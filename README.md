@@ -2,6 +2,13 @@
 
 栖页是面向 Windows 10 / 11（64 位）的桌面浏览器，用于同时管理抖音等网站的多个账号。每个环境拥有独立且持久化的 Chromium 会话；新建环境从空白登录状态开始，再次打开已有环境则使用原来的浏览器数据。
 
+## Windows 下载
+
+- [下载安装版（106 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.0/Qiye-Setup-0.1.0-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（146 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.0/Qiye-0.1.0-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+
+[v0.1.0 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.0)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。
+
 ## 使用方式
 
 1. 点击「新建环境」，设置名称、备注、标记颜色和起始网址。默认打开 `https://www.douyin.com/`。
