@@ -46,9 +46,11 @@ jobs:
       - name: Test Chromium session isolation on Windows
         run: npm run test:integration
       - name: Build Windows x64 installer
-        run: npm run dist:win
+        shell: pwsh
+        run: ./.github/scripts/build-windows.ps1 -Target nsis
       - name: Build Windows x64 ZIP
-        run: npm run dist:win:zip
+        shell: pwsh
+        run: ./.github/scripts/build-windows.ps1 -Target zip
       - name: Collect release files and SHA256 checksums
         shell: pwsh
         env:

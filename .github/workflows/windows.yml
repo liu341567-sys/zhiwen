@@ -31,7 +31,8 @@ jobs:
       - name: Test actual Chromium session isolation
         run: npm run test:integration
       - name: Build Windows x64 installer
-        run: npm run dist:win
+        shell: pwsh
+        run: ./.github/scripts/build-windows.ps1 -Target nsis
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
