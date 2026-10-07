@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('browserAPI', {
   reload: () => ipcRenderer.invoke('browser:reload'),
   setContentBounds: bounds => ipcRenderer.invoke('browser:bounds', bounds),
   setOverlayVisible: visible => ipcRenderer.invoke('browser:overlay', visible),
+  startLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-start'),
+  getLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-get'),
+  stopLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-stop'),
+  saveLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-save'),
   onShortcut: callback => {
     const listener = (_event, key) => callback(key);
     ipcRenderer.on('browser:shortcut', listener);

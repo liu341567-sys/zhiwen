@@ -50,6 +50,7 @@
             <input id="address-input" aria-label="网址" type="text" spellcheck="false" placeholder="工作空间" disabled />
             <span id="address-environment" class="address-environment" hidden><span class="status-dot"></span>独立环境</span>
           </form>
+          <button id="login-diagnostics-button" class="text-button login-diagnostics-button" type="button" disabled><span data-icon="info"></span>登录诊断</button>
           <button id="active-settings" class="icon-button" type="button" title="编辑当前环境" aria-label="编辑当前环境" disabled><span data-icon="sliders"></span></button>
         </div>
         <section id="overview-view" class="overview-view" aria-label="工作空间总览">
@@ -108,6 +109,17 @@
       <div class="delete-warning"><span data-icon="alert-triangle"></span><p>该环境的 Cookie、缓存、本地存储和登录状态将被永久清除，无法恢复。其他环境的数据不会受到影响。</p></div>
       <p id="delete-error" class="form-error" role="alert" hidden></p>
       <div class="modal-actions"><button id="delete-cancel" class="button button-secondary" type="button">保留环境</button><button id="delete-confirm" class="button button-danger" type="button">永久删除</button></div>
+    </dialog>
+
+    <dialog id="diagnostics-dialog" class="modal diagnostics-modal" aria-labelledby="diagnostics-dialog-title">
+      <div class="modal-heading"><span class="modal-symbol" data-icon="info"></span><button id="diagnostics-dialog-close" class="icon-button" type="button" aria-label="关闭登录诊断"><span data-icon="x"></span></button></div>
+      <h2 id="diagnostics-dialog-title">登录诊断</h2>
+      <p class="modal-description">汇总记录期间完成或失败的知乎请求及页面错误提示。请求数量不代表登录尝试次数；不保存手机号、验证码、密码或登录凭据。</p>
+      <p id="diagnostics-status" class="diagnostics-status" role="status" aria-live="polite">尚未开始记录。</p>
+      <p class="field-help">点击“开始记录”后回到网页，手动执行一次登录。记录最长持续 120 秒，再次打开这里查看或保存报告。</p>
+      <pre id="diagnostics-report" class="diagnostics-report" aria-label="登录诊断报告" hidden></pre>
+      <p id="diagnostics-error" class="form-error" role="alert" hidden></p>
+      <div class="modal-actions diagnostics-actions"><button id="diagnostics-start" class="button button-primary" type="button">开始记录</button><button id="diagnostics-stop" class="button button-secondary" type="button" disabled>结束记录</button><button id="diagnostics-save" class="button button-secondary" type="button" disabled>保存报告</button><button id="diagnostics-close" class="button button-secondary" type="button">关闭</button></div>
     </dialog>
   </body>
 </html>

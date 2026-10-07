@@ -89,9 +89,10 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
 
 async function launch() {
   app = await electron.launch({
+    chromiumSandbox: true,
     // Linux cloud machines use Chromium's user-namespace sandbox; the setuid
     // helper would require an administrator-owned installation. Sandbox stays on.
-    args: [...(process.platform === 'linux' ? ['--disable-setuid-sandbox'] : []), path.join(root, 'src', 'main.js')],
+    args: [...(process.platform === 'linux' ? ['--disable-setuid-sandbox'] : []), path.join(root, 'tests', 'electron-launch.cjs')],
     cwd: root,
     env: { ...process.env, QIYE_DATA_DIR: dataDirectory },
     timeout: 45_000,
@@ -209,6 +210,22 @@ async function main() {
     check('new environment starts without account state', () => assert.ok(first.id));
     const initial = await evaluateView(first.id, 'window.readAccount()');
     check('first environment has no Cookie, localStorage, sessionStorage, IndexedDB, Cache API or service worker', () => assert.deepEqual(initial, emptyAccount));
+    const runtime = await app.evaluate(({ app, BrowserWindow }, id) => {
+      const wc = BrowserWindow.getAllWindows().flatMap(window => window.contentView.children)
+        .map(view => view.webContents).find(contents => contents?.profileId === id);
+      return {
+        noSandbox: app.commandLine.hasSwitch('no-sandbox'),
+        injected: globalThis.__qiyeTestRuntime.injectedSwitches.filter(name => app.commandLine.hasSwitch(name)),
+        renderer: globalThis.__qiyeTestRuntime.renderers.get(wc.id),
+      };
+    }, first.id);
+    check('actual website renderer is sandboxed and isolated with native storage, popup and IPC settings', () => {
+      assert.equal(runtime.noSandbox, false);
+      assert.deepEqual(runtime.injected, []);
+      assert.equal(runtime.renderer.sandboxed, true);
+      assert.equal(runtime.renderer.contextIsolated, true);
+      assert.equal(runtime.renderer.isMainFrame, true);
+    });
     const pageCapabilities = await evaluateView(first.id, '({ node: typeof require, manager: typeof browserAPI })');
     check('websites cannot access Node.js or the account management bridge', () => assert.deepEqual(pageCapabilities, { node: 'undefined', manager: 'undefined' }));
     const aHttpCache = await evaluateView(first.id, 'window.readHttpCache()');

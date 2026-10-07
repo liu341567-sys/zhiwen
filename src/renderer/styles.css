@@ -116,6 +116,8 @@ svg { display: block; width: 18px; height: 18px; flex-shrink: 0; }
 .navigation-toolbar { display: flex; height: 64px; background: #fff; align-items: center; gap: 13px; padding: 0 20px; border-bottom: 1px solid #e9edf2; flex-shrink: 0; }
 .navigation-buttons { display: flex; gap: 3px; }
 .navigation-buttons svg { width: 16px; height: 16px; }
+.login-diagnostics-button { gap: 5px; white-space: nowrap; flex-shrink: 0; }
+.login-diagnostics-button svg { width: 14px; height: 14px; }
 .address-field { display: flex; align-items: center; gap: 11px; height: 34px; padding: 0 12px; border: 1px solid #e9edf1; border-radius: 7px; background: #f7f9fb; flex: 1; min-width: 0; }
 .address-field > [data-icon] { color: #a3adba; }
 .address-field svg { width: 13px; height: 13px; }
@@ -211,7 +213,7 @@ svg { display: block; width: 18px; height: 18px; flex-shrink: 0; }
 .toast { padding: 11px 12px; border-radius: 8px; background: #f0f6f1; border: 1px solid #deebdf; color: #60866c; font-size: 10px; line-height: 1.7; margin-top: 6px; overflow-wrap: anywhere; }
 .toast.error { background: #fff3f0; border-color: #f5ded8; color: #b67561; }
 .toast.info { background: #f2f5fb; border-color: #e2e8f4; color: #6c82a4; }
-.modal { width: 448px; border: 1px solid #e5e9ef; border-radius: 15px; padding: 27px; box-shadow: 0 22px 70px #26334226; color: var(--text); }
+.modal { width: 448px; max-height: calc(100vh - 36px); overflow-y: auto; border: 1px solid #e5e9ef; border-radius: 15px; padding: 27px; box-shadow: 0 22px 70px #26334226; color: var(--text); }
 .modal::backdrop { background: #212c3a5c; backdrop-filter: blur(2px); }
 .modal-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
 .modal-symbol { width: 38px; height: 38px; border-radius: 11px; color: var(--orange); background: var(--orange-light); }
@@ -249,6 +251,11 @@ svg { display: block; width: 18px; height: 18px; flex-shrink: 0; }
 .delete-warning svg { width: 16px; height: 16px; }
 .delete-warning p { margin: 0; line-height: 1.9; font-size: 11px; color: #aa7b69; }
 .modal-description strong { color: #647183; font-weight: 600; overflow-wrap: anywhere; }
+.diagnostics-modal { width: 620px; }
+.diagnostics-modal .modal-description { margin-bottom: 14px; }
+.diagnostics-status { color: #647082; font-size: 12px; line-height: 1.8; margin: 0 0 8px; }
+.diagnostics-report { margin: 17px 0 0; padding: 13px; max-height: 285px; overflow: auto; border: 1px solid #e7ebf1; border-radius: 8px; background: #f8fafc; color: #637186; font: 11px/1.7 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.diagnostics-actions { flex-wrap: wrap; }
 @media (max-width: 1180px) {
   :root { --sidebar-width: 235px; }
   .sidebar { padding-left: 16px; padding-right: 16px; }

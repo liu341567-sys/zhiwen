@@ -2,15 +2,18 @@
 
 const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
 const { ProfileStore, normalizeUrl, partitionFor } = require('./profile-store');
 const { CookieVault } = require('./cookie-vault');
+const { userAgentForMode } = require('./browser-identity');
+const { LoginDiagnostics, PAGE_OBSERVATION_SCRIPT } = require('./login-diagnostics');
 
 app.setName('栖页');
-// Electron adds the app name to its UA. Use an ASCII product token before any
-// network context is created, while retaining the Chinese display/data name
-// and the native platform, Chromium/Electron versions and Client Hints.
+// Use one browser identity for documents and Service Workers before creating
+// any network context. Keep the real OS/Chromium version and native metadata.
 const applicationProduct = `${app.getName().replace(/ /g, '')}/${app.getVersion()}`;
-app.userAgentFallback = app.userAgentFallback.replace(applicationProduct, `Qiye/${app.getVersion()}`);
+const applicationUserAgent = app.userAgentFallback.replace(applicationProduct, `Qiye/${app.getVersion()}`);
+app.userAgentFallback = userAgentForMode(applicationUserAgent, 'web');
 if (process.env.QIYE_DATA_DIR) app.setPath('userData', path.resolve(process.env.QIYE_DATA_DIR));
 
 const views = new Map();
@@ -28,6 +31,50 @@ let overlayVisible = false;
 let quitting = false;
 let canQuit = false;
 let mutationQueue = Promise.resolve();
+const diagnostics = new LoginDiagnostics();
+let diagnosticGeneration = 0;
+let samplingDiagnostics = false;
+
+function stopDiagnostics(reason) {
+  diagnosticGeneration += 1;
+  diagnostics.stop(reason);
+}
+
+async function sampleDiagnosticsPage() {
+  const id = diagnostics.targetId;
+  const wc = views.get(id)?.view.webContents;
+  if (samplingDiagnostics || !diagnostics.getReport()?.running || !wc || wc.isDestroyed()) return;
+  let host;
+  const sampleUrl = wc.getURL();
+  try {
+    const url = new URL(sampleUrl);
+    host = url.protocol === 'https:' && (url.hostname === 'zhihu.com' || url.hostname.endsWith('.zhihu.com'));
+  } catch { return; }
+  if (!host) return;
+  samplingDiagnostics = true;
+  const generation = diagnosticGeneration;
+  let deadline;
+  try {
+    const observed = await Promise.race([
+      wc.executeJavaScriptInIsolatedWorld(1001, [{ code: `(() => {
+        const observed = ${PAGE_OBSERVATION_SCRIPT};
+        if (!observed) return null;
+        observed.configuredUaMatchesPage = navigator.userAgent === ${JSON.stringify(wc.getUserAgent())};
+        return observed;
+      })()` }]),
+      new Promise((_resolve, reject) => { deadline = setTimeout(() => reject(new Error('Diagnostic sample timed out')), 750); })
+    ]);
+    if (generation !== diagnosticGeneration || diagnostics.targetId !== id ||
+        wc.isDestroyed() || wc.getURL() !== sampleUrl || !observed || typeof observed !== 'object') return;
+    const major = Number(process.versions.chrome.split('.')[0]);
+    diagnostics.observePage(id, {
+      zhihu10001Shown: observed.zhihu10001Shown === true,
+      configuredUaMatchesPage: observed.configuredUaMatchesPage === true,
+      clientHintsMatchChromium: observed.clientHintChromiumMajor === major
+    });
+  } catch { /* Navigation or a stalled document must not block diagnostics. */ }
+  finally { clearTimeout(deadline); samplingDiagnostics = false; }
+}
 
 function snapshot() {
   const state = store.getState();
@@ -125,6 +172,9 @@ function getSession(id) {
   if (sessions.has(id)) return sessions.get(id);
   const ownSession = session.fromPartition(partitionFor(id), { cache: true });
   sessions.set(id, ownSession);
+  const diagnosticFilter = { urls: ['https://zhihu.com/*', 'https://*.zhihu.com/*'] };
+  ownSession.webRequest.onCompleted(diagnosticFilter, details => diagnostics.recordCompleted(id, details));
+  ownSession.webRequest.onErrorOccurred(diagnosticFilter, details => diagnostics.recordError(id, details));
   documentStates.set(id, {});
   const restoration = vault.restore(id, ownSession).then(documents => {
     documentStates.set(id, documents);
@@ -283,6 +333,7 @@ async function createView(id) {
 }
 
 async function closeView(id) {
+  if (diagnostics.targetId === id) stopDiagnostics('profile-closed');
   await captureDocumentState(id);
   const children = popups.get(id);
   if (children) for (const child of [...children]) { if (!child.isDestroyed()) child.destroy(); }
@@ -335,7 +386,8 @@ function registerIPC() {
     } catch { /* A closing frame cannot checkpoint after it is detached. */ }
     finally { event.returnValue = true; }
   });
-  const serialized = new Set(['create', 'update', 'open', 'close', 'delete', 'overview', 'navigate', 'back', 'forward', 'reload']);
+  const serialized = new Set(['create', 'update', 'open', 'close', 'delete', 'overview', 'navigate', 'back', 'forward', 'reload',
+    'diagnostics-start', 'diagnostics-stop', 'diagnostics-save']);
   const handle = (name, action) => ipcMain.handle(`browser:${name}`, async (event, ...args) => {
     if (quitting || !mainWindow || event.sender !== mainWindow.webContents ||
         event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('此页面无权管理环境');
@@ -414,6 +466,41 @@ function registerIPC() {
     overlayVisible = visible;
     return true;
   });
+  handle('diagnostics-start', async () => {
+    const entry = activePage();
+    const id = store.getState().activeId;
+    const ua = entry.view.webContents.getUserAgent();
+    diagnosticGeneration += 1;
+    diagnostics.start(id, {
+      appVersion: app.getVersion(), electronVersion: process.versions.electron,
+      chromiumVersion: process.versions.chrome, platform: process.platform, browserMode: 'web',
+      identity: {
+        ascii: /^[\x20-\x7e]+$/.test(ua), hasApplicationProduct: /\sQiye\//.test(ua),
+        hasElectronProduct: /\sElectron\//.test(ua), chromeVersionMatches: ua.includes(`Chrome/${process.versions.chrome}`)
+      }
+    });
+    await sampleDiagnosticsPage();
+    return diagnostics.getReport();
+  });
+  handle('diagnostics-get', async () => { await sampleDiagnosticsPage(); return diagnostics.getReport(); });
+  handle('diagnostics-stop', async () => {
+    await sampleDiagnosticsPage();
+    stopDiagnostics('user');
+    return diagnostics.getReport();
+  });
+  handle('diagnostics-save', async () => {
+    await sampleDiagnosticsPage();
+    stopDiagnostics('user');
+    const report = diagnostics.getReport();
+    if (!report) throw new Error('请先开始一次登录诊断');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '保存登录诊断报告', defaultPath: path.join(app.getPath('downloads'), 'Qiye-Login-Diagnostics.json'),
+      filters: [{ name: 'JSON 诊断报告', extensions: ['json'] }]
+    });
+    if (result.canceled || !result.filePath) return { saved: false };
+    await fs.promises.writeFile(result.filePath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+    return { saved: true };
+  });
 }
 
 async function createWindow() {
@@ -476,6 +563,7 @@ if (!app.requestSingleInstanceLock()) {
     event.preventDefault();
     if (quitting) return;
     quitting = true;
+    stopDiagnostics('app-exit');
     (async () => {
       await mutationQueue;
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));

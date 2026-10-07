@@ -20,15 +20,18 @@ let frameOrigin;
 let passed = 0;
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
-const agentScript = `function agentInfo() {
+const agentScript = `async function agentInfo() {
   const userAgent = navigator.userAgent;
   let base64Works = false;
   try { base64Works = atob(btoa(userAgent)) === userAgent; } catch {}
-  return { userAgent, base64Works, brands: navigator.userAgentData?.brands ?? [] };
+  return { userAgent, base64Works, brands: navigator.userAgentData?.brands ?? [],
+    platform: navigator.userAgentData?.platform,
+    high: await navigator.userAgentData?.getHighEntropyValues(['fullVersionList', 'uaFullVersion']) };
 }`;
 
 function pageHtml(url) {
-  const addFrame = url.pathname === '/main' || url.pathname === '/checkpoint';
+  const addFrame = url.pathname === '/main' || url.pathname === '/checkpoint' || url.pathname === '/web-main';
+  const frameContext = url.pathname === '/web-main' ? 'web-iframe' : 'iframe';
   return `<!doctype html><meta charset="utf-8"><title>Local login compatibility</title>
 <script>
 ${agentScript}
@@ -41,15 +44,16 @@ if (location.pathname === '/resume' && window.initialNonce) {
   window.resumeDone = fetch('/consume', { method: 'POST', body: window.initialNonce }).then(response => response.json());
 }
 window.fixtureReady = true;
-</script>${addFrame ? `<iframe src="${frameOrigin}/frame?context=iframe"></iframe>` : ''}`;
+</script>${addFrame ? `<iframe src="${frameOrigin}/frame?context=${frameContext}"></iframe>` : ''}`;
 }
 
 const workerScript = `${agentScript}
 self.addEventListener('install', event => {
-  event.waitUntil(fetch('/agent?context=service-worker').then(() => self.skipWaiting()));
+  const context = new URL(self.location.href).searchParams.get('context') ?? 'service-worker';
+  event.waitUntil(fetch('/agent?context=' + context).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
-self.addEventListener('message', event => event.ports[0].postMessage(agentInfo()));`;
+self.addEventListener('message', event => event.waitUntil(agentInfo().then(info => event.ports[0].postMessage(info))));`;
 
 function check(label, assertion) {
   assertion();
@@ -134,11 +138,16 @@ function assertAgent(info, versions) {
   assert.equal(typeof info.userAgent, 'string');
   assert.match(info.userAgent, /^[\x20-\x7e]+$/);
   assert.ok(info.userAgent.includes(`Chrome/${versions.chrome}`));
-  assert.ok(info.userAgent.includes(`Electron/${versions.electron}`));
-  assert.ok(info.userAgent.includes(`Qiye/${versions.app}`));
+  assert.doesNotMatch(info.userAgent, /\b(?:Electron|Qiye)\//);
   if (Object.hasOwn(info, 'base64Works')) assert.equal(info.base64Works, true);
   for (const brand of info.brands ?? []) {
     if (brand.brand === 'Chromium') assert.equal(brand.version, versions.chrome.split('.')[0]);
+  }
+  if (Object.hasOwn(info, 'brands')) {
+    assert.ok(info.brands.some(brand => brand.brand === 'Chromium'));
+    assert.equal(info.platform, versions.platform);
+    assert.equal(info.high.uaFullVersion, versions.chrome);
+    assert.equal(info.high.fullVersionList.find(brand => brand.brand === 'Chromium').version, versions.chrome);
   }
   const hint = /"Chromium";v="(\d+)"/.exec(info.clientHints ?? '');
   if (hint) assert.equal(hint[1], versions.chrome.split('.')[0]);
@@ -183,7 +192,8 @@ window.frameReady = true;</script>`);
   frameOrigin = `http://127.0.0.1:${frameServer.address().port}`;
   try {
     app = await _electron.launch({
-      args: [...(process.platform === 'linux' ? ['--disable-setuid-sandbox'] : []), path.join(root, 'src', 'main.js')],
+      chromiumSandbox: true,
+      args: [...(process.platform === 'linux' ? ['--disable-setuid-sandbox'] : []), path.join(root, 'tests', 'electron-launch.cjs')],
       cwd: root,
       env: { ...process.env, QIYE_DATA_DIR: dataDirectory },
       timeout: 45_000,
@@ -195,12 +205,29 @@ window.frameReady = true;</script>`);
     }
     assert.ok(shell);
     await shell.waitForFunction(() => Boolean(window.browserAPI?.createProfile));
-    const versions = await app.evaluate(({ app }) => ({ chrome: process.versions.chrome, electron: process.versions.electron, app: app.getVersion() }));
+    const versions = await app.evaluate(({ app }) => ({
+      chrome: process.versions.chrome, electron: process.versions.electron, app: app.getVersion(),
+      platform: ({ win32: 'Windows', darwin: 'macOS', linux: 'Linux' })[process.platform],
+    }));
     const profile = await newProfile('Login compatibility', '/main?context=main');
     const mainAgent = await contents('qiye', profile, 'eval', 'agentInfo()');
     check('main document sends ASCII User-Agent with real engine versions and btoa works', () => {
       assertAgent(mainAgent, versions);
       assertAgent(requestAgents.get('main'), versions);
+    });
+    const runtime = await app.evaluate(({ app, BrowserWindow }, id) => {
+      const wc = BrowserWindow.getAllWindows().flatMap(window => window.contentView.children)
+        .map(view => view.webContents).find(contents => contents?.profileId === id);
+      return { noSandbox: app.commandLine.hasSwitch('no-sandbox'),
+        injected: globalThis.__qiyeTestRuntime.injectedSwitches.filter(name => app.commandLine.hasSwitch(name)),
+        renderer: globalThis.__qiyeTestRuntime.renderers.get(wc.id) };
+    }, profile);
+    check('login fixture uses an actually sandboxed renderer without Playwright storage or popup overrides', () => {
+      assert.equal(runtime.noSandbox, false);
+      assert.deepEqual(runtime.injected, []);
+      assert.equal(runtime.renderer.sandboxed, true);
+      assert.equal(runtime.renderer.contextIsolated, true);
+      assert.equal(runtime.renderer.isMainFrame, true);
     });
 
     let frameAgent;
@@ -233,6 +260,60 @@ window.frameReady = true;</script>`);
     check('Service Worker HTTP and JavaScript agents preserve ASCII and native versions', () => {
       assertAgent(workerAgent, versions);
       assertAgent(requestAgents.get('service-worker'), versions);
+    });
+
+    const webProfile = await newProfile('Second login environment', '/web-main?context=web-main');
+    const webMainAgent = await contents('qiye', webProfile, 'eval', 'agentInfo()');
+    check('second environment page and HTTP requests keep native Chromium and platform without application products', () => {
+      assertAgent(webMainAgent, versions);
+      assertAgent(requestAgents.get('web-main'), versions);
+    });
+    let webFrameAgent;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      webFrameAgent = await app.evaluate(async ({ BrowserWindow }, { id, origin }) => {
+        const wc = BrowserWindow.getAllWindows().flatMap(window => window.contentView.children)
+          .map(view => view.webContents).find(wc => wc?.profileId === id);
+        const frame = wc.mainFrame.framesInSubtree.find(frame => frame.url.startsWith(origin));
+        return frame ? frame.executeJavaScript('window.frameReady ? agentInfo() : null') : null;
+      }, { id: webProfile, origin: frameOrigin });
+      if (webFrameAgent) break;
+      await delay(100);
+    }
+    check('second environment cross-origin iframe preserves real Chromium Client Hints and matching HTTP identity', () => {
+      assert.ok(webFrameAgent);
+      assertAgent(webFrameAgent, versions);
+      assertAgent(requestAgents.get('web-iframe'), versions);
+    });
+    const webWorkerAgent = await contents('qiye', webProfile, 'eval', `(async () => {
+      await navigator.serviceWorker.register('/agent-worker.js?context=web-service-worker');
+      const registration = await navigator.serviceWorker.ready;
+      return new Promise((resolve, reject) => {
+        const channel = new MessageChannel();
+        const deadline = setTimeout(() => reject(new Error('web worker response timed out')), 10000);
+        channel.port1.onmessage = event => { clearTimeout(deadline); resolve(event.data); };
+        registration.active.postMessage('agent', [channel.port2]);
+      });
+    })()`);
+    check('second environment Service Worker matches page and HTTP identity without mixing in the application UA', () => {
+      assertAgent(webWorkerAgent, versions);
+      assertAgent(requestAgents.get('web-service-worker'), versions);
+    });
+    const webPopupUrl = primaryOrigin + '/web-popup?context=web-popup';
+    await contents('qiye', webProfile, 'eval', `window.open(${JSON.stringify(webPopupUrl)}, '_blank', 'noopener'); true`);
+    const webPopupAgent = await popup(webPopupUrl, 'agentInfo()');
+    check('second environment login popup inherits the originating session identity and real Client Hints', () => {
+      assertAgent(webPopupAgent, versions);
+      assertAgent(requestAgents.get('web-popup'), versions);
+    });
+    await contents('qiye', profile, 'eval', "document.cookie='modeAccount=app; Path=/'; localStorage.setItem('modeAccount','app'); true");
+    await contents('qiye', webProfile, 'eval', "document.cookie='modeAccount=web; Path=/'; localStorage.setItem('modeAccount','web'); true");
+    const appAccount = await contents('qiye', profile, 'eval', "({cookie:document.cookie, account:localStorage.getItem('modeAccount')})");
+    const webAccount = await contents('qiye', webProfile, 'eval', "({cookie:document.cookie, account:localStorage.getItem('modeAccount')})");
+    check('simultaneously open environments with the same browser identity retain separate account Cookies and localStorage', () => {
+      assert.match(appAccount.cookie, /(?:^|; )modeAccount=app(?:;|$)/);
+      assert.match(webAccount.cookie, /(?:^|; )modeAccount=web(?:;|$)/);
+      assert.equal(appAccount.account, 'app');
+      assert.equal(webAccount.account, 'web');
     });
 
     const native = await newNativeControl('nonce');

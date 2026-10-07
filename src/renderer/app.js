@@ -43,6 +43,11 @@
   let boundsFrame = 0;
   let lastBounds = '';
   let toastSequence = 0;
+  const dialogIds = ['profile-dialog', 'delete-dialog', 'diagnostics-dialog'];
+  let diagnosticsReport = null;
+  let diagnosticsBusy = false;
+  let diagnosticsTimer = null;
+  let diagnosticsPollGeneration = 0;
 
   function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -83,7 +88,7 @@
   function findProfile(id) { return state.profiles.find((profile) => profile.id === id); }
   function isOpen(id) { return state.openTabs.some((tab) => tab.id === id); }
   function activeTab() { return state.openTabs.find((tab) => tab.id === state.activeId); }
-  function dialogIsOpen() { return $('profile-dialog').open || $('delete-dialog').open || modalOpening; }
+  function dialogIsOpen() { return dialogIds.some((id) => $(id).open) || modalOpening; }
   function initials(name) { return Array.from(String(name || '环境').trim())[0] || '环'; }
 
   function avatar(profile) {
@@ -218,6 +223,7 @@
     $('forward-button').disabled = !tab || !tab.canGoForward;
     $('reload-button').disabled = !tab;
     $('active-settings').disabled = !tab;
+    $('login-diagnostics-button').disabled = !tab;
     $('address-input').disabled = !tab;
     $('address-environment').hidden = !tab;
     if (previousActiveId !== state.activeId || document.activeElement !== $('address-input')) {
@@ -323,13 +329,111 @@
   }
 
   async function closeDialog(dialog, restoreFocus = true) {
-    if (dialogBusy) return;
+    if (dialogBusy || (dialog.id === 'diagnostics-dialog' && diagnosticsBusy)) return;
+    if (dialog.id === 'diagnostics-dialog') stopDiagnosticsPolling();
     dialog.close();
     await action('setOverlayVisible', false);
     scheduleBounds();
     if (restoreFocus) {
       if (focusBeforeModal?.isConnected) focusBeforeModal.focus({ preventScroll: true });
       else $('sidebar-create').focus({ preventScroll: true });
+    }
+  }
+
+  function stopDiagnosticsPolling() {
+    diagnosticsPollGeneration += 1;
+    window.clearTimeout(diagnosticsTimer);
+    diagnosticsTimer = null;
+  }
+
+  function renderDiagnostics() {
+    const running = diagnosticsReport?.running === true;
+    $('diagnostics-start').disabled = diagnosticsBusy;
+    $('diagnostics-stop').disabled = diagnosticsBusy || !running;
+    $('diagnostics-save').disabled = diagnosticsBusy || !diagnosticsReport;
+    $('diagnostics-close').disabled = diagnosticsBusy;
+    $('diagnostics-dialog-close').disabled = diagnosticsBusy;
+    if (!diagnosticsReport) {
+      $('diagnostics-status').textContent = '尚未开始记录。';
+      $('diagnostics-report').hidden = true;
+      $('diagnostics-report').textContent = '';
+      return;
+    }
+    const seconds = Number.isFinite(diagnosticsReport.remainingSeconds) ? Math.max(0, Math.ceil(diagnosticsReport.remainingSeconds)) : 0;
+    $('diagnostics-status').textContent = running ? `正在记录，最多还剩 ${seconds} 秒。` : '记录已结束，可以查看或保存报告。';
+    const visibleReport = {};
+    for (const key of ['schemaVersion', 'runtime', 'counters', 'page', 'running', 'remainingSeconds', 'stopReason']) {
+      if (Object.hasOwn(diagnosticsReport, key)) visibleReport[key] = diagnosticsReport[key];
+    }
+    $('diagnostics-report').textContent = JSON.stringify(visibleReport, null, 2);
+    $('diagnostics-report').hidden = false;
+  }
+
+  function scheduleDiagnosticsPoll() {
+    window.clearTimeout(diagnosticsTimer);
+    diagnosticsTimer = null;
+    if (!$('diagnostics-dialog').open || !diagnosticsReport?.running || diagnosticsBusy) return;
+    const generation = diagnosticsPollGeneration;
+    diagnosticsTimer = window.setTimeout(async () => {
+      diagnosticsTimer = null;
+      try {
+        const report = await call('getLoginDiagnostics');
+        if (generation !== diagnosticsPollGeneration || !$('diagnostics-dialog').open) return;
+        diagnosticsReport = report;
+        renderDiagnostics();
+        scheduleDiagnosticsPoll();
+      } catch (error) {
+        if (generation !== diagnosticsPollGeneration || !$('diagnostics-dialog').open) return;
+        $('diagnostics-error').textContent = error.message || '诊断报告未能更新，请关闭后重新打开。';
+        $('diagnostics-error').hidden = false;
+      }
+    }, 1000);
+  }
+
+  async function openDiagnosticsDialog() {
+    if (!activeTab() || dialogIsOpen()) return;
+    modalOpening = true;
+    focusBeforeModal = document.activeElement;
+    stopDiagnosticsPolling();
+    try {
+      await setOverlay(true);
+      diagnosticsReport = await call('getLoginDiagnostics');
+      diagnosticsBusy = false;
+      $('diagnostics-error').hidden = true;
+      renderDiagnostics();
+      $('diagnostics-dialog').showModal();
+      $('diagnostics-start').focus();
+      scheduleDiagnosticsPoll();
+    } catch (error) {
+      notify(error.message || '无法打开登录诊断。', 'error');
+      await action('setOverlayVisible', false);
+    } finally { modalOpening = false; }
+  }
+
+  async function runDiagnosticsAction(method) {
+    if (diagnosticsBusy) return;
+    diagnosticsBusy = true;
+    stopDiagnosticsPolling();
+    $('diagnostics-error').hidden = true;
+    renderDiagnostics();
+    try {
+      const result = await call(method);
+      if (method === 'saveLoginDiagnostics') {
+        diagnosticsReport = await call('getLoginDiagnostics');
+        if (result?.saved) notify('诊断报告已保存。');
+      } else diagnosticsReport = result;
+      diagnosticsBusy = false;
+      renderDiagnostics();
+      if (method === 'startLoginDiagnostics') {
+        await closeDialog($('diagnostics-dialog'));
+        notify('请在网页手动执行一次登录，再打开“登录诊断”查看或保存报告。', 'info');
+      } else scheduleDiagnosticsPoll();
+    } catch (error) {
+      diagnosticsBusy = false;
+      renderDiagnostics();
+      $('diagnostics-error').textContent = error.message || '诊断操作未能完成，请重试。';
+      $('diagnostics-error').hidden = false;
+      scheduleDiagnosticsPoll();
     }
   }
 
@@ -397,6 +501,10 @@
   for (const id of ['sidebar-overview', 'error-overview']) $(id).addEventListener('click', () => action('showOverview'));
   $('profile-search').addEventListener('input', renderProfiles);
   $('active-settings').addEventListener('click', () => { const profile = findProfile(state.activeId); if (profile) openProfileDialog(profile); });
+  $('login-diagnostics-button').addEventListener('click', openDiagnosticsDialog);
+  $('diagnostics-start').addEventListener('click', () => runDiagnosticsAction('startLoginDiagnostics'));
+  $('diagnostics-stop').addEventListener('click', () => runDiagnosticsAction('stopLoginDiagnostics'));
+  $('diagnostics-save').addEventListener('click', () => runDiagnosticsAction('saveLoginDiagnostics'));
   $('back-button').addEventListener('click', () => action('goBack'));
   $('forward-button').addEventListener('click', () => action('goForward'));
   for (const id of ['reload-button', 'error-reload']) $(id).addEventListener('click', () => action('reload'));
@@ -422,7 +530,8 @@
   $('profile-delete').addEventListener('click', openDeleteDialog);
   for (const id of ['profile-cancel', 'profile-dialog-close']) $(id).addEventListener('click', () => closeDialog($('profile-dialog')));
   for (const id of ['delete-cancel', 'delete-dialog-close']) $(id).addEventListener('click', () => closeDialog($('delete-dialog')));
-  for (const id of ['profile-dialog', 'delete-dialog']) {
+  for (const id of ['diagnostics-close', 'diagnostics-dialog-close']) $(id).addEventListener('click', () => closeDialog($('diagnostics-dialog')));
+  for (const id of dialogIds) {
     const dialog = $(id);
     dialog.addEventListener('cancel', (event) => { event.preventDefault(); closeDialog(dialog); });
     dialog.addEventListener('click', (event) => {

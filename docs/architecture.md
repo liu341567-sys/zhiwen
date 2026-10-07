@@ -45,14 +45,26 @@ sessionStorage 随同快照加密保存。主进程在关闭主标签页、退�
 
 ## 浏览器标识
 
-Electron 默认会把应用名写入 User-Agent 产品字段。0.1.1 在创建 Session 和网页视图之前，将其中的中文应用产品名替换为 ASCII `Qiye/实际应用版本`；界面名称和用户数据目录仍为「栖页」。系统描述、Chromium 与 Electron 版本来自当前运行时，Client Hints 仍由 Chromium 原生生成，不硬编码其他浏览器或系统的版本，也不隐藏 Electron 标识。
+Electron 默认会把应用名写入 User-Agent 产品字段。0.1.1 将中文应用产品名改为 ASCII `Qiye/实际应用版本`，解决非 ASCII 标识引发的编码问题，仍保留 `Electron` 产品标识。
 
-这一修改修复了非 ASCII User-Agent 引发的网站编码兼容问题。它不能证明平台接受 Electron 客户端，也不能据此认定抖音「操作频繁」已经解决。
+0.1.2 在创建任何网络上下文、Session 和网页视图之前，全局设置标准网页 User-Agent，移除 `Qiye` 和 `Electron` 产品标识。系统描述与 Chromium 完整版本取自原生标识，不硬编码其他系统或引擎版本。页面、iframe、弹窗和 Service Worker 的 HTTP 请求与 JavaScript 浏览器标识一致；Client Hints 继续由 Chromium 原生生成。
+
+这个设置使用 Electron 的浏览器接口，不通过页面脚本覆盖 navigator，也不改写网站请求参数、登录签名或关闭 TLS 校验。界面名称与数据目录仍为「栖页」，账号环境的分区与存储生命周期继续沿用原来的方式。标识兼容调整不能证明平台接受客户端；知乎 `10001` 和抖音「操作频繁」的原因及真实登录结果仍未确认。
+
+## 手动登录诊断
+
+用户在当前环境点击「登录诊断」及「开始记录」后，主进程仅观察该环境的知乎 HTTPS 请求，最长持续 120 秒。开始后对话框关闭，用户手动执行一次登录，再打开诊断查看或保存。保存报告会停止观察；关闭环境、退出应用或超时也会结束记录。诊断不自动执行或重试登录。
+
+记录期间完成或失败的知乎请求立即归入固定类别，报告只保留完成/失败数量、HTTP 状态码、预设网络错误类别、HTTP 方法及资源类型的计数。统计按完成或失败事件发生时刻计入，记录开始前已发出、记录期间才结束的请求也会计入。页面观察在隔离上下文中执行，只返回可见 `10001：请求参数异常，请升级客户端后重试` 是否出现、配置 User-Agent 与页面是否一致，以及 Client Hints 是否匹配当前 Chromium 主版本等限定结果。报告还包含经过校验的应用与引擎版本、操作系统类别。
+
+诊断报告不保存 URL、路径、查询参数、请求头、请求或响应正文、Cookie、手机号、输入值、页面正文、原始 User-Agent、环境 ID 或名称。网页正文只用于当次错误提示检测，不传回主进程或写入报告。报告仅在用户选择保存时写入本地 JSON 文件，不自动上传。
 
 ## 验证范围
 
 `tests/store.test.js` 验证清单操作及磁盘持久化。`tests/isolation.cjs` 使用 Playwright 启动真实 Electron，在环回地址提供测试页，操作两个独立环境并检查 Cookie、localStorage、IndexedDB、Cache Storage、Service Worker 与 HTTP 缓存。它还检查改名、关闭重开、应用重启、同环境弹窗及删除后的行为。
 
-`tests/login-compatibility.cjs` 验证主页面、异源 iframe、Service Worker 和弹窗的浏览器标识，使用一次性本地登录挑战验证弹窗不会重放主页面旧值，并检查网站清空临时存储后的导航和主页面关闭重开行为。
+`tests/login-compatibility.cjs` 验证主页面、异源 iframe、Service Worker 和弹窗的浏览器标识，使用一次性本地登录挑战验证弹窗不会重放主页面旧值，并检查网站清空临时存储后的导航和主页面关闭重开行为。诊断模块的单元测试检查记录范围、时限、固定字段与报告数据边界。
+
+0.1.2 的 Playwright 启动显式设置 `chromiumSandbox: true`。测试专用入口删除 Playwright 默认注入的存储、密码库、mock keychain、弹窗等行为开关；私有预加载脚本报告真实 `process.sandboxed`、`process.contextIsolated` 和 `process.isMainFrame`，主进程进行断言。这些探针与入口仅用于测试，不进入应用包。早期版本的 Playwright 默认参数会改变这些行为，因此历史测试通过不能作为生产沙箱已验证的证据。
 
 这些测试不登录抖音，也不模拟平台的扫码、验证码或登录有效期。Windows 工作流负责原生环境下执行测试并生成安装包；发布前仍需人工检查真实平台及安装程序。修复验证与历史发布检查分别记录在 [验证记录](validation.md)。
