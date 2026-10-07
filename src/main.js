@@ -6,6 +6,11 @@ const { ProfileStore, normalizeUrl, partitionFor } = require('./profile-store');
 const { CookieVault } = require('./cookie-vault');
 
 app.setName('栖页');
+// Electron adds the app name to its UA. Use an ASCII product token before any
+// network context is created, while retaining the Chinese display/data name
+// and the native platform, Chromium/Electron versions and Client Hints.
+const applicationProduct = `${app.getName().replace(/ /g, '')}/${app.getVersion()}`;
+app.userAgentFallback = app.userAgentFallback.replace(applicationProduct, `Qiye/${app.getVersion()}`);
 if (process.env.QIYE_DATA_DIR) app.setPath('userData', path.resolve(process.env.QIYE_DATA_DIR));
 
 const views = new Map();
@@ -14,6 +19,7 @@ const popups = new Map();
 const restores = new Map();
 const blockedVaults = new Set();
 const documentStates = new Map();
+const pendingDocumentRestores = new Map();
 let store;
 let vault;
 let mainWindow;
@@ -74,7 +80,8 @@ function allowedNavigation(url) {
 }
 
 function configurePage(wc, id) {
-  // Remote pages receive no preload, Node.js, shell API, or local-file access.
+  // Remote pages receive only the private storage preload, with no Node.js,
+  // shell API, or local-file access.
   wc.profileId = id;
   wc.on('will-navigate', (event, url) => { if (!allowedNavigation(url)) event.preventDefault(); });
   wc.on('will-redirect', (event, url) => { if (!allowedNavigation(url)) event.preventDefault(); });
@@ -182,10 +189,11 @@ async function flushSession(id) {
 }
 
 async function captureDocumentState(id) {
-  const contents = [...(popups.get(id) ?? [])].filter(window => !window.isDestroyed()).map(window => window.webContents);
   const mainContents = views.get(id)?.view.webContents;
-  if (mainContents && !mainContents.isDestroyed()) contents.push(mainContents);
-  for (const wc of contents) {
+  // Login popups have their own native sessionStorage namespace; they must not
+  // replace the saved main tab's state, even when they use the same origin.
+  if (mainContents && !mainContents.isDestroyed()) {
+    const wc = mainContents;
     for (const frame of wc.mainFrame.framesInSubtree) {
       if (!allowedNavigation(frame.url)) continue;
       const origin = new URL(frame.url).origin;
@@ -263,6 +271,9 @@ async function createView(id) {
     notify();
     return entry;
   }
+  // Restore each origin only once for this newly opened main tab. Subsequent
+  // documents use Chromium's live storage, including any website removals.
+  pendingDocumentRestores.set(id, { ...(documentStates.get(id) ?? {}) });
   wc.loadURL(profile.lastUrl).catch(error => {
     if (!views.has(id) || wc.isDestroyed() || error.code === 'ERR_ABORTED') return;
     entry.error = `页面加载失败：${error.message}`;
@@ -283,6 +294,7 @@ async function closeView(id) {
     if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close({ waitForBeforeUnload: false });
   }
   await flushSession(id);
+  pendingDocumentRestores.delete(id);
 }
 
 function activePage() {
@@ -299,13 +311,17 @@ function registerIPC() {
   const documentContext = event => {
     const ownSession = event.sender.session;
     const id = [...sessions.keys()].find(key => sessions.get(key) === ownSession);
-    if (!id || !store.getState().profiles.some(profile => profile.id === id) || blockedVaults.has(id) || !allowedNavigation(event.senderFrame.url)) return null;
+    if (!id || event.sender !== views.get(id)?.view.webContents ||
+        !store.getState().profiles.some(profile => profile.id === id) || blockedVaults.has(id) || !allowedNavigation(event.senderFrame.url)) return null;
     return { id, origin: new URL(event.senderFrame.url).origin };
   };
   ipcMain.on('browser:document-restore', event => {
     try {
       const context = documentContext(event);
-      event.returnValue = context ? documentStates.get(context.id)?.[context.origin] ?? [] : [];
+      const pending = context ? pendingDocumentRestores.get(context.id) : null;
+      const entries = pending?.[context?.origin] ?? [];
+      if (pending) delete pending[context.origin];
+      event.returnValue = entries;
     } catch { event.returnValue = []; }
   });
   ipcMain.on('browser:document-checkpoint', (event, origin, entries) => {
@@ -446,7 +462,9 @@ if (!app.requestSingleInstanceLock()) {
       store = new ProfileStore(app.getPath('userData'));
       vault = new CookieVault(app.getPath('userData'), safeStorage);
       registerIPC();
-      await createWindow();
+      const startup = mutationQueue.then(() => createWindow());
+      mutationQueue = startup.catch(() => {});
+      await startup;
     } catch (error) {
       dialog.showErrorBox('无法读取账号环境', `${error.message}\n数据位置：${app.getPath('userData')}\n请先备份原目录，再检查 profiles.json；原有数据未被覆盖。`);
       canQuit = true;
