@@ -4,10 +4,10 @@
 
 ## Windows 下载
 
-- [下载安装版（106 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.0/Qiye-Setup-0.1.0-x64.exe)：下载后运行安装程序。
-- [下载 ZIP 版（146 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.0/Qiye-0.1.0-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+- [下载安装版（106 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.1/Qiye-Setup-0.1.1-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（146 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.1/Qiye-0.1.1-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
 
-[v0.1.0 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.0)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。
+[v0.1.1 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.1)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。0.1.1 修正浏览器标识编码、登录弹窗的临时存储恢复及启动导航时序；真实抖音登录仍需实机验证。更新前关闭旧版，已有环境继续使用原来的数据目录。
 
 ## 使用方式
 
@@ -49,9 +49,9 @@ npm run dist:win
 - `npm test`：环境清单、网址校验和持久化等单元测试。
 - `npm run check`：JavaScript 语法检查。
 - `npm run test:integration`：实际启动 Electron，使用本地测试网页验证浏览器会话隔离、重新打开和重启后的持久化，以及删除环境后的数据清理。测试使用临时目录，不需要真实平台账号。
-- `npm run dist:win`：生成 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.0-x64.exe`。
+- `npm run dist:win`：生成 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.1-x64.exe`。
 
-也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.0-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
+也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.1-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
 
 仓库提供 [Windows 构建工作流](.github/workflows/windows.yml)，可在 GitHub Actions 中手动运行，下载上传的安装包。工作流执行上述检查和打包，不自动发布 Release。当前打包配置没有代码签名证书，安装包未签名。
 
