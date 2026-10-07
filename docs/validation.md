@@ -6,9 +6,9 @@
 
 0.1.2 改为显式 `chromiumSandbox: true`，在测试入口移除上述行为开关，并通过测试专用私有预加载脚本，直接检查实际主框架的沙箱与上下文隔离状态。测试需要的调试接口仍用于检查应用；该启动器和探针不进入生产包。下方保留历史测试与发布结果，并单独记录修正后的证据。
 
-## 0.1.2 本地验证与待办
+## 0.1.2 验证与待办
 
-2026-10-07，Linux 云机器，Node.js 24、Electron 44.6.0 / Chromium 152.0.7977.130、Xvfb。本地已取得以下结果：
+2026-10-07，本地 Linux 检查使用 Node.js 24、Electron 44.6.0 / Chromium 152.0.7977.130 与 Xvfb。以下分别记录本地结果及后续 Windows 原生验证：
 
 | 检查 | 结果 |
 | --- | --- |
@@ -16,15 +16,29 @@
 | 真实浏览器隔离检查 | 23 项通过 |
 | 登录兼容性检查 | 16 项通过 |
 | 真实网站主框架运行状态 | `sandboxed: true`、`contextIsolated: true`、`isMainFrame: true` |
-| 非 Playwright 的原生启动探针 | `navigator.webdriver: false`；该结果不代表 Windows 包已验证 |
+| 非 Playwright 的 Linux 原生启动探针 | `navigator.webdriver: false`；webdriver 这一项仅为 Linux 原生探针的观察 |
 | 全局浏览器标识 | 页面、异源 iframe、弹窗和 Service Worker 的 JavaScript / HTTP 标识一致，为 ASCII；不含 `Qiye` / `Electron` 产品标识，保留真实系统和完整 Chromium 版本，Client Hints 与引擎一致 |
-| Windows CI、安装包 / ZIP 构建、发布 | 尚未开始，待完成 |
+| Windows 原生单元与集成检查 | 39 项单元、23 项隔离、16 项登录兼容性检查及语法检查通过 |
+| Windows 实际主框架沙箱与上下文隔离 | 严格断言通过，测试注入的行为开关已移除 |
+| Windows 系统加密恢复 | 原生安全存储强制断言通过，DPAPI 下会话 Cookie / sessionStorage 跨退出恢复分支实际执行并通过 |
+| Windows NSIS 安装包构建与上传 | 通过 |
+| 发布流程、NSIS / ZIP 构建与附件下载 | 通过，三个附件最终 HTTP 200，校验文件与附件摘要一致 |
 
 原生安全存储在当前 Linux 机器不可用，加密会话 Cookie 与 sessionStorage 跨程序退出恢复仍明确跳过；同次运行的关闭重开、持久 Cookie 及其他网站存储的检查实际执行。单元测试中的加密替身不能代替 Windows DPAPI 验证。
 
+[Windows 原生验证（run 37583761902）](https://github.com/liu341567-sys/zhiwen/actions/runs/37583761902)对应提交 `ed6ceb51d625af13c3ea94a123f60f3d320bdc5a`，所有检查、NSIS 安装器构建和上传均成功。该版本在 Windows 上要求 `nativeCookieEncryption === true`，否则测试立即失败，因此本次成功确认了原生系统加密可用，并实际执行了重启后恢复会话 Cookie 和在网站脚本运行前恢复 sessionStorage 的检查。这一结果验证本地测试网页的加密恢复流程，不能代替真实知乎或抖音登录。
+
+[0.1.2 发布工作流（run 37584006111）](https://github.com/liu341567-sys/zhiwen/actions/runs/37584006111)对应同一提交，构建与发布作业均已成功。[v0.1.2 试用版](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.2)已作为非草稿预发布版本发布。发布页和下列三个附件的直接下载链接，跟随重定向后最终均返回 HTTP 200；实际读取的 `SHA256SUMS.txt` 两行与 ZIP、安装包的 GitHub 附件 SHA256 摘要逐项一致。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.1.2-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.2/Qiye-0.1.2-x64.zip) | 153134100 | `3d7eee980a1a5963e5decb9e7456864be28171de4cd1f3e77574e29ebe804efe` |
+| [Qiye-Setup-0.1.2-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.2/Qiye-Setup-0.1.2-x64.exe) | 111399617 | `cf2aa8f9f9eb809bc08fe0fc2c45ea46dd44e18358a82bdd2f90034329cf38a5` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.2/SHA256SUMS.txt) | 178 | `26916b62f7034219e9c4cec22bb65a5dba69cf4d08afcd3218d916e6cc2d0e69` |
+
 新增知乎登录诊断必须手动开启，限定开始时选中的环境、知乎请求和 120 秒时限。统计定义为记录期间完成或失败的请求，可能包含记录前发出而记录内结束的在途请求。测试检查固定统计字段、错误提示布尔值和报告数据边界；报告不保留 URL / 路径 / 查询、头或正文、Cookie、手机号、输入值、页面正文、原始 UA、环境 ID 或名称。标识设置与诊断不改写平台登录参数或签名，不通过页面脚本伪造 navigator，不禁用 TLS 验证。
 
-用户确认 0.1.1 中知乎扫码和手机验证码登录均出现 `10001：请求参数异常，请升级客户端后重试`。原因尚未确认。云网络无法访问知乎，没有可用的真实平台登录验证；上述本地结果不能当作知乎或抖音账号登录已成功的证据。当前 README 继续提供已验证的 0.1.1 下载链接，0.1.2 尚未发布。
+用户确认 0.1.1 中知乎扫码和手机验证码登录均出现 `10001：请求参数异常，请升级客户端后重试`。原因尚未确认。云网络无法访问知乎，没有可用的真实平台登录验证；上述本地及 Windows 原生测试结果不能当作知乎或抖音账号登录已成功的证据。当前 README 已提供通过下载与校验检查的 0.1.2 附件，真实平台登录仍待实机复测。
 
 ## 0.1.1 修复的本地证据
 
