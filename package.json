@@ -1,0 +1,43 @@
+{
+  "name": "qiye-browser",
+  "productName": "栖页",
+  "version": "0.1.0",
+  "description": "每个账号，独立栖居。支持持久化独立会话的账号管理浏览器。",
+  "main": "src/main.js",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "setup:electron": "install-electron",
+    "start": "electron .",
+    "test": "node --test tests/*.test.js",
+    "test:integration": "node tests/isolation.cjs",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/renderer/app.js",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:win:zip": "electron-builder --win zip --x64",
+    "pack:win": "electron-builder --win --x64 --dir"
+  },
+  "devDependencies": {
+    "electron": "44.6.0",
+    "electron-builder": "26.15.3",
+    "playwright-core": "1.63.0"
+  },
+  "build": {
+    "appId": "com.qiye.browser",
+    "productName": "栖页",
+    "directories": { "output": "dist" },
+    "files": ["src/**/*", "package.json"],
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "Qiye-${version}-${arch}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "artifactName": "Qiye-Setup-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "栖页"
+    }
+  }
+}

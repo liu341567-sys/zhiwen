@@ -1,0 +1,122 @@
+name: Publish Windows preview release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'liu341567-sys/zhiwen'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches package version
+        id: version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
+          if ($manifest.version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw 'Invalid package version.'
+          }
+          $expectedTag = 'v' + $manifest.version
+          if ($env:GITHUB_REF_TYPE -cne 'tag' -or $env:GITHUB_REF_NAME -cne $expectedTag) {
+            throw "Tag must be $expectedTag to match package.json."
+          }
+          "version=$($manifest.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Electron executable
+        run: npm run setup:electron
+      - name: Run unit tests
+        run: npm test
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Test Chromium session isolation on Windows
+        run: npm run test:integration
+      - name: Build Windows x64 installer
+        run: npm run dist:win
+      - name: Build Windows x64 ZIP
+        run: npm run dist:win:zip
+      - name: Collect release files and SHA256 checksums
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $names = @(
+            "Qiye-Setup-$($env:PACKAGE_VERSION)-x64.exe",
+            "Qiye-$($env:PACKAGE_VERSION)-x64.zip"
+          )
+          New-Item -ItemType Directory -Path 'release-assets' -Force | Out-Null
+          $checksums = foreach ($name in $names) {
+            $source = Join-Path 'dist' $name
+            if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Missing release file: $name"
+            }
+            if ((Get-Item -LiteralPath $source).Length -eq 0) {
+              throw "Empty release file: $name"
+            }
+            $destination = Join-Path 'release-assets' $name
+            Copy-Item -LiteralPath $source -Destination $destination
+            $hash = Get-FileHash -LiteralPath $destination -Algorithm SHA256
+            '{0}  {1}' -f $hash.Hash.ToLowerInvariant(), $name
+          }
+          Set-Content -LiteralPath 'release-assets/SHA256SUMS.txt' -Value $checksums -Encoding ascii
+      - name: Upload verified release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    if: github.repository == 'liu341567-sys/zhiwen'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Windows-release-assets
+          path: release-assets
+      - name: Publish preview release with verified tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $manifest = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
+          if ($env:RELEASE_TAG -cne ('v' + $manifest.version)) {
+            throw 'Release tag no longer matches package.json.'
+          }
+          $expected = @(
+            "Qiye-Setup-$($manifest.version)-x64.exe",
+            "Qiye-$($manifest.version)-x64.zip",
+            'SHA256SUMS.txt'
+          )
+          $files = @(Get-ChildItem -LiteralPath 'release-assets' -File)
+          if ($files.Count -ne $expected.Count -or
+              @(Compare-Object ($expected | Sort-Object) ($files.Name | Sort-Object)).Count -ne 0) {
+            throw 'Release artifact contents do not match the expected files.'
+          }
+          $assets = @($files | ForEach-Object { $_.FullName })
+          & gh release create $env:RELEASE_TAG @assets --verify-tag --prerelease --title "栖页 $($env:RELEASE_TAG) · Windows x64 试用版" --notes-file 'docs/release-notes.md'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'GitHub release creation or asset upload failed.'
+          }

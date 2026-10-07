@@ -1,0 +1,41 @@
+name: Windows checks and installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Electron executable
+        run: npm run setup:electron
+      - name: Test environment store
+        run: npm test
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Test actual Chromium session isolation
+        run: npm run test:integration
+      - name: Build Windows x64 installer
+        run: npm run dist:win
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qiye-Windows-x64
+          path: dist/Qiye-Setup-*-x64.exe
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>栖页 · 账号工作空间</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="环境管理">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none"><path d="M6 23.5V10.7L16 5l10 5.7v12.8L16 29 6 23.5Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="m6.8 11.2 9.2 5.3 9.2-5.3M16 16.5v11.4M11 13.7v-5M21 13.7v-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </span>
+          <div><span class="brand-name">栖页</span><span class="brand-subtitle">账号工作空间</span></div>
+        </div>
+        <button id="sidebar-create" class="button button-primary sidebar-create" type="button"><span data-icon="plus"></span>新建独立环境<span class="shortcut">⌘ / Ctrl T</span></button>
+        <button id="sidebar-overview" class="overview-button active" type="button"><span data-icon="grid"></span>工作空间<span data-icon="chevron-right"></span></button>
+        <div class="sidebar-heading"><h2>我的环境</h2><span id="profile-count" class="count">0</span></div>
+        <label class="search-field"><span data-icon="search"></span><input id="profile-search" type="search" placeholder="搜索名称或备注" aria-label="搜索环境名称或备注" autocomplete="off" /></label>
+        <div id="profile-list" class="profile-list" aria-label="已保存环境"></div>
+        <div id="sidebar-empty" class="sidebar-empty" hidden>还没有保存的环境<br /><span>从新建第一个环境开始</span></div>
+        <div class="sidebar-bottom">
+          <div id="persistence-warning" class="persistent-warning" role="status" hidden></div>
+          <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+          <div class="storage-status"><span class="status-dot"></span><span>环境数据保存在本机</span><span data-icon="lock"></span></div>
+          <p>关闭标签页会保留环境数据</p>
+          <button id="data-path-button" class="text-button data-path-button" type="button" aria-label="查看环境数据保存位置">查看保存位置<span data-icon="chevron-right"></span></button>
+          <div id="data-path-detail" class="data-path-detail" hidden></div>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <div class="tab-bar" aria-label="已打开环境">
+          <div id="tab-list" class="tab-list" role="tablist" aria-label="环境标签页"></div>
+          <button id="tab-create" class="icon-button new-tab-button" type="button" title="新建独立环境 (Ctrl / ⌘ + T)" aria-label="新建独立环境"><span data-icon="plus"></span></button>
+          <span class="tab-bar-label"><span data-icon="layers"></span>独立环境</span>
+        </div>
+        <div class="navigation-toolbar">
+          <div class="navigation-buttons">
+            <button id="back-button" class="icon-button" type="button" title="后退" aria-label="后退" disabled><span data-icon="arrow-left"></span></button>
+            <button id="forward-button" class="icon-button" type="button" title="前进" aria-label="前进" disabled><span data-icon="arrow-right"></span></button>
+            <button id="reload-button" class="icon-button" type="button" title="刷新" aria-label="刷新" disabled><span data-icon="reload"></span></button>
+          </div>
+          <form id="address-form" class="address-field" autocomplete="off">
+            <span id="address-icon" data-icon="grid"></span>
+            <input id="address-input" aria-label="网址" type="text" spellcheck="false" placeholder="工作空间" disabled />
+            <span id="address-environment" class="address-environment" hidden><span class="status-dot"></span>独立环境</span>
+          </form>
+          <button id="active-settings" class="icon-button" type="button" title="编辑当前环境" aria-label="编辑当前环境" disabled><span data-icon="sliders"></span></button>
+        </div>
+        <section id="overview-view" class="overview-view" aria-label="工作空间总览">
+          <div class="overview-topline"><span class="workspace-label">WORKSPACE</span><span class="local-badge"><span class="status-dot"></span>本地工作空间</span></div>
+          <div class="welcome-panel">
+            <div class="welcome-copy">
+              <span class="eyebrow">一个环境，一个账号</span>
+              <h1>每个账号，<br />都有自己的空间。</h1>
+              <p>独立登录，安心切换。把不同账号放进各自的环境，<br class="wide-only" />下次打开，继续上次的工作。</p>
+              <button id="welcome-create" class="button button-primary" type="button"><span data-icon="plus"></span>新建独立环境<span data-icon="arrow-right"></span></button>
+            </div>
+            <div class="welcome-art" aria-hidden="true">
+              <div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div>
+              <div class="art-leaf leaf-one"></div><div class="art-leaf leaf-two"></div>
+              <div class="art-window window-back"><div class="art-window-bar"><i></i><i></i><i></i></div><div class="art-avatar" data-color="blue"><span data-icon="user"></span></div><div class="art-line"></div><div class="art-line short"></div><div class="art-tag"><span data-icon="lock"></span></div></div>
+              <div class="art-window window-front"><div class="art-window-bar"><i></i><i></i><i></i></div><div class="art-avatar" data-color="orange"><span data-icon="user"></span></div><div class="art-line"></div><div class="art-line short"></div><div class="art-tag"><span data-icon="lock"></span></div></div>
+              <span class="art-spark spark-one">+</span><span class="art-spark spark-two">+</span><div class="art-isolation"><span data-icon="shield-check"></span>彼此独立 · 自动保存</div>
+            </div>
+          </div>
+          <div class="feature-strip">
+            <div><span class="feature-icon" data-icon="shield-check"></span><div><strong>登录互不影响</strong><span>Cookie、缓存与本地存储隔离</span></div></div>
+            <div><span class="feature-icon" data-icon="folder"></span><div><strong>环境持续保留</strong><span>关闭后可再次打开使用</span></div></div>
+            <div><span class="feature-icon" data-icon="layers"></span><div><strong>多个环境同时打开</strong><span>用名称与备注区分账号</span></div></div>
+          </div>
+          <div class="saved-heading"><div><h2>已保存的环境 <span id="overview-count">0</span></h2><p>打开一个环境，继续管理对应的账号。</p></div><button id="cards-create" class="button button-secondary" type="button"><span data-icon="plus"></span>新建环境</button></div>
+          <div id="profile-cards" class="profile-cards"></div>
+          <div id="overview-empty" class="overview-empty" hidden><span class="empty-icon" data-icon="folder-plus"></span><h3>你的第一个账号空间，等你开启</h3><p>新建环境会使用全新的登录状态。登录后，<br />这个环境就可以持续用于管理同一个账号。</p><button id="empty-create" class="button button-secondary" type="button"><span data-icon="plus"></span>创建第一个环境</button></div>
+          <p class="overview-footnote"><span data-icon="info"></span>登录状态由平台决定；若登录过期，请在对应环境内重新登录。</p>
+        </section>
+        <section id="browser-view" class="browser-view" aria-label="网页内容" hidden>
+          <div id="browser-loading" class="browser-loading" hidden></div>
+          <div id="browser-viewport" class="browser-viewport">
+            <div id="browser-error" class="browser-error" hidden><span class="error-icon" data-icon="globe"></span><h2>暂时无法打开这个页面</h2><p id="browser-error-message"></p><button id="error-reload" class="button button-primary" type="button"><span data-icon="reload"></span>重新加载</button><button id="error-overview" class="text-button" type="button">返回工作空间</button></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="profile-dialog" class="modal" aria-labelledby="profile-dialog-title">
+      <form id="profile-form">
+        <div class="modal-heading"><span class="modal-symbol" data-icon="layers"></span><button id="profile-dialog-close" class="icon-button" type="button" aria-label="关闭对话框"><span data-icon="x"></span></button></div>
+        <h2 id="profile-dialog-title">新建独立环境</h2><p id="profile-dialog-description" class="modal-description">从全新的登录状态开始，为一个账号创建专属空间。</p>
+        <label class="form-field">环境名称 <span class="required">*</span><input id="profile-name" name="name" type="text" placeholder="例如：抖音 · 主账号" required maxlength="60" autocomplete="off" /></label>
+        <label class="form-field">备注 <span class="field-optional">选填</span><textarea id="profile-notes" name="notes" placeholder="记录账号用途，方便下次识别" maxlength="500" rows="2"></textarea></label>
+        <label class="form-field">启动网址<input id="profile-url" name="startUrl" type="text" placeholder="https://www.douyin.com" required maxlength="4096" spellcheck="false" autocomplete="off" /><span class="field-help">首次打开时访问的网址；再次打开会恢复上次的页面。</span></label>
+        <fieldset class="color-field"><legend>环境颜色</legend><div id="color-choices" class="color-choices"></div></fieldset>
+        <p id="profile-form-error" class="form-error" role="alert" hidden></p>
+        <div id="new-profile-tip" class="modal-tip"><span data-icon="shield-check"></span><span>每个环境单独保存浏览数据，已有环境的登录状态不会改变。</span></div>
+        <div class="modal-actions"><button id="profile-delete" class="text-button delete-environment-button" type="button" hidden><span data-icon="trash"></span>删除环境</button><button id="profile-cancel" class="button button-secondary" type="button">取消</button><button id="profile-save" class="button button-primary" type="submit">创建并打开</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="delete-dialog" class="modal delete-modal" aria-labelledby="delete-dialog-title">
+      <div class="modal-heading"><span class="modal-symbol danger-symbol" data-icon="trash"></span><button id="delete-dialog-close" class="icon-button" type="button" aria-label="关闭删除对话框"><span data-icon="x"></span></button></div>
+      <h2 id="delete-dialog-title">永久删除这个环境？</h2><p class="modal-description">即将删除 <strong id="delete-profile-name"></strong>。</p>
+      <div class="delete-warning"><span data-icon="alert-triangle"></span><p>该环境的 Cookie、缓存、本地存储和登录状态将被永久清除，无法恢复。其他环境的数据不会受到影响。</p></div>
+      <p id="delete-error" class="form-error" role="alert" hidden></p>
+      <div class="modal-actions"><button id="delete-cancel" class="button button-secondary" type="button">保留环境</button><button id="delete-confirm" class="button button-danger" type="button">永久删除</button></div>
+    </dialog>
+  </body>
+</html>

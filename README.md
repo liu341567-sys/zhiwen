@@ -1,0 +1,68 @@
+# 栖页 · 多账号浏览器
+
+栖页是面向 Windows 10 / 11（64 位）的桌面浏览器，用于同时管理抖音等网站的多个账号。每个环境拥有独立且持久化的 Chromium 会话；新建环境从空白登录状态开始，再次打开已有环境则使用原来的浏览器数据。
+
+## 使用方式
+
+1. 点击「新建环境」，设置名称、备注、标记颜色和起始网址。默认打开 `https://www.douyin.com/`。
+2. 在新环境中登录对应账号。继续新建环境，可以独立登录另一个账号。
+3. 从环境列表打开或切换账号。多个环境可以同时保持打开；网站打开的登录弹窗沿用所属环境。
+4. 关闭标签页只关闭页面，保留环境。重新打开后继续使用原来的 Cookie 和存储；退出应用后再次启动，恢复上次仍打开的环境和最近网址。
+5. 修改名称或备注不影响登录。删除环境会清除其 Cookie、网站存储和缓存，并移除环境记录，操作不可恢复。
+
+快捷键：`Ctrl+T` 新建环境、`Ctrl+L` 聚焦地址栏、`Ctrl+W` 关闭当前环境标签页。地址栏支持 HTTP / HTTPS 网页，提供后退、前进和刷新。
+
+“已打开”表示环境的页面正在运行，并不表示平台账号已登录。平台可能使登录过期、要求扫码或额外验证；栖页保留本地会话数据，无法替平台续期。各环境仍使用当前电脑和网络出口，不提供代理、设备指纹伪装或平台风控规避功能。
+
+## 本地运行
+
+安装 [Node.js 24 LTS](https://nodejs.org/) 和 Git，在终端运行：
+
+```powershell
+git clone https://github.com/liu341567-sys/zhiwen.git
+cd zhiwen
+npm ci
+npm run setup:electron
+npm start
+```
+
+`npm ci` 使用提交的锁文件。Electron 44 的 npm 包与浏览器可执行文件分开安装，首次启动前需要执行 `npm run setup:electron`。依赖安装和打包需要访问 npm 注册表及 Electron 的官方发布下载源。开发环境建议使用 Node.js 24；Electron 安装工具要求 Node.js 22.12 或更新版本。
+
+在 Linux 云环境验证时，需要可用的图形显示或 Xvfb，以及 Electron 所需系统库。以普通用户运行 Electron，保留 Chromium 沙箱；不要为运行应用关闭沙箱或 TLS 验证。
+
+## 检查与 Windows 打包
+
+```powershell
+npm test
+npm run check
+npm run test:integration
+npm run dist:win
+```
+
+- `npm test`：环境清单、网址校验和持久化等单元测试。
+- `npm run check`：JavaScript 语法检查。
+- `npm run test:integration`：实际启动 Electron，使用本地测试网页验证浏览器会话隔离、重新打开和重启后的持久化，以及删除环境后的数据清理。测试使用临时目录，不需要真实平台账号。
+- `npm run dist:win`：生成 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.0-x64.exe`。
+
+也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.0-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
+
+仓库提供 [Windows 构建工作流](.github/workflows/windows.yml)，可在 GitHub Actions 中手动运行，下载上传的安装包。工作流执行上述检查和打包，不自动发布 Release。当前打包配置没有代码签名证书，安装包未签名。
+
+发布前还需在 Windows 实机使用两个测试账号确认抖音登录、扫码/弹窗、退出账号、重启与下载行为。自动测试验证本地浏览器数据隔离，不能替代第三方平台登录兼容性检查。
+
+## 数据位置与备份
+
+默认数据目录是 Windows 的 `%APPDATA%\栖页`，应用界面也会显示实际目录。开发时可用环境变量指定另一目录：
+
+```powershell
+$env:QIYE_DATA_DIR = "D:\QiyeData"
+npm start
+```
+
+`profiles.json` 保存环境名称、备注、网址和打开状态；登录 Cookie 等浏览器数据由 Chromium 保存于对应的独立持久化分区。为支持没有过期日期的会话 Cookie，以及部分网页使用的临时会话存储（sessionStorage），应用还在 `session-cookies` 目录按环境保存使用系统安全存储加密的快照；Windows 使用 DPAPI。再次打开时，sessionStorage 会在网站脚本运行前恢复到原环境、原网站来源。应用不主动保存账号密码。不要在名称或备注中填写密码。
+
+若系统安全存储不可用，应用提示会话 Cookie 和 sessionStorage 无法跨退出恢复，不会退回明文保存；同一次程序运行中关闭标签页再打开仍可恢复。此时有过期日期的持久化 Cookie 和其他持久化网站存储仍由 Chromium 管理。
+
+备份前正常退出应用，再复制整个数据目录；只复制 `profiles.json` 无法保存登录环境。恢复前先备份现有目录，并保持应用关闭。部分 Cookie 会使用系统加密，迁移到其他电脑或 Windows 用户后可能需要重新登录；备份也不能延长平台登录有效期。请妥善保护包含登录会话的数据目录。
+
+技术结构与隔离边界见 [架构说明](docs/architecture.md)。
