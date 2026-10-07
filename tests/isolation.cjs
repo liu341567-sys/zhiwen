@@ -206,6 +206,10 @@ async function main() {
     await launch();
     const nativeCookieEncryption = await app.evaluate(({ safeStorage }) =>
       safeStorage.isEncryptionAvailable() && (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'));
+    // Windows promises encrypted login-state restoration; its CI must exercise
+    // that branch rather than quietly accepting the Linux fallback.
+    if (process.platform === 'win32') assert.equal(nativeCookieEncryption, true,
+      'Windows integration checks require native secure storage');
     const first = await newProfile('账号 A', origin);
     check('new environment starts without account state', () => assert.ok(first.id));
     const initial = await evaluateView(first.id, 'window.readAccount()');
