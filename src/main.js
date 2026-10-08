@@ -522,7 +522,7 @@ async function createWindow() {
     minHeight: Math.min(600, workArea.height),
     title: '栖页 · 账号工作空间',
     icon: applicationIcon,
-    backgroundColor: '#f4f7fb',
+    backgroundColor: '#f4f5f7',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
