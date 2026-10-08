@@ -8,7 +8,7 @@
 
 ## 0.1.6 平台预设验证
 
-本轮 Linux 使用真实 Electron、Xvfb 1920 × 1080 完成检查。九个平台入口以用户 DOCX 和 canonical JSON 为准，图标使用有来源与摘要记录的本地镜像原文件，详见 [平台预设说明](platform-presets.md)。
+本轮源码与 `v0.1.6` 标签对应提交 `f201a28d7f6a3bdabe331fea6a7ffb213898ae5f`。Linux 实际窗口 UI 使用真实 Electron 与 Xvfb 1920 × 1080 完成检查。九个平台入口以用户 DOCX 和 canonical JSON 为准，图标使用有来源与摘要记录的本地镜像原文件，详见 [平台预设说明](platform-presets.md)。
 
 | 检查 | 本轮结果 |
 | --- | --- |
@@ -20,12 +20,34 @@
 | 沙箱 | 实际网页 `sandboxed: true`，`--no-sandbox` 未启用 |
 | 图标及配置 | 文档九组字段与 canonical 一致；九份本地资源路径、字节数和 SHA256 与来源清单一致 |
 | 人工截图检查 | 三档设备缩放的平台选中网格，以及 100% 环境卡片概览已查看；品牌图形清晰，蓝色基线保持 |
-| Windows CI、DPAPI 与实际安装 | 待验证 |
-| 0.1.6 发布、附件下载及校验 | 待完成 |
+| Windows 单元、语法与集成 | 59 项单元、语法、23 项隔离及 16 项本地登录兼容性通过 |
+| Windows 实际窗口 UI | 201 项通过，6 个实际布局，无跳过；实际 DPR 1 / 1.25 / 1.5 分别为 78 / 67 / 56 项 |
+| Windows DPAPI 与实际安装 | 原生加密恢复、PE 图标、快捷方式、九平台本地图标与关联恢复、原生运行、数据恢复及卸载通过 |
+| 0.1.6 发布、附件下载及校验 | 通过，发布页及三个附件最终 HTTP 200，实际读取的校验文件与 API 附件摘要一致 |
 
-新增回归覆盖旧清单及未知平台字段、默认图标、九图标加载、3 × 3 单选及原生 Tab / 方向键焦点、手输草稿与非法网址、各平台原文入口首次导航、同平台两环境的 Cookie / localStorage 隔离与退出互不影响、改名及平台切换不自动导航、自定义清关联、写盘重开和真实图片错误回退。只改名或备注保留旧 `platformId` 与原文启动网址，已通过实际界面与文件检查。
+新增回归覆盖旧清单及未知平台字段、默认图标、九图标加载、3 × 3 单选及原生 Tab / 方向键焦点、手输草稿与非法网址、九平台原文配置及预设入口首次导航、同平台两环境的 Cookie / localStorage 隔离与退出互不影响、改名及平台切换不自动导航、自定义清关联、写盘重开和真实图片错误回退。只改名或备注保留旧 `platformId` 与原文启动网址，已通过实际界面与文件检查。
 
-平台精确入口在测试中重定向到环回网页，未知外部请求被拦截且最终计数为 0；未访问真实平台登录。完整 UI 日志保存在 `test-results/ui-platforms.log`。设备缩放通过 Electron 设置并核对实际 DPR，不代表切换 Windows 设置面板的物理显示器 DPI。Linux 原生安全存储不可用，会话型 Cookie / sessionStorage 的加密跨退出恢复分支仍按既有机制跳过；Windows DPAPI 待本轮 CI，不能借用历史结果。README 下载仍为已验证的 0.1.5，真实平台登录继续待实机复测。
+平台精确入口在测试中重定向到环回网页，未知外部请求被拦截且最终计数为 0；未访问真实平台登录。完整 Linux UI 日志保存在 `test-results/ui-platforms.log`。设备缩放通过 Electron 设置并核对实际 DPR，不代表切换 Windows 设置面板的物理显示器 DPI。Linux 原生安全存储不可用，会话型 Cookie / sessionStorage 的加密跨退出恢复分支仍按既有机制跳过；本轮 Windows 原生 DPAPI 路径实际执行并通过。
+
+[Windows 主分支检查（run 37755390568）](https://github.com/liu341567-sys/zhiwen/actions/runs/37755390568)与[发布工作流（run 37755416238）](https://github.com/liu341567-sys/zhiwen/actions/runs/37755416238)均完整成功，对应上述提交。Windows 实际窗口检查按工作区夹取窗口并合并重复布局，执行 201 项、6 个实际布局，无跳过：
+
+| 设备缩放 / 实际 DPR | 实际内容视口 | UI 检查 |
+| --- | --- | --- |
+| 100% / 1 | 1008 × 681、1008 × 680、900 × 480 | 78 项通过 |
+| 125% / 1.25 | 808 × 545、808 × 480 | 67 项通过 |
+| 150% / 1.5 | 672 × 454 | 56 项通过 |
+
+实际 NSIS 安装验收确认 PE 图标帧与源文件匹配，桌面与开始菜单快捷方式、AppUserModelID 及字标正确。已安装程序的九份本地平台图标与平台关联恢复、原生启动、`WM_CLOSE` 正常退出、账号测试数据恢复及卸载全部通过。
+
+[v0.1.6 Windows 试用版](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.6)于 2026-10-08 17:21:28（北京时间，UTC+08:00）公开为非草稿预发布版本。匿名 HEAD 访问发布页及三个附件的直接链接，跟随重定向后最终均为 HTTP 200。实际 GET 读取的 `SHA256SUMS.txt` 为 178 字节，自身 SHA256 与 API 附件摘要一致；其中安装包与 ZIP 的两行摘要也与 GitHub API 附件 SHA256 逐项一致。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.1.6-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.6/Qiye-0.1.6-x64.zip) | 153929762 | `d1816f54738b340cb59a5d51a57a82e3b79afd45106ee085d65199e59eee6f0f` |
+| [Qiye-Setup-0.1.6-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.6/Qiye-Setup-0.1.6-x64.exe) | 112439500 | `d61a83e577b7ef4c2c4aeac57219f03a7a81f215b451c0bf9ae4771990cca852` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.6/SHA256SUMS.txt) | 178 | `6b6ba97ee45d664a2ddf7e238f4a930c0a1c25274b06f55466af536da0a0ffd0` |
+
+真实平台登录继续待实机复测，本轮入口与本地兼容性检查不构成真实账号登录成功的证据。
 
 ## 0.1.5 侧栏与焦点回归
 
