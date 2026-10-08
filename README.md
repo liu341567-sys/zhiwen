@@ -4,12 +4,12 @@
 
 ## Windows 下载
 
-- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.4/Qiye-Setup-0.1.4-x64.exe)：下载后运行安装程序。
-- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.4/Qiye-0.1.4-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.5/Qiye-Setup-0.1.5-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.5/Qiye-0.1.5-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
 
-[v0.1.4 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.4)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版优化中性灰背景层次、白色欢迎区与卡片，降低侧栏新建按钮的色块权重，以品牌蓝强调主操作和焦点，并统一悬停、选中与危险操作反馈。原有 Logo、字体、布局、账号环境、数据目录及登录流程继续沿用。更新前正常退出旧版并备份数据目录，已有环境继续保留。
+[v0.1.5 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.5)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版恢复侧栏蓝色选中块和实心蓝色新建按钮，修正鼠标操作后按 Shift 出现的额外焦点框，以及取消编辑对话框后的焦点恢复。其他中性配色、原有 Logo、字体、布局、账号环境、数据目录及登录流程继续沿用。更新前正常退出旧版并备份数据目录，已有环境继续保留。
 
-[Windows 发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37723460817)已通过，包括 39 项单元、23 项隔离、16 项本地登录兼容性检查、原生 DPAPI 恢复及三档设备缩放的 102 项实际窗口检查；NSIS 安装、图标与快捷方式、已安装程序的原生运行、数据恢复及卸载也已验证。发布页与三个附件的下载和校验文件已核实。设备缩放由 Electron 设置并检查实际 DPR，未通过 Windows 设置面板切换物理显示器 DPI。知乎 `10001：请求参数异常，请升级客户端后重试` 的原因尚未确认，真实知乎和抖音登录仍需实机复测。[视觉规范](docs/visual-system.md)记录当前配色与保留的布局规范。
+[Windows 发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37746621542)已通过，包括 39 项单元、23 项隔离、16 项本地登录兼容性检查、原生 DPAPI 恢复及三档设备缩放的 147 项实际窗口检查；NSIS 安装、图标与快捷方式、已安装程序的原生运行、数据恢复及卸载也已验证。发布页与三个附件的下载和校验文件已核实。设备缩放由 Electron 设置并检查实际 DPR，未通过 Windows 设置面板切换物理显示器 DPI。知乎 `10001：请求参数异常，请升级客户端后重试` 的原因尚未确认，真实知乎和抖音登录仍需实机复测。[视觉规范](docs/visual-system.md)记录当前配色与焦点交互规范。
 
 ## 使用方式
 
@@ -61,9 +61,9 @@ npm run dist:win
 - `npm run check`：JavaScript 语法检查。
 - `npm run test:integration`：实际启动 Electron，使用本地测试网页验证浏览器会话隔离、持久化、删除清理、浏览器标识与登录存储兼容性。测试显式启用 Chromium 沙箱，清理测试工具注入的行为开关，并直接断言主框架的实际沙箱与上下文隔离状态。测试使用临时目录，不需要真实平台账号。
 - `npm run test:ui`：在真实 Electron 窗口中以 100%、125%、150% 的设备缩放检查品牌图片、标签关闭区域、长名称、弹窗、小工作区及原生网页视图位置。实际尺寸与检查数量按显示器工作区记录。
-- `npm run dist:win`：生成当前源码版本的 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.4-x64.exe`。
+- `npm run dist:win`：生成当前源码版本的 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.5-x64.exe`。
 
-也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.4-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
+也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.5-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
 
 仓库提供 [Windows 构建工作流](.github/workflows/windows.yml)，可在 GitHub Actions 中手动运行，下载上传的安装包。工作流执行上述检查和打包，在临时运行器实际安装、验证 PE 图标与快捷方式、启动及重启程序，完成后卸载；不自动发布 Release。当前打包配置没有代码签名证书，安装包未签名。
 
