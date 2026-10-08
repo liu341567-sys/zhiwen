@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { ProfileStore, normalizeUrl, partitionFor } = require('./profile-store');
@@ -9,6 +9,9 @@ const { userAgentForMode } = require('./browser-identity');
 const { LoginDiagnostics, PAGE_OBSERVATION_SCRIPT } = require('./login-diagnostics');
 
 app.setName('栖页');
+if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
+const iconDirectory = app.isPackaged ? path.join(process.resourcesPath, 'brand-icons') : path.join(__dirname, 'assets');
+const applicationIcon = path.join(iconDirectory, process.platform === 'win32' ? 'qiye.ico' : 'qiye.png');
 // Use one browser identity for documents and Service Workers before creating
 // any network context. Keep the real OS/Chromium version and native metadata.
 const applicationProduct = `${app.getName().replace(/ /g, '')}/${app.getVersion()}`;
@@ -137,25 +140,30 @@ function configurePage(wc, id) {
     const allowedFrameDocument = !event.isMainFrame && /^(about:blank|about:srcdoc|blob:|data:)/.test(event.url);
     if (!allowedNavigation(event.url) && !allowedFrameDocument) event.preventDefault();
   });
-  wc.setWindowOpenHandler(({ url }) => ({
-    action: allowedNavigation(url) || url === 'about:blank' ? 'allow' : 'deny',
-    overrideBrowserWindowOptions: {
-      parent: mainWindow,
-      autoHideMenuBar: true,
-      width: 1060,
-      height: 780,
-      title: `${store.get(id).name} · 栖页`,
-      webPreferences: {
-        session: sessions.get(id),
-        preload: path.join(__dirname, 'remote-preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-        navigateOnDragDrop: false
+  wc.setWindowOpenHandler(({ url }) => {
+    const popupArea = (mainWindow && !mainWindow.isDestroyed()
+      ? screen.getDisplayMatching(mainWindow.getBounds()) : screen.getPrimaryDisplay()).workAreaSize;
+    return {
+      action: allowedNavigation(url) || url === 'about:blank' ? 'allow' : 'deny',
+      overrideBrowserWindowOptions: {
+        parent: mainWindow,
+        icon: applicationIcon,
+        autoHideMenuBar: true,
+        width: Math.min(1060, popupArea.width),
+        height: Math.min(780, popupArea.height),
+        title: `${store.get(id).name} · 栖页`,
+        webPreferences: {
+          session: sessions.get(id),
+          preload: path.join(__dirname, 'remote-preload.js'),
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          webSecurity: true,
+          navigateOnDragDrop: false
+        }
       }
-    }
-  }));
+    };
+  });
   wc.on('did-create-window', child => {
     if (!popups.has(id)) popups.set(id, new Set());
     popups.get(id).add(child);
@@ -504,13 +512,17 @@ function registerIPC() {
 }
 
 async function createWindow() {
+  // Work-area sizes are device-independent pixels, so a scaled display must
+  // not receive a window or minimum size larger than its available desktop.
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 940,
-    minWidth: 1020,
-    minHeight: 700,
+    width: Math.min(1440, workArea.width),
+    height: Math.min(940, workArea.height),
+    minWidth: Math.min(900, workArea.width),
+    minHeight: Math.min(600, workArea.height),
     title: '栖页 · 账号工作空间',
-    backgroundColor: '#f8f7f4',
+    icon: applicationIcon,
+    backgroundColor: '#f4f7fb',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

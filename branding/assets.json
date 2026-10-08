@@ -1,0 +1,63 @@
+{
+  "source": "用户上传栖页.zip的原始PNG，无重绘",
+  "desktop": {
+    "source": "branding/originals/desktop.png",
+    "sha256": "f6c660f2b7732c27db0cdf312d5f60b1fb27dad16aec5a7d31364dc6d497a878",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "crop": [
+      221,
+      185,
+      815,
+      921
+    ],
+    "output": "src/assets/qiye.png",
+    "outputSize": [
+      512,
+      512
+    ],
+    "fit": [
+      432,
+      432
+    ],
+    "padding": "uniform fit centered in transparent square",
+    "maxAlphaOutsideCrop": 1
+  },
+  "wordmark": {
+    "source": "branding/originals/wordmark.png",
+    "sha256": "c84549533eb039cc075d0fd23a606319b3fa07e31b2b25b9ab38e4322d203e58",
+    "originalSize": [
+      1672,
+      941
+    ],
+    "crop": [
+      229,
+      201,
+      1253,
+      559
+    ],
+    "output": "src/assets/qiye-wordmark.png",
+    "outputSize": [
+      1253,
+      559
+    ],
+    "maxAlphaOutsideCrop": 1
+  },
+  "windowsIcon": {
+    "output": "src/assets/qiye.ico",
+    "sizes": [
+      16,
+      20,
+      24,
+      32,
+      40,
+      48,
+      64,
+      128,
+      256
+    ],
+    "format": "32-bit RGBA/DIB multi-resolution ICO"
+  }
+}

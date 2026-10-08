@@ -45,9 +45,32 @@ jobs:
         run: npm run check
       - name: Test Chromium session isolation on Windows
         run: npm run test:integration
+      - name: Test UI at 100%, 125% and 150% display scale
+        shell: pwsh
+        run: ./.github/scripts/test-ui.ps1
+      - name: Upload UI screenshots and measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-UI-validation
+          path: test-results/ui/*
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Build Windows x64 installer
         shell: pwsh
         run: ./.github/scripts/build-windows.ps1 -Target nsis
+      - name: Verify installed Windows application and icons
+        id: installed-check
+        shell: pwsh
+        run: ./.github/scripts/test-installer.ps1
+      - name: Upload installed application verification
+        if: always() && steps.installed-check.outputs.verification_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-installed-validation
+          path: ${{ steps.installed-check.outputs.verification_path }}
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Build Windows x64 ZIP
         shell: pwsh
         run: ./.github/scripts/build-windows.ps1 -Target zip
