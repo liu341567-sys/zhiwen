@@ -40,6 +40,7 @@
   let dialogBusy = false;
   let modalOpening = false;
   let focusBeforeModal = null;
+  let focusKeyBeforeModal = null;
   let boundsFrame = 0;
   let lastBounds = '';
   let toastSequence = 0;
@@ -48,6 +49,16 @@
   let diagnosticsBusy = false;
   let diagnosticsTimer = null;
   let diagnosticsPollGeneration = 0;
+
+  // Modifier-only key presses must not turn a mouse-focused environment
+  // control into a keyboard selection. Keep actual keyboard navigation visible.
+  const navigationKeys = new Set(['Tab', 'Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Escape']);
+  document.addEventListener('pointerdown', () => {
+    document.documentElement.dataset.environmentFocus = 'pointer';
+  }, { capture: true, passive: true });
+  document.addEventListener('keydown', (event) => {
+    if (navigationKeys.has(event.key)) document.documentElement.dataset.environmentFocus = 'keyboard';
+  }, { capture: true });
 
   function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -305,6 +316,7 @@
     if (dialogIsOpen()) return;
     modalOpening = true;
     focusBeforeModal = document.activeElement;
+    focusKeyBeforeModal = focusBeforeModal?.dataset.focusKey;
     try {
       await setOverlay(true);
       editId = profile ? profile.id : null;
@@ -335,8 +347,9 @@
     await action('setOverlayVisible', false);
     scheduleBounds();
     if (restoreFocus) {
-      if (focusBeforeModal?.isConnected) focusBeforeModal.focus({ preventScroll: true });
-      else $('sidebar-create').focus({ preventScroll: true });
+      const target = focusBeforeModal?.isConnected ? focusBeforeModal :
+        [...document.querySelectorAll('[data-focus-key]')].find((node) => node.dataset.focusKey === focusKeyBeforeModal);
+      (target || $('sidebar-create')).focus({ preventScroll: true });
     }
   }
 
@@ -394,6 +407,7 @@
     if (!activeTab() || dialogIsOpen()) return;
     modalOpening = true;
     focusBeforeModal = document.activeElement;
+    focusKeyBeforeModal = focusBeforeModal?.dataset.focusKey;
     stopDiagnosticsPolling();
     try {
       await setOverlay(true);

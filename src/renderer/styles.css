@@ -46,6 +46,13 @@
   --shadow-card: #20293805;
   --shadow-modal: #20293820;
   --backdrop: #20293860;
+  --sidebar-action: #1665d8;
+  --sidebar-action-hover: #1455bb;
+  --sidebar-action-active: #104794;
+  --sidebar-hover: #f0f5ff;
+  --sidebar-selected: #edf4ff;
+  --sidebar-selected-hover: #e3eefe;
+  --sidebar-selected-border: #c8dcfb;
   --sidebar-width: 264px;
   --font-body: 14px;
   --font-small: 12px;
@@ -70,6 +77,11 @@ input, textarea { min-width: 0; -webkit-tap-highlight-color: transparent; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
+}
+/* Shift alone may match native :focus-visible after a mouse click. Scope the
+   input-source correction to environment controls; forms keep native focus. */
+:root[data-environment-focus="pointer"] :is(.profile-row button, .profile-card button, .tab button, .sidebar-create, .overview-button, .new-tab-button):focus {
+  outline: none;
 }
 [hidden] { display: none !important; }
 svg { display: block; width: 18px; height: 18px; flex-shrink: 0; }
@@ -168,10 +180,10 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .text-button svg { width: 16px; height: 16px; }
 
 /* Saved environment navigation. */
-.sidebar-create { justify-content: flex-start; width: 100%; padding-right: 10px; padding-left: 10px; flex-shrink: 0; color: var(--text); background: var(--surface); border-color: var(--line-strong); }
-.sidebar-create > [data-icon] { color: var(--brand); }
-.sidebar-create:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); border-color: var(--line-hover); }
-.sidebar-create:active:not(:disabled) { color: var(--text); background: var(--surface-pressed); border-color: var(--line-hover); }
+.sidebar-create { justify-content: flex-start; width: 100%; padding-right: 10px; padding-left: 10px; flex-shrink: 0; color: var(--on-brand); background: var(--sidebar-action); border-color: var(--sidebar-action); }
+.sidebar-create > [data-icon] { color: inherit; }
+.sidebar-create:hover:not(:disabled) { color: var(--on-brand); background: var(--sidebar-action-hover); border-color: var(--sidebar-action-hover); }
+.sidebar-create:active:not(:disabled) { color: var(--on-brand); background: var(--sidebar-action-active); border-color: var(--sidebar-action-active); }
 .shortcut { margin-left: auto; font-size: var(--font-small); font-weight: 400; opacity: .9; white-space: nowrap; }
 .overview-button {
   display: flex;
@@ -191,10 +203,10 @@ button, input, textarea, .profile-row, .tab, .profile-card {
   flex-shrink: 0;
 }
 .overview-button > [data-icon]:last-child { margin-left: auto; }
-.overview-button:hover { color: var(--text); background: var(--surface-hover); }
-.overview-button.active { color: var(--text); background: var(--surface-selected); border-color: var(--line); box-shadow: inset 1px 0 0 var(--brand); }
-.overview-button.active > [data-icon] { color: var(--brand); }
-.overview-button.active:hover { background: var(--surface-hover); }
+.overview-button:hover { color: var(--text); background: var(--sidebar-hover); }
+.overview-button.active { color: var(--sidebar-action-hover); background: var(--sidebar-selected); border-color: var(--sidebar-selected-border); box-shadow: none; }
+.overview-button.active > [data-icon] { color: var(--sidebar-action); }
+.overview-button.active:hover { background: var(--sidebar-selected-hover); }
 .sidebar-heading { display: flex; align-items: center; gap: 8px; margin: 22px 10px 10px; flex-shrink: 0; }
 .sidebar-heading h2 { margin: 0; color: var(--secondary); font-size: var(--font-small); font-weight: 600; }
 .count { min-width: 21px; padding: 1px 6px; border-radius: 5px; color: var(--secondary); background: var(--surface-inset); font-size: var(--font-small); text-align: center; }
@@ -206,9 +218,9 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .search-field input:focus-visible { outline: 0; }
 .profile-list { flex: 1 1 120px; min-height: 64px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 .profile-row { display: flex; align-items: center; gap: 2px; margin-bottom: 5px; padding: 3px; border: 1px solid transparent; border-radius: var(--radius-control); }
-.profile-row:hover { background: var(--surface-hover); }
-.profile-row.active { background: var(--surface-selected); border-color: var(--line); box-shadow: inset 2px 0 0 var(--brand); }
-.profile-row.active:hover { background: var(--surface-hover); }
+.profile-row:hover { background: var(--sidebar-hover); }
+.profile-row.active { background: var(--sidebar-selected); border-color: var(--sidebar-selected-border); box-shadow: none; }
+.profile-row.active:hover { background: var(--sidebar-selected-hover); }
 .profile-open { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 7px 4px; border: 0; border-radius: 5px; background: transparent; text-align: left; }
 .profile-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--profile-border); border-radius: 9px; color: var(--text); background: var(--profile-tint); font-size: 16px; font-weight: 600; flex-shrink: 0; }
 [data-color="orange"] { --profile-accent: #e87941; --profile-tint: #f8efe9; }

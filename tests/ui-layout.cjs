@@ -8,6 +8,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { _electron } = require('playwright-core');
+const { verifyInputFocus } = require('./ui-focus.cjs');
 
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'ui');
@@ -320,6 +321,8 @@ async function runScale(scale, origin) {
       await shell.locator('#data-path-button').click();
       await nativeBoundsMatch();
     }
+
+    await verifyInputFocus({ shell, state, ids, check, prefix, screenshot, eventually, clickable });
 
     // User flow after the smallest geometry pass: rename, navigation, close and
     // reopen use normal controls. These checks protect data while changing CSS.
