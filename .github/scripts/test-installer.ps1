@@ -58,19 +58,32 @@ function Assert-Shortcut {
     $iconLocation = [string]$shortcut.IconLocation
     $properties = @{ link = $LinkPath; target = $targetPath; icon = $iconLocation } | ConvertTo-Json -Compress
     Write-Host "::notice title=Installed shortcut properties::$properties"
-    if ([string]::IsNullOrWhiteSpace($targetPath)) { throw "Shortcut has an empty target: $LinkPath" }
-    if ([IO.Path]::GetFullPath($targetPath) -ine [IO.Path]::GetFullPath($installedExe)) {
+    # Load the existing Shell Link explicitly and retain native HRESULTs.
+    # WScript.CreateShortcut can return a default object without explaining why
+    # loading the file failed; it must not be the sole installation verdict.
+    $inspection = & (Join-Path $PSScriptRoot 'inspect-shortcut.ps1') -LinkPath $LinkPath
+    $inspectionJson = $inspection | ConvertTo-Json -Depth 8 -Compress
+    $inspectionJson | Set-Content -LiteralPath (Join-Path $outputDirectory ((Split-Path -Leaf $LinkPath) + '.json')) -Encoding utf8
+    $annotation = $inspectionJson.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+    Write-Host "::notice title=Native installed shortcut inspection::$annotation"
+    $native = $inspection.native
+    if ($inspection.headerSize -ne 76 -or $inspection.shellLinkCLSID -cne '00021401-0000-0000-c000-000000000046' -or
+        $native.loadHRESULT -cne '0x00000000' -or $native.getPathHRESULT -cne '0x00000000' -or
+        [string]::IsNullOrWhiteSpace([string]$native.target)) {
+      throw "The existing shortcut must load and expose its target through Windows IShellLinkW: $LinkPath"
+    }
+    if ([IO.Path]::GetFullPath([string]$native.target) -ine [IO.Path]::GetFullPath($installedExe)) {
       throw "Shortcut target is not the verified installed executable: $LinkPath"
     }
-    $iconMatch = [regex]::Match($iconLocation, '^(.+),\s*0\s*$')
-    if (!$iconMatch.Success) { throw "Shortcut must use executable icon index zero: $LinkPath ($iconLocation)" }
-    $iconFile = $iconMatch.Groups[1].Value.Trim('"')
+    if ($native.getIconHRESULT -cne '0x00000000' -or $native.iconIndex -ne 0 -or
+        [string]::IsNullOrWhiteSpace([string]$native.iconPath)) {
+      throw "Shortcut must expose executable icon index zero through Windows IShellLinkW: $LinkPath"
+    }
+    $iconFile = [string]$native.iconPath
     if ([IO.Path]::GetFullPath($iconFile) -ine [IO.Path]::GetFullPath($installedExe)) {
       throw "Shortcut icon does not refer to the verified executable: $LinkPath"
     }
-    $folder = $desktopShell.Namespace((Split-Path -Parent $LinkPath))
-    $item = $folder.ParseName((Split-Path -Leaf $LinkPath))
-    if ($item.ExtendedProperty('System.AppUserModel.ID') -cne $appId) {
+    if ($native.getAppIdHRESULT -cne '0x00000000' -or $native.appId -cne $appId) {
       throw "Shortcut AppUserModelID does not match $appId`: $LinkPath"
     }
     Write-Host "Verified shortcut target, executable icon index 0 and AppUserModelID: $LinkPath"
