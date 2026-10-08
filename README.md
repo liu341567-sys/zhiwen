@@ -4,12 +4,12 @@
 
 ## Windows 下载
 
-- [下载安装版（约 106 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.2/Qiye-Setup-0.1.2-x64.exe)：下载后运行安装程序。
-- [下载 ZIP 版（约 146 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.2/Qiye-0.1.2-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.3/Qiye-Setup-0.1.3-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.3/Qiye-0.1.3-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
 
-[v0.1.2 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.2)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版统一页面、iframe、弹窗和 Service Worker 的浏览器标识，并增加可手动开启的知乎登录诊断。更新前关闭旧版，已有环境继续使用原来的数据目录。
+[v0.1.3 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.3)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版采用用户提供的原始 Logo，统一蓝色配色及字体层级，固定标签关闭区域，并改善小窗口与对话框布局。账号环境、数据目录及登录流程沿用原有实现。更新前正常退出旧版并备份数据目录，已有环境继续保留。
 
-[Windows 发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37584006111)已通过，包括实际沙箱、系统加密恢复及安装包 / ZIP 构建；三个附件的下载与校验文件已核实。知乎 `10001：请求参数异常，请升级客户端后重试` 的原因尚未确认，真实知乎和抖音登录仍需实机复测。
+[Windows 发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37720249026)已通过，包括实际沙箱、系统加密恢复、三档设备缩放、安装包 / ZIP 构建以及安装后的图标、快捷方式与原生程序运行；三个附件的下载与校验文件已核实。知乎 `10001：请求参数异常，请升级客户端后重试` 的原因尚未确认，真实知乎和抖音登录仍需实机复测。[视觉规范](docs/visual-system.md)记录本次品牌与布局调整。
 
 ## 使用方式
 
@@ -53,17 +53,19 @@ npm start
 npm test
 npm run check
 npm run test:integration
+npm run test:ui
 npm run dist:win
 ```
 
 - `npm test`：环境清单、网址校验和持久化等单元测试。
 - `npm run check`：JavaScript 语法检查。
-- `npm run test:integration`：实际启动 Electron，使用本地测试网页验证浏览器会话隔离、持久化、删除清理、浏览器标识与登录存储兼容性。0.1.2 显式启用 Chromium 沙箱，清理测试工具注入的行为开关，并直接断言主框架的实际沙箱与上下文隔离状态。测试使用临时目录，不需要真实平台账号。
-- `npm run dist:win`：生成当前源码版本的 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.2-x64.exe`。
+- `npm run test:integration`：实际启动 Electron，使用本地测试网页验证浏览器会话隔离、持久化、删除清理、浏览器标识与登录存储兼容性。测试显式启用 Chromium 沙箱，清理测试工具注入的行为开关，并直接断言主框架的实际沙箱与上下文隔离状态。测试使用临时目录，不需要真实平台账号。
+- `npm run test:ui`：在真实 Electron 窗口中以 100%、125%、150% 的设备缩放检查品牌图片、标签关闭区域、长名称、弹窗、小工作区及原生网页视图位置。实际尺寸与检查数量按显示器工作区记录。
+- `npm run dist:win`：生成当前源码版本的 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.3-x64.exe`。
 
-也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.2-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
+也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.3-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
 
-仓库提供 [Windows 构建工作流](.github/workflows/windows.yml)，可在 GitHub Actions 中手动运行，下载上传的安装包。工作流执行上述检查和打包，不自动发布 Release。当前打包配置没有代码签名证书，安装包未签名。
+仓库提供 [Windows 构建工作流](.github/workflows/windows.yml)，可在 GitHub Actions 中手动运行，下载上传的安装包。工作流执行上述检查和打包，在临时运行器实际安装、验证 PE 图标与快捷方式、启动及重启程序，完成后卸载；不自动发布 Release。当前打包配置没有代码签名证书，安装包未签名。
 
 真实平台验收仍需在 Windows 实机使用两个测试账号确认抖音、知乎登录、扫码/弹窗、退出账号、重启与下载行为。自动测试验证本地浏览器行为，不能替代第三方平台登录兼容性检查。当前结果与历史测试条件的更正见 [验证记录](docs/validation.md)。
 
