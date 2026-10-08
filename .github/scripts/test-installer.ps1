@@ -54,11 +54,17 @@ function Assert-Shortcut {
   if (!(Test-Path -LiteralPath $LinkPath -PathType Leaf)) { throw "Missing installer shortcut: $LinkPath" }
   $shortcut = $shell.CreateShortcut($LinkPath)
   try {
-    if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ine [IO.Path]::GetFullPath($installedExe)) {
+    $targetPath = [string]$shortcut.TargetPath
+    $iconLocation = [string]$shortcut.IconLocation
+    $properties = @{ link = $LinkPath; target = $targetPath; icon = $iconLocation } | ConvertTo-Json -Compress
+    Write-Host "::notice title=Installed shortcut properties::$properties"
+    if ([string]::IsNullOrWhiteSpace($targetPath)) { throw "Shortcut has an empty target: $LinkPath" }
+    if ([IO.Path]::GetFullPath($targetPath) -ine [IO.Path]::GetFullPath($installedExe)) {
       throw "Shortcut target is not the verified installed executable: $LinkPath"
     }
-    if ($shortcut.IconLocation -notmatch '^(.*),\s*0\s*$') { throw "Shortcut must use executable icon index zero: $LinkPath" }
-    $iconFile = $Matches[1].Trim('"')
+    $iconMatch = [regex]::Match($iconLocation, '^(.+),\s*0\s*$')
+    if (!$iconMatch.Success) { throw "Shortcut must use executable icon index zero: $LinkPath ($iconLocation)" }
+    $iconFile = $iconMatch.Groups[1].Value.Trim('"')
     if ([IO.Path]::GetFullPath($iconFile) -ine [IO.Path]::GetFullPath($installedExe)) {
       throw "Shortcut icon does not refer to the verified executable: $LinkPath"
     }
@@ -149,3 +155,4 @@ if (!$successful) {
   throw $failureMessage
 }
 Write-Host "Installed application and branding verification passed. Screenshots and JSON: $outputDirectory"
+Write-Host '::notice title=Installed Windows application verification passed::Verified source-matching PE icon frames, desktop and start-menu shortcuts, AppUserModelID, packaged wordmark, native installed startup, normal WM_CLOSE shutdown and account data restoration after restart.'
