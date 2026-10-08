@@ -33,7 +33,7 @@
     globe: ['M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z', 'M2 12h20M12 2a17 17 0 0 1 0 20 17 17 0 0 1 0-20Z'],
     pencil: ['m15 5 4 4M4 16l12-12a2.8 2.8 0 0 1 4 4L8 20l-5 1 1-5Z'],
   };
-  let state = { profiles: [], openTabs: [], activeId: null, dataPath: '' };
+  let state = { profiles: [], openTabs: [], activeId: null, dataPath: '', platformPresets: [] };
   let previousActiveId = null;
   let editId = null;
   let deleteId = null;
@@ -44,6 +44,12 @@
   let boundsFrame = 0;
   let lastBounds = '';
   let toastSequence = 0;
+  let platformChoicesBuilt = false;
+  let selectedPlatformId = null;
+  let customUrlDraft = '';
+  let originalStartUrl = '';
+  let profileUrlAtOpen = '';
+  let platformSelectionChanged = false;
   const dialogIds = ['profile-dialog', 'delete-dialog', 'diagnostics-dialog'];
   let diagnosticsReport = null;
   let diagnosticsBusy = false;
@@ -101,12 +107,85 @@
   function activeTab() { return state.openTabs.find((tab) => tab.id === state.activeId); }
   function dialogIsOpen() { return dialogIds.some((id) => $(id).open) || modalOpening; }
   function initials(name) { return Array.from(String(name || '环境').trim())[0] || '环'; }
+  function findPlatform(id) { return Array.isArray(state.platformPresets) ? state.platformPresets.find((preset) => preset.id === id) : undefined; }
 
   function avatar(profile) {
     const node = element('span', 'profile-icon', initials(profile.name));
     node.dataset.color = colorName(profile.color);
     node.setAttribute('aria-hidden', 'true');
+    const platform = findPlatform(profile.platformId);
+    if (platform) {
+      const image = element('img', 'profile-platform-image');
+      image.alt = '';
+      image.hidden = true;
+      image.addEventListener('load', () => {
+        image.hidden = false;
+        node.replaceChildren(image);
+        node.classList.add('has-platform-icon');
+        node.dataset.platformId = platform.id;
+      }, { once: true });
+      image.addEventListener('error', () => {
+        node.replaceChildren(document.createTextNode(initials(profile.name)));
+        node.classList.remove('has-platform-icon');
+        delete node.dataset.platformId;
+      }, { once: true });
+      node.append(image);
+      image.src = platform.iconResource;
+    }
     return node;
+  }
+
+  function syncPlatformSelection() {
+    for (const input of $('platform-presets').querySelectorAll('input[name="platform"]')) input.checked = input.value === selectedPlatformId;
+    $('custom-platform').checked = selectedPlatformId === null;
+    $('profile-url-field').hidden = selectedPlatformId !== null;
+    $('profile-url').readOnly = selectedPlatformId !== null;
+  }
+
+  function choosePlatform(id) {
+    if (dialogBusy) return;
+    platformSelectionChanged = true;
+    const platform = findPlatform(id);
+    if (platform) {
+      if (selectedPlatformId === null) customUrlDraft = $('profile-url').value;
+      selectedPlatformId = platform.id;
+      $('profile-url').value = platform.launchUrl;
+    } else {
+      selectedPlatformId = null;
+      $('profile-url').value = customUrlDraft;
+    }
+    syncPlatformSelection();
+  }
+
+  function buildPlatformChoices() {
+    if (platformChoicesBuilt || !Array.isArray(state.platformPresets) || !state.platformPresets.length) return;
+    const choices = state.platformPresets.map((platform) => {
+      const label = element('label', 'platform-preset');
+      label.dataset.platformId = platform.id;
+      const input = element('input', 'platform-preset-input');
+      input.type = 'radio';
+      input.name = 'platform';
+      input.value = platform.id;
+      input.disabled = dialogBusy;
+      input.setAttribute('aria-label', platform.displayName);
+      input.addEventListener('change', () => { if (input.checked) choosePlatform(platform.id); });
+      const content = element('span', 'platform-preset-content');
+      const image = element('img', 'platform-preset-image');
+      image.alt = '';
+      image.hidden = true;
+      const fallback = element('span', 'platform-preset-fallback', initials(platform.displayName));
+      fallback.setAttribute('aria-hidden', 'true');
+      image.addEventListener('load', () => { image.hidden = false; fallback.hidden = true; }, { once: true });
+      image.addEventListener('error', () => { image.hidden = true; fallback.hidden = false; }, { once: true });
+      content.append(image, fallback, element('span', 'platform-preset-name', platform.displayName));
+      label.append(input, content);
+      image.src = platform.iconResource;
+      return label;
+    });
+    $('platform-presets').replaceChildren(...choices);
+    $('platform-presets-status').hidden = true;
+    platformChoicesBuilt = true;
+    syncPlatformSelection();
   }
 
   function status(profile) {
@@ -119,6 +198,7 @@
   function applyState(next) {
     if (!next || !Array.isArray(next.profiles) || !Array.isArray(next.openTabs)) return;
     state = next;
+    buildPlatformChoices();
     render();
   }
 
@@ -289,6 +369,7 @@
   function setDialogBusy(value) {
     dialogBusy = value;
     ['profile-save', 'profile-cancel', 'profile-dialog-close', 'profile-delete', 'delete-confirm', 'delete-cancel', 'delete-dialog-close'].forEach((id) => { $(id).disabled = value; });
+    document.querySelectorAll('input[name="platform"]').forEach((input) => { input.disabled = value; });
     $('profile-save').textContent = value ? '正在保存…' : (editId ? '保存修改' : '创建并打开');
     $('delete-confirm').textContent = value ? '正在删除…' : '永久删除';
   }
@@ -323,7 +404,14 @@
       $('profile-form').reset();
       $('profile-name').value = profile?.name || '';
       $('profile-notes').value = profile?.notes || '';
-      $('profile-url').value = profile?.startUrl || 'https://www.douyin.com';
+      originalStartUrl = profile?.startUrl || 'https://www.douyin.com';
+      $('profile-url').value = originalStartUrl;
+      customUrlDraft = $('profile-url').value;
+      selectedPlatformId = findPlatform(profile?.platformId)?.id || null;
+      if (selectedPlatformId) $('profile-url').value = findPlatform(selectedPlatformId).launchUrl;
+      profileUrlAtOpen = $('profile-url').value;
+      platformSelectionChanged = false;
+      syncPlatformSelection();
       selectColor(profile?.color || colors[state.profiles.length % colors.length].value);
       $('profile-dialog-title').textContent = profile ? '编辑环境' : '新建独立环境';
       $('profile-dialog-description').textContent = profile ? '更新名称、备注与启动网址，便于识别这个账号空间。' : '从全新的登录状态开始，为一个账号创建专属空间。';
@@ -480,7 +568,14 @@
     try {
       const name = $('profile-name').value.trim();
       if (!name) throw new Error('请为环境填写一个名称。');
-      const input = { name, notes: $('profile-notes').value.trim(), startUrl: normalizeUrl($('profile-url').value), color: $('color-choices').querySelector('input:checked')?.value || colors[0].value };
+      const platform = findPlatform(selectedPlatformId);
+      if (selectedPlatformId && !platform) throw new Error('所选平台暂不可用，请重新选择平台或填写自定义网址。');
+      const input = { name, notes: $('profile-notes').value.trim(), color: $('color-choices').querySelector('input:checked')?.value || colors[0].value };
+      const launchSettingsUnchanged = Boolean(editId) && !platformSelectionChanged && $('profile-url').value === profileUrlAtOpen;
+      if (!launchSettingsUnchanged) {
+        input.startUrl = platform ? platform.launchUrl : normalizeUrl($('profile-url').value);
+        input.platformId = platform?.id || null;
+      }
       setDialogBusy(true);
       await call(editId ? 'updateProfile' : 'createProfile', ...(editId ? [editId, input] : [input]));
       const wasEditing = Boolean(editId);
@@ -512,6 +607,8 @@
   });
 
   for (const id of ['sidebar-create', 'tab-create', 'welcome-create', 'cards-create', 'empty-create']) $(id).addEventListener('click', () => openProfileDialog());
+  $('custom-platform').addEventListener('change', () => { if ($('custom-platform').checked) choosePlatform(null); });
+  $('profile-url').addEventListener('input', () => { if (selectedPlatformId === null) customUrlDraft = $('profile-url').value; });
   for (const id of ['sidebar-overview', 'error-overview']) $(id).addEventListener('click', () => action('showOverview'));
   $('profile-search').addEventListener('input', renderProfiles);
   $('active-settings').addEventListener('click', () => { const profile = findProfile(state.activeId); if (profile) openProfileDialog(profile); });

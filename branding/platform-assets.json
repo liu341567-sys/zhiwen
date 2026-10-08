@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "retrievedOn": "2026-10-08",
+  "purpose": "九个平台启动预设与环境图标共用的离线品牌资源，启动URL仅以用户DOCX及src/platform-presets.json为准。",
+  "provenance": "当前云网络对平台官网、官方CDN返回CONNECT 403，未反复重试受阻主机。资源取自固定GitHub提交中的平台品牌标识镜像，并保留平台关联证据。未直接核验其与当前官网原始图片字节相同；不声称由官网直接下载。",
+  "assetHandling": "所有正式资源保持下载或ZIP解压得到的原始字节；品牌图形及颜色均未自行绘制或修改；显示比例由应用CSS object-fit: contain统一。SVG无脚本、foreignObject、外部href、远程CSS或DTD。",
+  "runtimeNetworkRequired": false,
+  "assets": [
+    {
+      "platformId": "douyin",
+      "displayName": "抖音",
+      "localPath": "src/assets/platforms/douyin.svg",
+      "format": "image/svg+xml",
+      "intrinsicSize": [
+        20,
+        20
+      ],
+      "bytes": 2897,
+      "sha256": "59c2b1e61d049e36ca01eb31a7bb7e01f6b81bc9288d4535b946b5e00ecb5360",
+      "sourceUrl": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/douyin.svg",
+      "mirrorSource": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/douyin.svg",
+      "officialBrandReference": "https://www.douyin.com/",
+      "platformAssociationEvidence": "https://github.com/yikart/AiToEarn/blob/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/app/config/platConfig.ts",
+      "brandVariant": "完整品牌色标识，SVG原始path/rect绘制，可无损显示。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "standaloneSvg": true
+    },
+    {
+      "platformId": "xiaohongshu",
+      "displayName": "小红书",
+      "localPath": "src/assets/platforms/xiaohongshu.svg",
+      "format": "image/svg+xml",
+      "intrinsicSize": [
+        20,
+        20
+      ],
+      "bytes": 1417,
+      "sha256": "534cf2f717ab26b23e9d0562d40e5cfdbd185459d0661e3e93bf67c30b308b05",
+      "sourceUrl": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/xhs.svg",
+      "mirrorSource": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/xhs.svg",
+      "officialBrandReference": "https://www.xiaohongshu.com/",
+      "platformAssociationEvidence": "https://github.com/yikart/AiToEarn/blob/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/app/config/platConfig.ts",
+      "brandVariant": "完整品牌色标识，SVG原始path/rect绘制，可无损显示。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "standaloneSvg": true
+    },
+    {
+      "platformId": "weixin-channels",
+      "displayName": "视频号",
+      "localPath": "src/assets/platforms/weixin-channels.svg",
+      "format": "image/svg+xml",
+      "intrinsicSize": [
+        20,
+        20
+      ],
+      "bytes": 1943,
+      "sha256": "14dcccbc65f54bc9a433fef2b893195a581e288309c29303d69e89bb93327b57",
+      "sourceUrl": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/wx-sph.svg",
+      "mirrorSource": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/wx-sph.svg",
+      "officialBrandReference": "https://channels.weixin.qq.com/",
+      "platformAssociationEvidence": "https://github.com/yikart/AiToEarn/blob/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/app/config/platConfig.ts",
+      "brandVariant": "完整品牌色标识，SVG原始path/rect绘制，可无损显示。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "standaloneSvg": true
+    },
+    {
+      "platformId": "kuaishou",
+      "displayName": "快手",
+      "localPath": "src/assets/platforms/kuaishou.svg",
+      "format": "image/svg+xml",
+      "intrinsicSize": [
+        20,
+        20
+      ],
+      "bytes": 1200,
+      "sha256": "768a08a25bfe4c1e6af2a8a34df441e8a996f1a80dc97175892d07671ca56f8a",
+      "sourceUrl": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/ks.svg",
+      "mirrorSource": "https://raw.githubusercontent.com/yikart/AiToEarn/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/assets/svgs/plat/ks.svg",
+      "officialBrandReference": "https://www.kuaishou.com/",
+      "platformAssociationEvidence": "https://github.com/yikart/AiToEarn/blob/3581f511293236044e56fad67958cfcea0def6b5/project/aitoearn-web/src/app/config/platConfig.ts",
+      "brandVariant": "完整品牌色标识，SVG原始path/rect绘制，可无损显示。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "standaloneSvg": true
+    },
+    {
+      "platformId": "weixin-official",
+      "displayName": "公众号",
+      "localPath": "src/assets/platforms/weixin-official.webp",
+      "format": "image/webp",
+      "intrinsicSize": [
+        180,
+        180
+      ],
+      "bytes": 2900,
+      "sha256": "dcb7e72c84101afe7583ff28d24a8b2e40126cec0210eef7691765e3e2079803",
+      "sourceUrl": "https://raw.githubusercontent.com/zmh-program/bingtang-desktop/20008fd44a198c5f927ab25da6e613f1e826406a/public/apps/weixin_gongzhonghao.png",
+      "mirrorSource": "https://raw.githubusercontent.com/zmh-program/bingtang-desktop/20008fd44a198c5f927ab25da6e613f1e826406a/public/apps/weixin_gongzhonghao.png",
+      "officialBrandReference": "https://mp.weixin.qq.com/",
+      "platformAssociationEvidence": "https://github.com/zmh-program/bingtang-desktop/blob/20008fd44a198c5f927ab25da6e613f1e826406a/assets/script/app/work.json#L392",
+      "brandVariant": "公众号专用绿色环形聊天气泡标识。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "sourceExtensionNote": "镜像名为.png，魔数及解码结果均为WEBP；本地按实际格式命名.webp，字节未改变。"
+    },
+    {
+      "platformId": "toutiao",
+      "displayName": "头条号",
+      "localPath": "src/assets/platforms/toutiao.png",
+      "format": "image/png",
+      "intrinsicSize": [
+        200,
+        200
+      ],
+      "bytes": 15300,
+      "sha256": "81d0992217d8079c6d8619c5e2327e130e4689cd32e107e6b99449a3c557d29d",
+      "sourceUrl": "https://raw.githubusercontent.com/DevilJie/social-auto-upload-web-ui/310990bf0e784223cbe2dd1e2366f5cbbe10721e/frontend/src/assets/logos/toutiao.png",
+      "mirrorSource": "https://raw.githubusercontent.com/DevilJie/social-auto-upload-web-ui/310990bf0e784223cbe2dd1e2366f5cbbe10721e/frontend/src/assets/logos/toutiao.png",
+      "officialBrandReference": "https://mp.toutiao.com/",
+      "platformAssociationEvidence": "https://github.com/DevilJie/social-auto-upload-web-ui/blob/310990bf0e784223cbe2dd1e2366f5cbbe10721e/frontend/src/config/platforms.js",
+      "brandVariant": "经典红色头条字标APP版。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false
+    },
+    {
+      "platformId": "baijiahao",
+      "displayName": "百家号",
+      "localPath": "src/assets/platforms/baijiahao.png",
+      "format": "image/png",
+      "intrinsicSize": [
+        200,
+        200
+      ],
+      "bytes": 6670,
+      "sha256": "af734bf3cef4cca3e3d46e69326f2ae5210b77e323b854124f792420872b6f92",
+      "sourceUrl": "https://raw.githubusercontent.com/DevilJie/social-auto-upload-web-ui/310990bf0e784223cbe2dd1e2366f5cbbe10721e/frontend/src/assets/logos/baijiahao.png",
+      "mirrorSource": "https://raw.githubusercontent.com/DevilJie/social-auto-upload-web-ui/310990bf0e784223cbe2dd1e2366f5cbbe10721e/frontend/src/assets/logos/baijiahao.png",
+      "officialBrandReference": "https://baijiahao.baidu.com/",
+      "platformAssociationEvidence": "https://github.com/DevilJie/social-auto-upload-web-ui/blob/310990bf0e784223cbe2dd1e2366f5cbbe10721e/frontend/src/config/platforms.js",
+      "brandVariant": "经典蓝色百字羽毛标识版。",
+      "processing": "镜像原始字节保存；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false
+    },
+    {
+      "platformId": "sohu",
+      "displayName": "搜狐号",
+      "localPath": "src/assets/platforms/sohu.ico",
+      "format": "image/x-icon",
+      "intrinsicSize": [
+        48,
+        48
+      ],
+      "bytes": 15086,
+      "sha256": "f0338b229b33f7f2ccd3a43992ca35c01f3815c5ea36773c71e54e3be25f1049",
+      "sourceUrl": "https://raw.githubusercontent.com/geshanzsq/geshanzsq-nav/21cb59cf22c502f842f58238752ad6ad0bb3a867/docker/project/file/profile/profile.zip",
+      "mirrorSource": "https://raw.githubusercontent.com/geshanzsq/geshanzsq-nav/21cb59cf22c502f842f58238752ad6ad0bb3a867/docker/project/file/profile/profile.zip",
+      "officialBrandReference": "https://mp.sohu.com/",
+      "platformAssociationEvidence": "https://github.com/geshanzsq/geshanzsq-nav/blob/21cb59cf22c502f842f58238752ad6ad0bb3a867/sql/geshanzsq_nav.sql#L624",
+      "brandVariant": "搜狐号站点favicon：黄色背景、黑色S，2021年导航资料明确关联搜狐号。",
+      "processing": "从固定提交的ZIP中解压该原始ICO文件；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "sourceArchiveEntry": "site/system/b6021b69-2035-4f9c-8e1e-ea54c1d74817.ico",
+      "sourceArchiveBytes": 6182690,
+      "sourceArchiveSha256": "d6a5185fd77a7da251041e376694c95d550e0cb9a3c097fd10ca28c46e1b752a",
+      "frames": [
+        [
+          48,
+          48
+        ],
+        [
+          32,
+          32
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "officialFaviconReference": "https://statics.itc.cn/mp-new/icon/1.1/favicon.ico",
+      "officialFaviconReferenceEvidence": "https://github.com/doocs/cose/blob/1538af5d33286a7e7cc4795376d19de97c9d3c51/packages/core/src/platforms/sohu.js"
+    },
+    {
+      "platformId": "zhihu",
+      "displayName": "知乎",
+      "localPath": "src/assets/platforms/zhihu.ico",
+      "format": "image/x-icon",
+      "intrinsicSize": [
+        32,
+        32
+      ],
+      "bytes": 6518,
+      "sha256": "a0f2ee82efbb7e718ba87dbe82263c14a9bdcd6ba48047694328ef5c2e0046fa",
+      "sourceUrl": "https://raw.githubusercontent.com/geshanzsq/geshanzsq-nav/21cb59cf22c502f842f58238752ad6ad0bb3a867/docker/project/file/profile/profile.zip",
+      "mirrorSource": "https://raw.githubusercontent.com/geshanzsq/geshanzsq-nav/21cb59cf22c502f842f58238752ad6ad0bb3a867/docker/project/file/profile/profile.zip",
+      "officialBrandReference": "https://www.zhihu.com/",
+      "platformAssociationEvidence": "https://github.com/geshanzsq/geshanzsq-nav/blob/21cb59cf22c502f842f58238752ad6ad0bb3a867/sql/geshanzsq_nav.sql#L449",
+      "brandVariant": "知乎网页经典favicon：蓝底白色知字，2020年导航资料明确关联知乎官网。",
+      "processing": "从固定提交的ZIP中解压该原始ICO文件；无重绘、改色、裁切、缩放或格式转换。",
+      "officialOriginBytesDirectlyVerified": false,
+      "sourceArchiveEntry": "site/system/02090c1f2ff7d580395b7dfe44ba066c.ico",
+      "sourceArchiveBytes": 6182690,
+      "sourceArchiveSha256": "d6a5185fd77a7da251041e376694c95d550e0cb9a3c097fd10ca28c46e1b752a",
+      "frames": [
+        [
+          16,
+          16
+        ],
+        [
+          32,
+          32
+        ]
+      ],
+      "officialFaviconReference": "https://static.zhihu.com/static/favicon.ico"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ const { ProfileStore, normalizeUrl, partitionFor } = require('./profile-store');
 const { CookieVault } = require('./cookie-vault');
 const { userAgentForMode } = require('./browser-identity');
 const { LoginDiagnostics, PAGE_OBSERVATION_SCRIPT } = require('./login-diagnostics');
+const platformPresets = require('./platform-presets.json');
 
 app.setName('栖页');
 if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
@@ -83,6 +84,7 @@ function snapshot() {
   const state = store.getState();
   return {
     profiles: state.profiles,
+    platformPresets,
     activeId: state.activeId,
     openTabs: state.openIds.map(id => {
       const entry = views.get(id);

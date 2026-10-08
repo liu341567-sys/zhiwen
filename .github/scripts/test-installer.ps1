@@ -152,7 +152,7 @@ try {
     @(
       '### Installed Windows application and branding', '',
       "Passed: $successful", '',
-      'Checks: first PE icon group and every ICO frame, desktop/start-menu icon source and AppUserModelID, physical window icon hashes, native installed launch, original wordmark aspect ratio, profile persistence and normal WM_CLOSE shutdown.', '',
+      'Checks: first PE icon group and every ICO frame, desktop/start-menu icon source and AppUserModelID, physical window icon hashes, native installed launch, original wordmark aspect ratio, nine local platform logos, platform association and icon restoration, profile persistence and normal WM_CLOSE shutdown.', '',
       "Temporary verification artifacts: $outputDirectory"
     ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
     if ($failureMessage) {
@@ -168,4 +168,4 @@ if (!$successful) {
   throw $failureMessage
 }
 Write-Host "Installed application and branding verification passed. Screenshots and JSON: $outputDirectory"
-Write-Host '::notice title=Installed Windows application verification passed::Verified source-matching PE icon frames, desktop and start-menu shortcuts, AppUserModelID, packaged wordmark, native installed startup, normal WM_CLOSE shutdown and account data restoration after restart.'
+Write-Host '::notice title=Installed Windows application verification passed::Verified source-matching PE icon frames, desktop and start-menu shortcuts, AppUserModelID, packaged wordmark, nine local platform logos, platform association and icon restoration, native installed startup, normal WM_CLOSE shutdown and account data restoration after restart.'

@@ -223,6 +223,9 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .profile-row.active:hover { background: var(--sidebar-selected-hover); }
 .profile-open { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 7px 4px; border: 0; border-radius: 5px; background: transparent; text-align: left; }
 .profile-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--profile-border); border-radius: 9px; color: var(--text); background: var(--profile-tint); font-size: 16px; font-weight: 600; flex-shrink: 0; }
+.profile-icon.has-platform-icon { border-color: var(--line); background: var(--surface); }
+.profile-platform-image { display: block; width: 24px; height: 24px; object-fit: contain; }
+.card-top .profile-platform-image { width: 28px; height: 28px; }
 [data-color="orange"] { --profile-accent: #e87941; --profile-tint: #f8efe9; }
 [data-color="blue"] { --profile-accent: #658ac0; --profile-tint: #edf1f7; }
 [data-color="green"] { --profile-accent: #5b8d79; --profile-tint: #edf3ef; }
@@ -402,6 +405,26 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .required { color: var(--danger); }
 .field-optional { margin-left: 6px; color: var(--muted); font-size: var(--font-small); font-weight: 400; }
 .field-help { display: block; margin-top: 7px; color: var(--secondary); font-size: var(--font-small); font-weight: 400; line-height: 1.7; overflow-wrap: anywhere; }
+.platform-field { margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+.platform-field legend { margin-bottom: 9px; padding: 0; color: var(--text); font-size: var(--font-body); font-weight: 500; }
+.platform-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.platform-preset { display: block; position: relative; min-width: 0; cursor: pointer; }
+.platform-preset-input { position: absolute; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.platform-preset-content { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-height: 52px; padding: 10px 9px; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--text); background: var(--surface); transition: background-color .14s ease, border-color .14s ease; }
+.platform-preset:hover .platform-preset-content { background: var(--sidebar-hover); }
+.platform-preset-input:checked + .platform-preset-content { background: var(--sidebar-selected); border-color: var(--sidebar-selected-border); }
+.platform-preset:hover .platform-preset-input:checked + .platform-preset-content { background: var(--sidebar-selected-hover); }
+.platform-preset-input:focus-visible + .platform-preset-content { outline: 2px solid var(--focus); outline-offset: 2px; }
+.platform-preset-input:disabled { cursor: default; }
+.platform-preset-input:disabled + .platform-preset-content { color: var(--text-disabled); background: var(--surface-disabled); border-color: var(--line-disabled); }
+.platform-preset-image, .platform-preset-fallback { width: 24px; height: 24px; flex-shrink: 0; }
+.platform-preset-image { display: block; object-fit: contain; }
+.platform-preset-fallback { display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; color: var(--secondary); background: var(--surface-inset); font-size: var(--font-small); }
+.platform-preset-name { display: block; min-width: 0; overflow: hidden; color: inherit; font-size: var(--font-body); line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.custom-platform-choice { display: flex; align-items: center; gap: 9px; min-height: 36px; margin-top: 9px; color: var(--text); font-size: var(--font-body); cursor: pointer; }
+.custom-platform-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--brand); flex-shrink: 0; }
+.custom-platform-choice input:disabled { cursor: default; }
+.custom-url-field { margin-top: 7px; margin-bottom: 0; }
 .color-field { margin: 0 0 18px; padding: 0; border: 0; }
 .color-field legend { margin-bottom: 10px; padding: 0; color: var(--text); font-size: var(--font-body); }
 .color-choices { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

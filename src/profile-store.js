@@ -3,10 +3,18 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const PLATFORM_PRESETS = require('./platform-presets.json');
 
 const DEFAULT_URL = 'https://www.douyin.com/';
 const COLORS = ['#e87941', '#5b8d79', '#658ac0', '#9473b5', '#c39c49', '#ca7181'];
 const ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+const PLATFORM_BY_ID = new Map(PLATFORM_PRESETS.map((preset) => [preset.id, preset]));
+
+function platformPreset(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !PLATFORM_BY_ID.has(value)) throw new Error('请选择有效的平台');
+  return PLATFORM_BY_ID.get(value);
+}
 
 function normalizeUrl(value = DEFAULT_URL) {
   if (typeof value !== 'string' || value.length > 4096) throw new Error('请输入有效的网址');
@@ -42,6 +50,8 @@ class ProfileStore {
         throw new Error('环境清单格式不正确，请先备份数据，避免覆盖原有账号环境');
       }
       const seen = new Set();
+      // Platform associations are optional metadata. Preserve unknown saved
+      // values so loading or saving another environment cannot erase them.
       for (const profile of saved.profiles) {
         partitionFor(profile.id);
         if (seen.has(profile.id)) throw new Error('环境清单存在重复标识');
@@ -83,7 +93,8 @@ class ProfileStore {
 
   create(input = {}) {
     const id = randomUUID();
-    const startUrl = normalizeUrl(input.startUrl);
+    const preset = platformPreset(input.platformId);
+    const startUrl = preset ? preset.launchUrl : normalizeUrl(input.startUrl);
     const profile = {
       id,
       name: textField(input.name ?? `环境 ${this.state.profiles.length + 1}`, 60, '环境名称', false),
@@ -93,6 +104,7 @@ class ProfileStore {
       lastUrl: startUrl,
       createdAt: new Date().toISOString()
     };
+    if (preset) profile.platformId = preset.id;
     if (!COLORS.includes(profile.color)) throw new Error('请选择有效的环境颜色');
     this.state.profiles.push(profile);
     this.save();
@@ -103,7 +115,25 @@ class ProfileStore {
     const profile = this.get(id);
     if (input.name !== undefined) profile.name = textField(input.name, 60, '环境名称', false);
     if (input.notes !== undefined) profile.notes = textField(input.notes, 500, '备注');
-    if (input.startUrl !== undefined) profile.startUrl = normalizeUrl(input.startUrl);
+    if (input.platformId !== undefined) {
+      const preset = platformPreset(input.platformId);
+      if (preset) {
+        profile.platformId = preset.id;
+        profile.startUrl = preset.launchUrl;
+      } else {
+        delete profile.platformId;
+        if (input.startUrl !== undefined) profile.startUrl = normalizeUrl(input.startUrl);
+      }
+    } else if (input.startUrl !== undefined) {
+      const startUrl = normalizeUrl(input.startUrl);
+      const preset = PLATFORM_BY_ID.get(profile.platformId);
+      if (preset && startUrl === normalizeUrl(preset.launchUrl)) {
+        profile.startUrl = preset.launchUrl;
+      } else {
+        delete profile.platformId;
+        profile.startUrl = startUrl;
+      }
+    }
     if (input.color !== undefined) {
       if (!COLORS.includes(input.color)) throw new Error('请选择有效的环境颜色');
       profile.color = input.color;

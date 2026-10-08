@@ -1,0 +1,11 @@
+[
+  { "id": "douyin", "displayName": "抖音", "launchUrl": "https://creator.douyin.com/", "iconResource": "../assets/platforms/douyin.svg" },
+  { "id": "xiaohongshu", "displayName": "小红书", "launchUrl": "https://creator.xiaohongshu.com/login", "iconResource": "../assets/platforms/xiaohongshu.svg" },
+  { "id": "weixin-channels", "displayName": "视频号", "launchUrl": "https://channels.weixin.qq.com/login.html", "iconResource": "../assets/platforms/weixin-channels.svg" },
+  { "id": "kuaishou", "displayName": "快手", "launchUrl": "https://cp.kuaishou.com/profile", "iconResource": "../assets/platforms/kuaishou.svg" },
+  { "id": "weixin-official", "displayName": "公众号", "launchUrl": "https://mp.weixin.qq.com/", "iconResource": "../assets/platforms/weixin-official.webp" },
+  { "id": "toutiao", "displayName": "头条号", "launchUrl": "https://mp.toutiao.com/profile_v4/index", "iconResource": "../assets/platforms/toutiao.png" },
+  { "id": "baijiahao", "displayName": "百家号", "launchUrl": "https://baijiahao.baidu.com/builder/theme/bjh/login", "iconResource": "../assets/platforms/baijiahao.png" },
+  { "id": "sohu", "displayName": "搜狐号", "launchUrl": "https://mp.sohu.com/mpfe/v4/login", "iconResource": "../assets/platforms/sohu.ico" },
+  { "id": "zhihu", "displayName": "知乎", "launchUrl": "https://www.zhihu.com/signin?next=%2F", "iconResource": "../assets/platforms/zhihu.ico" }
+]

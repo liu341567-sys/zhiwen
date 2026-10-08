@@ -9,6 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { _electron } = require('playwright-core');
 const { verifyInputFocus } = require('./ui-focus.cjs');
+const { seedLegacyPlatforms, verifyLegacyPlatforms, verifyPlatforms } = require('./ui-platforms.cjs');
 
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'ui');
@@ -38,6 +39,7 @@ async function runScale(scale, origin) {
   const skippedTargets = [];
   const combinedTargets = [];
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), `qiye-ui-${scale}-`));
+  const legacy = seedLegacyPlatforms(directory);
   const scaleLabel = `scale-${Math.round(scale * 100)}`;
   let app;
   let shell;
@@ -192,6 +194,7 @@ async function runScale(scale, origin) {
       assert.equal(brand.naturalHeight, 559);
       assert.ok(Math.abs(brand.width / brand.height - brand.naturalWidth / brand.naturalHeight) < .03);
     });
+    await verifyLegacyPlatforms({ shell, state, check, prefix, eventually, directory, legacy });
     await screenshot('overview');
 
     // Lower only the disposable test window's minimum for the CSS 900×480 case.
@@ -323,6 +326,8 @@ async function runScale(scale, origin) {
     }
 
     await verifyInputFocus({ shell, state, ids, check, prefix, screenshot, eventually, clickable });
+    await verifyPlatforms({ app, shell, state, check, prefix, screenshot, eventually, clickable,
+      origin, directory, viewScript, waitForView });
 
     // User flow after the smallest geometry pass: rename, navigation, close and
     // reopen use normal controls. These checks protect data while changing CSS.
