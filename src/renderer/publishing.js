@@ -1019,7 +1019,7 @@
       E(
         'p',
         'publish-help',
-        '需要电脑开机、联网并保持栖页运行；错过计划时间会暂停等待确认。立即队列也遵守同账号最小间隔。',
+        '需要电脑开机、联网并保持栖页运行；重启时错过计划五分钟以上的任务暂停等待确认。立即队列也遵守同账号最小间隔。',
       ),
     );
     body.append(schedule);
@@ -1284,21 +1284,25 @@
           textButton('设置', () => {
             if (r.locked) throw new Error('请先取消此任务的锁定，再修改参数');
             const p = E('div');
+            let cover = structuredClone(r.cover),
+              location = structuredClone(r.location),
+              autoSubmit = r.autoSubmit;
             p.append(
-              coverControl(r.cover, (v) => {
-                r.cover = v;
-                rowOverride(r, { cover: v });
+              coverControl(cover, (v) => {
+                cover = v;
               }),
-              locationControl(r.location, (v) => {
-                r.location = v;
-                rowOverride(r, { location: v });
+              locationControl(location, (v) => {
+                location = v;
               }),
-              check('授权自动提交', r.autoSubmit, (v) => {
-                r.autoSubmit = v;
-                rowOverride(r, { autoSubmit: v });
+              check('授权自动提交', autoSubmit, (v) => {
+                autoSubmit = v;
               }),
             );
             show('单任务参数', [p], () => {
+              r.cover = cover;
+              r.location = location;
+              r.autoSubmit = autoSubmit;
+              rowOverride(r, { cover, location, autoSubmit });
               lockRow(r, true);
               fill();
             });
@@ -1358,7 +1362,19 @@
           name,
           allowDuplicates,
         });
+        for (const row of preview.rows) {
+          delete input.title.locks?.[row.key];
+          delete input.topics.locks?.[row.key];
+        }
         preview = null;
+        step = 0;
+        input.overrides = {};
+        input.previewOrder = [];
+        input.autoSubmit = false;
+        clearTimeout(draftTimer);
+        await cmd('draft', { input, step, previewId: null }).catch((error) =>
+          notify(`任务已生成，但草稿保存失败：${error.message}`, 'error'),
+        );
         await refresh();
         go('tasks');
         notify('发布任务已生成，按本地计划进入队列');

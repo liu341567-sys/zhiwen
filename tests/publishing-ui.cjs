@@ -243,6 +243,32 @@ async function run(scale) {
         ['第一期测试标题', false],
       ],
     );
+    const settingsButton = () =>
+      shell
+        .locator('.publish-table tbody tr')
+        .nth(1)
+        .getByRole('button', { name: '设置', exact: true });
+    await settingsButton().click();
+    let options = shell.locator('.publish-dialog[open]');
+    await options.getByLabel('封面方式').selectOption('frame');
+    await options.getByLabel('指定帧时间（秒）', { exact: true }).fill('0.5');
+    await options.getByLabel('发布定位').selectOption('specified');
+    await options.getByLabel('平台位置名称', { exact: true }).fill('上海市');
+    await options.getByLabel('授权自动提交', { exact: true }).check();
+    await options.getByRole('button', { name: '关闭', exact: true }).click();
+    await settingsButton().click();
+    options = shell.locator('.publish-dialog[open]');
+    assert.equal(
+      await options.getByLabel('授权自动提交', { exact: true }).isChecked(),
+      false,
+    );
+    assert.equal(await options.getByLabel('封面方式').inputValue(), 'first');
+    assert.equal(await options.getByLabel('发布定位').inputValue(), 'none');
+    await options.getByRole('button', { name: '关闭', exact: true }).click();
+    check(
+      `publishing-${scale}: closing unsaved task settings discards cover, location and submission authorization changes`,
+      () => assert.ok(true),
+    );
     const layout = await shell.evaluate(() => {
       const r = (n) => {
         const b = n.getBoundingClientRect();
@@ -298,6 +324,13 @@ async function run(scale) {
           })),
         ),
       );
+    const nextDraft = (await command('state')).drafts.find(
+      (d) => d.id === 'current',
+    );
+    assert.equal(nextDraft.data.step, 0);
+    assert.equal(nextDraft.data.previewId, null);
+    assert.equal(nextDraft.data.input.autoSubmit, false);
+    assert.deepEqual(nextDraft.data.input.overrides, {});
     check(
       `publishing-${scale}: native CDP file upload and text fill bind exact accounts without auto-submitting`,
       () => {
