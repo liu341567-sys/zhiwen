@@ -450,6 +450,50 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .delete-environment-button { margin-right: auto; color: var(--danger); font-size: var(--font-body); }
 .delete-environment-button:hover:not(:disabled) { color: var(--danger-hover); background: var(--danger-light); }
 .form-error { margin: 12px 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--radius-control); font-size: var(--font-small); line-height: 1.7; overflow-wrap: anywhere; }
+/* Keep actions and dismissal visible; only the environment fields scroll. */
+#profile-dialog {
+  padding: 0;
+  max-height: min(88vh, calc(100vh - 32px));
+  max-height: min(88dvh, calc(100dvh - 32px));
+  overflow: hidden;
+}
+#profile-dialog[open] { display: flex; flex-direction: column; }
+#profile-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(min(88vh, 100vh - 32px) - 2px);
+  max-height: calc(min(88dvh, 100dvh - 32px) - 2px);
+}
+#profile-dialog-header, #profile-dialog-footer { flex: 0 0 auto; }
+#profile-dialog-header { padding: 20px 24px 16px; }
+.profile-dialog-heading { display: flex; align-items: center; gap: 12px; }
+.profile-dialog-heading h2 { flex: 1; min-width: 0; }
+#profile-dialog-close { width: 40px; height: 40px; }
+#profile-dialog-description { margin: 8px 0 0; }
+#profile-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 24px 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+  scrollbar-gutter: stable;
+  scroll-padding-block: 12px;
+}
+#profile-dialog-body .form-field { margin-bottom: 12px; }
+#profile-dialog-body .custom-url-field { margin-bottom: 0; }
+#profile-dialog-body textarea { min-height: 64px; }
+#profile-dialog-body .platform-field { margin-bottom: 14px; }
+#profile-dialog-body .platform-presets { gap: 6px; }
+#profile-dialog-body .platform-preset-content { min-height: 48px; padding-block: 8px; }
+#profile-dialog-body .color-field { margin-bottom: 14px; }
+#profile-dialog-footer { padding: 14px 24px 18px; border-top: 1px solid var(--line); }
+#profile-dialog-footer .modal-actions { margin-top: 0; }
+#profile-dialog-footer .form-error { margin: 0 0 12px; }
 .delete-modal { width: 460px; }
 .danger-symbol { color: var(--danger); background: var(--danger-light); }
 .delete-warning { display: flex; align-items: flex-start; gap: 9px; padding: 13px; border: 1px solid var(--danger-border); border-radius: var(--radius-control); background: var(--danger-light); }

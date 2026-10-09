@@ -1,7 +1,7 @@
 {
   "name": "qiye-browser",
   "productName": "栖页",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "每个账号，独立栖居。支持持久化独立会话的账号管理浏览器。",
   "main": "src/main.js",
   "license": "UNLICENSED",

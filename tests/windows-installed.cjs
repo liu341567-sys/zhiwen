@@ -205,6 +205,99 @@ async function assertLaunchLocked(shell, id) {
   assert.deepEqual(result.after, result.before, 'A rejected edit must preserve every profile and its metadata');
 }
 
+async function assertInstalledCreationLayout(shell, accountPage, outputDirectory) {
+  const before = await shell.evaluate(() => window.browserAPI.getState());
+  await accountPage.evaluate(() => {
+    window.__installedModalClicks = 0;
+    window.__installedModalClickListener = () => { window.__installedModalClicks += 1; };
+    document.addEventListener('click', window.__installedModalClickListener, true);
+  });
+  const measure = () => shell.evaluate(() => {
+    const rect = id => {
+      const box = document.getElementById(id).getBoundingClientRect();
+      return { left: box.left, top: box.top, right: box.right, bottom: box.bottom, width: box.width, height: box.height };
+    };
+    const hit = id => {
+      const node = document.getElementById(id), box = node.getBoundingClientRect();
+      const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return target === node || node.contains(target);
+    };
+    const dialog = document.getElementById('profile-dialog'), body = document.getElementById('profile-dialog-body');
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:fixed;visibility:hidden;color:var(--brand)';
+    document.body.append(probe);
+    const brand = getComputedStyle(probe).color;
+    probe.remove();
+    return { viewport: { width: innerWidth, height: innerHeight }, dialog: rect('profile-dialog'),
+      header: rect('profile-dialog-header'), body: rect('profile-dialog-body'), footer: rect('profile-dialog-footer'),
+      title: rect('profile-dialog-title'), close: rect('profile-dialog-close'), save: rect('profile-save'), tip: rect('new-profile-tip'),
+      scroll: { outer: dialog.scrollTop, outerHeight: dialog.clientHeight, outerContent: dialog.scrollHeight,
+        body: body.scrollTop, bodyHeight: body.clientHeight, bodyContent: body.scrollHeight },
+      overflow: { outer: getComputedStyle(dialog).overflowY, body: getComputedStyle(body).overflowY },
+      closeHit: hit('profile-dialog-close'), saveHit: hit('profile-save'),
+      primary: { background: getComputedStyle(document.getElementById('profile-save')).backgroundColor,
+        text: getComputedStyle(document.getElementById('profile-save')).color, brand },
+    };
+  });
+  try {
+    await shell.locator('#sidebar-create').click();
+    await shell.locator('#profile-dialog').waitFor({ state: 'visible' });
+    await shell.waitForFunction(() => document.activeElement.id === 'profile-name' && document.getElementById('profile-dialog-body').scrollTop <= 1);
+    const top = await measure();
+    assert.ok(top.dialog.height <= top.viewport.height * .9 + 2 && top.dialog.top >= 15 && top.dialog.bottom <= top.viewport.height - 15);
+    assert.ok(['hidden', 'clip'].includes(top.overflow.outer) && ['auto', 'scroll'].includes(top.overflow.body));
+    assert.equal(top.scroll.outer, 0);
+    assert.ok(top.scroll.outerContent <= top.scroll.outerHeight + 2, 'The installed modal cannot have an outer scrollbar');
+    assert.ok(top.header.bottom <= top.body.top + 1 && top.body.bottom <= top.footer.top + 1);
+    assert.equal(top.primary.background, top.primary.brand);
+    assert.equal(top.primary.text, 'rgb(255, 255, 255)');
+    assert.ok(top.close.width >= 33 && top.close.height >= 33 && top.save.height >= 39);
+    assert.ok(top.closeHit && top.saveHit);
+
+    // This is real CDP mouse input at a point overlapping the native website
+    // view's normal bounds. If that view stays above the shell, the website
+    // receives the click and the manager textarea cannot receive focus.
+    const overlap = await shell.locator('#profile-notes').evaluate(node => {
+      const box = node.getBoundingClientRect(), website = document.getElementById('browser-viewport').getBoundingClientRect();
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      return x > website.left && x < website.right && y > website.top && y < website.bottom;
+    });
+    assert.equal(overlap, true, 'The installed modal pointer check must overlap the native website area');
+    await shell.locator('#profile-notes').click();
+    await shell.waitForFunction(() => document.activeElement.id === 'profile-notes');
+    assert.equal(await accountPage.evaluate(() => window.__installedModalClicks), 0, 'The native website must not intercept a modal click');
+    await shell.locator('#profile-dialog-body').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    await shell.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const bottom = await measure();
+    for (const region of ['header', 'footer', 'title', 'close', 'save']) {
+      for (const edge of ['left', 'top', 'right', 'bottom']) {
+        assert.ok(Math.abs(bottom[region][edge] - top[region][edge]) <= 1.1, `Installed ${region}.${edge} cannot move when the form scrolls`);
+      }
+    }
+    assert.ok(bottom.closeHit && bottom.saveHit, 'Both installed controls remain clickable at the form bottom');
+    assert.equal(bottom.scroll.outer, 0);
+    assert.ok(bottom.tip.top >= bottom.body.top - 1 && bottom.tip.bottom <= bottom.body.bottom + 1 && bottom.tip.bottom <= bottom.footer.top + 1,
+      'The installed modal must expose its complete final explanation above the footer');
+    if (bottom.scroll.bodyContent > bottom.scroll.bodyHeight + 1) {
+      assert.ok(bottom.scroll.body >= bottom.scroll.bodyContent - bottom.scroll.bodyHeight - 1, 'The middle body reaches its genuine bottom');
+    }
+    await shell.screenshot({ path: path.join(outputDirectory, 'installed-creation-fixed-actions.png') });
+    await shell.locator('#profile-dialog-close').click();
+    await shell.waitForFunction(() => !document.getElementById('profile-dialog').open);
+    const after = await shell.evaluate(() => window.browserAPI.getState());
+    assert.deepEqual(after.profiles, before.profiles, 'Testing installed modal layout must not create or edit an environment');
+    assert.equal(after.activeId, before.activeId);
+    assert.deepEqual(after.openTabs.map(tab => tab.id), before.openTabs.map(tab => tab.id));
+    return { top, bottom, nativeWebsitePointerBlocked: true };
+  } finally {
+    await accountPage.evaluate(() => {
+      document.removeEventListener('click', window.__installedModalClickListener, true);
+      delete window.__installedModalClickListener;
+      delete window.__installedModalClicks;
+    }).catch(() => {});
+  }
+}
+
 async function main() {
   if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true' || !process.env.RUNNER_TEMP) {
     throw new Error('This installation smoke test runs only on an ephemeral GitHub Windows runner');
@@ -265,6 +358,7 @@ async function main() {
       localStorage.setItem('installedAccount', 'native-preview');
       sessionStorage.setItem('installedAccount', 'native-preview');
     });
+    const creationLayout = await assertInstalledCreationLayout(shell, accountPage, outputDirectory);
     const edited = await shell.evaluate(id => window.browserAPI.updateProfile(id, { name: '安装检查 · 已编辑', notes: 'Saved local note' }), id);
     assert.equal(edited.profiles.find(profile => profile.id === id).name, '安装检查 · 已编辑');
     assert.equal(edited.profiles.find(profile => profile.id === id).notes, 'Saved local note');
@@ -326,8 +420,9 @@ async function main() {
       persistentAndSessionCookiesRestored: true, localAndSessionStorageRestored: true,
       localPlatformImageCount: platformImages.length, platformAssociationAndIconRestored: true,
       profileOrderRestored: true, launchConfigurationLocked: true,
+      fixedCreationHeaderAndFooter: true, creationLayout,
     }, null, 2));
-    console.log('Installed Windows native launch, original brand ratio, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
+    console.log('Installed Windows native launch, original brand ratio, fixed creation header/footer, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
   } finally {
     await cleanupFailedInstance(instance);
     server.closeAllConnections();

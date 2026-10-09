@@ -89,8 +89,11 @@
 
     <dialog id="profile-dialog" class="modal" aria-labelledby="profile-dialog-title" closedby="none">
       <form id="profile-form">
-        <div class="modal-heading"><span class="modal-symbol" data-icon="layers"></span><button id="profile-dialog-close" class="icon-button" type="button" aria-label="关闭对话框"><span data-icon="x"></span></button></div>
-        <h2 id="profile-dialog-title">新建独立环境</h2><p id="profile-dialog-description" class="modal-description">从全新的登录状态开始，为一个账号创建专属空间。</p>
+        <header id="profile-dialog-header">
+          <div class="profile-dialog-heading"><span class="modal-symbol" data-icon="layers"></span><h2 id="profile-dialog-title">新建独立环境</h2><button id="profile-dialog-close" class="icon-button" type="button" aria-label="关闭对话框"><span data-icon="x"></span></button></div>
+          <p id="profile-dialog-description" class="modal-description">从全新的登录状态开始，为一个账号创建专属空间。</p>
+        </header>
+        <div id="profile-dialog-body">
         <label class="form-field">环境名称 <span class="required">*</span><input id="profile-name" name="name" type="text" placeholder="例如：抖音 · 主账号" required maxlength="60" autocomplete="off" /></label>
         <label class="form-field">备注 <span class="field-optional">选填</span><textarea id="profile-notes" name="notes" placeholder="记录账号用途，方便下次识别" maxlength="500" rows="2"></textarea></label>
         <fieldset id="profile-launch-settings" class="platform-field">
@@ -102,9 +105,12 @@
           <span id="profile-launch-help" class="field-help">首次打开时访问的网址；再次打开会恢复上次的页面。</span>
         </fieldset>
         <fieldset class="color-field"><legend>环境颜色</legend><div id="color-choices" class="color-choices"></div></fieldset>
-        <p id="profile-form-error" class="form-error" role="alert" hidden></p>
         <div id="new-profile-tip" class="modal-tip"><span data-icon="shield-check"></span><span>每个环境单独保存浏览数据，已有环境的登录状态不会改变。</span></div>
+        </div>
+        <footer id="profile-dialog-footer">
+        <p id="profile-form-error" class="form-error" role="alert" hidden></p>
         <div class="modal-actions"><button id="profile-delete" class="text-button delete-environment-button" type="button" hidden><span data-icon="trash"></span>删除环境</button><button id="profile-cancel" class="button button-secondary" type="button">取消</button><button id="profile-save" class="button button-primary" type="submit">创建并打开</button></div>
+        </footer>
       </form>
     </dialog>
 

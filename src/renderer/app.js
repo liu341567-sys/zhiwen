@@ -47,6 +47,8 @@
   let platformChoicesBuilt = false;
   let selectedPlatformId = null;
   let customUrlDraft = '';
+  let profileErrorField = null;
+  let profileInvalidFrame = 0;
   let profileDrag = null;
   let profileRowsDeferred = false;
   let dragScrollFrame = 0;
@@ -581,10 +583,11 @@
       $('profile-cancel').hidden = !profile;
       $('profile-delete').hidden = !profile;
       $('new-profile-tip').hidden = Boolean(profile);
-      $('profile-form-error').hidden = true;
+      clearProfileError();
       setDialogBusy(false);
       $('profile-dialog').showModal();
-      $('profile-name').focus();
+      $('profile-dialog-body').scrollTop = 0;
+      $('profile-name').focus({ preventScroll: true });
       if (profile) $('profile-name').select();
     } catch (error) {
       notify(error.message || '无法打开编辑窗口。', 'error');
@@ -726,18 +729,54 @@
     return url.href;
   }
 
+  function clearProfileError() {
+    $('profile-form-error').hidden = true;
+    if (profileErrorField) {
+      profileErrorField.removeAttribute('aria-invalid');
+      profileErrorField.removeAttribute('aria-errormessage');
+      profileErrorField = null;
+    }
+  }
+
+  function revealProfileField(field) {
+    if (!$('profile-dialog').open || !field || field.disabled) return;
+    field.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    field.focus({ preventScroll: true });
+  }
+
+  // Keep the browser's required-field message, and reveal only the first
+  // invalid control when several fields fail the same validation attempt.
+  $('profile-form').addEventListener('invalid', (event) => {
+    if (profileInvalidFrame) return;
+    const field = event.target;
+    profileInvalidFrame = requestAnimationFrame(() => {
+      profileInvalidFrame = 0;
+      revealProfileField(field);
+    });
+  }, true);
+  $('profile-form').addEventListener('input', clearProfileError);
+  $('profile-dialog').addEventListener('wheel', (event) => {
+    if (!$('profile-dialog-body').contains(event.target)) event.preventDefault();
+  }, { passive: false });
+
   $('profile-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     if (dialogBusy) return;
-    $('profile-form-error').hidden = true;
+    clearProfileError();
+    let invalidField = null;
     try {
       const name = $('profile-name').value.trim();
-      if (!name) throw new Error('请为环境填写一个名称。');
+      if (!name) {
+        invalidField = $('profile-name');
+        throw new Error('请为环境填写一个名称。');
+      }
       const input = { name, notes: $('profile-notes').value.trim(), color: $('color-choices').querySelector('input:checked')?.value || colors[0].value };
       if (!editId) {
         const platform = findPlatform(selectedPlatformId);
         if (selectedPlatformId && !platform) throw new Error('所选平台暂不可用，请重新选择平台或填写自定义网址。');
+        if (!platform) invalidField = $('profile-url');
         input.startUrl = platform ? platform.launchUrl : normalizeUrl($('profile-url').value);
+        invalidField = null;
         input.platformId = platform?.id || null;
       }
       setDialogBusy(true);
@@ -750,6 +789,12 @@
       $('profile-form-error').textContent = error.message || '保存失败，请重试。';
       $('profile-form-error').hidden = false;
       setDialogBusy(false);
+      if (invalidField) {
+        profileErrorField = invalidField;
+        invalidField.setAttribute('aria-invalid', 'true');
+        invalidField.setAttribute('aria-errormessage', 'profile-form-error');
+        revealProfileField(invalidField);
+      }
     }
   });
 

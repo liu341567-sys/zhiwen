@@ -11,6 +11,7 @@ const { _electron } = require('playwright-core');
 const { verifyInputFocus } = require('./ui-focus.cjs');
 const { seedLegacyPlatforms, verifyLegacyPlatforms, verifyPlatforms } = require('./ui-platforms.cjs');
 const { verifyInteractions } = require('./ui-interactions.cjs');
+const { verifyCreateModal } = require('./ui-modal.cjs');
 
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'ui');
@@ -132,8 +133,10 @@ async function runScale(scale, origin) {
       }
       check(prefix(`${label} controls can scroll fully into view; native website is hidden`), () => assert.ok(outer.clientHeight > 0));
       await screenshot(label);
-      if (outer.scrollHeight > outer.clientHeight + 1) {
-        await shell.locator(`#${dialogId}`).evaluate(node => { node.scrollTop = node.scrollHeight; });
+      const scrollContainer = dialogId === 'profile-dialog' ? '#profile-dialog-body' : `#${dialogId}`;
+      const scrolls = await shell.locator(scrollContainer).evaluate(node => node.scrollHeight > node.clientHeight + 1);
+      if (scrolls) {
+        await shell.locator(scrollContainer).evaluate(node => { node.scrollTop = node.scrollHeight; });
         await screenshot(`${label}-bottom`);
       }
     };
@@ -317,6 +320,7 @@ async function runScale(scale, origin) {
       await screenshot('tabs-browser');
 
       await shortcut(ids[1], 't');
+      await verifyCreateModal({ shell, state, check, prefix, screenshot, eventually, origin });
       await checkDialog('profile-dialog', ['profile-name', 'profile-notes', 'profile-url', 'profile-save', 'profile-dialog-close'], 'create-dialog');
       assert.equal(await shell.locator('#profile-cancel').isVisible(), false, 'Only the close icon dismisses creation');
       await closeDialog('profile-dialog-close');
