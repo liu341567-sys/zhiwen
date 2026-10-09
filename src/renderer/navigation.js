@@ -14,6 +14,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
   let compact = innerWidth < 640;
   let saveTimer;
   let restoreFrame;
+  let restoringEnvironment = false;
   let compactTimer;
   const menus = new Map();
   const environmentVisible = () => activeModule === 'environment' && (!collapsed() || overlay);
@@ -22,7 +23,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
 
   function collect() {
     if (!preferences) return;
-    if (environmentVisible()) preferences.environmentScroll = $('profile-list').scrollTop;
+    if (environmentVisible() && !restoringEnvironment && !$('environment-sidebar-content').hidden) preferences.environmentScroll = $('profile-list').scrollTop;
     preferences.environmentSearch = $('profile-search').value;
     preferences.railScroll = $('primary-navigation').scrollTop;
     if (activeModule !== 'environment') {
@@ -81,6 +82,8 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
 
   function render() {
     const item = module();
+    const savedEnvironmentScroll = preferences.environmentScroll;
+    restoringEnvironment = true;
     shell.classList.toggle('sidebar-collapsed', collapsed());
     shell.classList.toggle('sidebar-overlay', overlay);
     shell.dataset.module = activeModule;
@@ -119,9 +122,14 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
         $('planned-icon').replaceChildren(icon(item.icon));
       }
     }
+    // Restore the retained list after making it visible, before paint. A second
+    // pass covers initial row creation; hidden-list scroll events must not replace
+    // the saved position during the native visibility / DOM transition.
+    if (environmentVisible()) $('profile-list').scrollTop = savedEnvironmentScroll;
     cancelAnimationFrame(restoreFrame);
     restoreFrame = requestAnimationFrame(() => {
-      if (environmentVisible()) $('profile-list').scrollTop = preferences.environmentScroll;
+      if (environmentVisible()) $('profile-list').scrollTop = savedEnvironmentScroll;
+      restoringEnvironment = false;
       if (activeModule === 'environment' && !overlay) $('overview-view').scrollTop = preferences.panelScroll.environment || 0;
       else if (activeModule !== 'environment') {
         $('module-view').scrollTop = preferences.panelScroll[activeModule] || 0;

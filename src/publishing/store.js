@@ -94,6 +94,12 @@ class PublishingStore {
       .run(id, JSON.stringify(data), Date.now());
     return id;
   }
+  draft(id) {
+    const r = this.db.prepare('SELECT * FROM drafts WHERE id=?').get(id);
+    return r
+      ? { id: r.id, data: JSON.parse(r.data), updatedAt: r.updated_at }
+      : null;
+  }
   drafts() {
     return this.db
       .prepare('SELECT * FROM drafts ORDER BY updated_at DESC')

@@ -109,7 +109,7 @@ async function run(scale) {
         name,
         value,
       });
-    await shell.locator('[data-module="publish"]').click();
+    await shell.locator('button[data-module="publish"]').click();
     await shell.locator('.publish-steps').waitFor();
     const imported = await command('import', [source]);
     assert.equal(imported.added.length, 1);
@@ -193,6 +193,56 @@ async function run(scale) {
     await shell.locator('.publish-control textarea').nth(1).fill('#AI #运营');
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     assert.equal(await shell.locator('.publish-table tbody tr').count(), 2);
+    await shell
+      .locator('.publish-table tbody tr')
+      .first()
+      .getByLabel('锁定', { exact: true })
+      .check();
+    await shell.getByRole('button', { name: '上一步', exact: true }).click();
+    await shell
+      .locator('.publish-control textarea')
+      .nth(0)
+      .fill('回退后新标题');
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    assert.deepEqual(
+      await shell
+        .getByLabel('任务标题', { exact: true })
+        .evaluateAll((nodes) => nodes.map((n) => n.value)),
+      ['第一期测试标题', '回退后新标题'],
+    );
+    await shell.getByRole('button', { name: '上一步', exact: true }).click();
+    await shell
+      .locator('.publish-control textarea')
+      .nth(0)
+      .fill('第一期测试标题');
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    await shell.getByRole('button', { name: '保存草稿', exact: true }).click();
+    const savedDraft = (await command('state')).drafts.find(
+      (d) => d.id === 'current',
+    );
+    assert.ok(savedDraft.data.previewId);
+    await app.close();
+    app = null;
+    shell = await launch();
+    await shell.locator('button[data-module="publish"]').click();
+    await shell
+      .getByRole('button', { name: '确认生成并执行', exact: true })
+      .waitFor();
+    check(
+      `publishing-${scale}: returning to configuration and restarting retain locked preview captions and saved task bindings`,
+      () => {
+        assert.ok(savedDraft.data.input.overrides);
+      },
+    );
+    assert.deepEqual(
+      await shell
+        .getByLabel('任务标题', { exact: true })
+        .evaluateAll((nodes) => nodes.map((n) => [n.value, n.disabled])),
+      [
+        ['第一期测试标题', true],
+        ['第一期测试标题', false],
+      ],
+    );
     const layout = await shell.evaluate(() => {
       const r = (n) => {
         const b = n.getBoundingClientRect();
@@ -219,9 +269,9 @@ async function run(scale) {
       },
     );
     await shell.getByRole('button', { name: '保存草稿', exact: true }).click();
-    await shell.locator('[data-module="environment"]').click();
+    await shell.locator('button[data-module="environment"]').click();
     await shell.locator('#sidebar-toggle').click();
-    await shell.locator('[data-module="publish"]').click();
+    await shell.locator('button[data-module="publish"]').click();
     assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     await shell.locator('#sidebar-toggle').click();
     await shell
@@ -382,7 +432,7 @@ async function run(scale) {
       `publishing-${scale}: captcha, expired login and unowned uploaded media pause before any submit`,
       () => assert.equal(unknownMaterial.checkpoint.submitIntent, undefined),
     );
-    await shell.locator('[data-module="publish"]').click();
+    await shell.locator('button[data-module="publish"]').click();
     await shell.locator('[data-publish-page="tasks"]').click();
     await shell.screenshot({ path: path.join(out, `publishing-${scale}.png`) });
     const snapBefore = tasks.map((t) => ({

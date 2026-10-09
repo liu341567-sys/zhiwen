@@ -201,6 +201,10 @@ function generate(input, videos, accounts, random, now = Date.now()) {
     input.distribution,
     random,
   );
+  if (input.previewOrder) {
+    const order = new Map(input.previewOrder.map((key, i) => [key, i]));
+    pairs.sort((a, b) => (order.get(a.key) ?? 1e9) - (order.get(b.key) ?? 1e9));
+  }
   const titles = assign(pairs, input.title, 'title', random),
     topics = assign(pairs, input.topics, 'topics', random),
     plan = times(pairs, input.schedule, now);
@@ -208,6 +212,7 @@ function generate(input, videos, accounts, random, now = Date.now()) {
     const video = videos.find((v) => v.id === pair.videoId),
       account = accounts.find((a) => a.id === pair.accountId);
     if (!video || !account) throw new Error('素材或环境已被删除，请重新选择');
+    const override = input.overrides?.[pair.key] || {};
     return {
       ...pair,
       platformId: account.platformId,
@@ -218,22 +223,29 @@ function generate(input, videos, accounts, random, now = Date.now()) {
       titleLocked: titles[index].locked,
       topicsLocked: topics[index].locked,
       cover: structuredClone(
-        input.covers?.[pair.key] ||
+        override.cover ||
+          input.covers?.[pair.key] ||
           input.covers?.[pair.videoId] ||
           input.cover || { mode: 'first' },
       ),
       location: structuredClone(
-        input.locations?.[pair.key] ||
+        override.location ||
+          input.locations?.[pair.key] ||
           input.locations?.[pair.videoId] ||
           input.location || { mode: 'none' },
       ),
       nativeSchedule: input.nativeSchedule || null,
       minIntervalMs: (input.schedule?.intervalMinutes ?? 10) * 60000,
-      plannedAt: plan[index],
+      plannedAt: Number.isFinite(override.plannedAt)
+        ? override.plannedAt
+        : plan[index],
       ordinal: index,
-      cancelled: false,
-      autoSubmit: input.autoSubmit === true,
-      locked: false,
+      cancelled: override.cancelled === true,
+      autoSubmit:
+        typeof override.autoSubmit === 'boolean'
+          ? override.autoSubmit
+          : input.autoSubmit === true,
+      locked: override.locked === true,
     };
   });
 }

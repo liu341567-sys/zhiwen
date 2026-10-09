@@ -101,7 +101,12 @@ class PublishingService {
       library: this.store.list('title').concat(this.store.list('topics')),
       covers: this.store.list('image'),
       locations: this.store.list('location'),
-      drafts: this.store.drafts(),
+      drafts: [
+        this.store.draft('current'),
+        this.store.draft(
+          `preview:${this.store.draft('current')?.data.previewId || ''}`,
+        ),
+      ].filter(Boolean),
       tasks: this.store.tasks(),
       batches: this.store.batches(),
       accounts: this.accounts(),
@@ -248,7 +253,7 @@ class PublishingService {
     if (
       !input ||
       typeof input !== 'object' ||
-      JSON.stringify(input).length > 2e6
+      JSON.stringify(input).length > 32e6
     )
       throw new Error('发布配置过大或无效');
     if (
@@ -299,16 +304,14 @@ class PublishingService {
     return { previewId, rows };
   }
   saveDraft(input) {
-    if (!input || JSON.stringify(input).length > 2e6)
+    if (!input || JSON.stringify(input).length > 32e6)
       throw new Error('草稿过大');
     this.store.saveDraft(clone(input));
     this.changed();
     return { saved: true };
   }
   async confirm({ previewId, rows, name, allowDuplicates = false }) {
-    const draft = this.store
-      .drafts()
-      .find((d) => d.id === `preview:${previewId}`);
+    const draft = this.store.draft(`preview:${previewId}`);
     if (!draft) throw new Error('预览已过期，请重新生成');
     if (!Array.isArray(rows) || rows.length !== draft.data.rows.length)
       throw new Error('任务数量发生变化，请重新预览');

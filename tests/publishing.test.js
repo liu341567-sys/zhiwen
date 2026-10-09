@@ -435,3 +435,47 @@ test('registering a future video adapter reuses the matching engine and canonica
   await service.shutdown();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('preview regeneration preserves manual caption locks, task order and locked options without trusting account overrides', () => {
+  const input = {
+    videoIds: ['v'],
+    accountIds: ['a', 'b'],
+    distribution: { mode: 'all' },
+    title: { mode: 'reuse', values: ['changed'], locks: { 'v:a': 'saved' } },
+    topics: { mode: 'reuse', values: ['#all'], locks: {} },
+    schedule: { mode: 'now' },
+    previewOrder: ['v:b', 'v:a'],
+    overrides: {
+      'v:a': {
+        locked: true,
+        plannedAt: 123,
+        autoSubmit: false,
+        cover: { mode: 'frame', seconds: 2 },
+        location: { mode: 'none' },
+        accountId: 'wrong',
+        platformId: 'wrong',
+      },
+    },
+  };
+  const rows = generate(
+    input,
+    [{ id: 'v' }],
+    [
+      { id: 'a', platformId: 'douyin', name: 'A' },
+      { id: 'b', platformId: 'douyin', name: 'B' },
+    ],
+    () => 0,
+    100,
+  );
+  assert.deepEqual(
+    rows.map((r) => r.key),
+    ['v:b', 'v:a'],
+  );
+  assert.equal(rows[0].title, 'changed');
+  assert.equal(rows[1].title, 'saved');
+  assert.equal(rows[1].locked, true);
+  assert.equal(rows[1].plannedAt, 123);
+  assert.equal(rows[1].accountId, 'a');
+  assert.equal(rows[1].platformId, 'douyin');
+  assert.deepEqual(rows[1].cover, { mode: 'frame', seconds: 2 });
+});

@@ -158,11 +158,64 @@
       .toISOString()
       .slice(0, 16);
   };
+  function rowOverride(row, patch) {
+    input.overrides ||= {};
+    input.overrides[row.key] = { ...input.overrides[row.key], ...patch };
+    saveSoon();
+  }
+  function lockRow(row, locked) {
+    row.locked = locked;
+    input.title.locks ||= {};
+    input.topics.locks ||= {};
+    if (locked) {
+      input.title.locks[row.key] = row.title;
+      input.topics.locks[row.key] = row.topics;
+      rowOverride(row, {
+        locked,
+        cover: row.cover,
+        location: row.location,
+        plannedAt: row.plannedAt,
+        autoSubmit: row.autoSubmit,
+      });
+    } else {
+      delete input.title.locks[row.key];
+      delete input.topics.locks[row.key];
+      row.titleLocked = false;
+      row.topicsLocked = false;
+      rowOverride(row, { locked: false });
+    }
+  }
+  function hydratePreview() {
+    for (const row of preview.rows) {
+      row.title = input.title.locks?.[row.key] ?? row.title;
+      row.topics = input.topics.locks?.[row.key] ?? row.topics;
+      const override = input.overrides?.[row.key];
+      if (override) {
+        for (const key of [
+          'cover',
+          'location',
+          'plannedAt',
+          'autoSubmit',
+          'locked',
+          'cancelled',
+        ])
+          if (Object.hasOwn(override, key))
+            row[key] = structuredClone(override[key]);
+        row.timeLocked = Object.hasOwn(override, 'plannedAt');
+      }
+    }
+    const order = new Map((input.previewOrder || []).map((key, i) => [key, i]));
+    preview.rows.sort(
+      (a, b) => (order.get(a.key) ?? 1e9) - (order.get(b.key) ?? 1e9),
+    );
+  }
   function saveSoon() {
     clearTimeout(draftTimer);
     draftTimer = setTimeout(
       () =>
-        cmd('draft', { input, step }).catch((e) => notify(e.message, 'error')),
+        cmd('draft', { input, step, previewId: preview?.previewId }).catch(
+          (e) => notify(e.message, 'error'),
+        ),
       500,
     );
   }
@@ -195,6 +248,16 @@
         if (draft?.data?.input) {
           input = draft.data.input;
           step = draft.data.step || 0;
+          const saved = data.drafts.find(
+            (d) => d.id === `preview:${draft.data.previewId}`,
+          );
+          if (saved) {
+            preview = {
+              previewId: draft.data.previewId,
+              rows: structuredClone(saved.data.rows),
+            };
+            hydratePreview();
+          }
         }
         page = names[data.ui.page] ? data.ui.page : 'video';
         step = Math.min(4, Math.max(0, draft?.data?.step ?? data.ui.step ?? 0));
@@ -217,7 +280,10 @@
       }
     } catch (error) {
       if (!ready) {
-        const message=error.message.includes('No handler registered')?'内容发布中心正在准备…':error.message;root.replaceChildren(E('p','publish-error',message));
+        const message = error.message.includes('No handler registered')
+          ? '内容发布中心正在准备…'
+          : error.message;
+        root.replaceChildren(E('p', 'publish-error', message));
       }
     } finally {
       loading = false;
@@ -545,7 +611,7 @@
       right = E('div', 'publish-actions');
     left.append(
       B('保存草稿', async () => {
-        await cmd('draft', { input, step });
+        await cmd('draft', { input, step, previewId: preview?.previewId });
         notify('发布草稿已保存');
       }),
     );
@@ -1105,6 +1171,9 @@
             .forEach((r) => {
               r.title = value;
               r.titleLocked = true;
+              input.title.locks ||= {};
+              input.title.locks[r.key] = value;
+              saveSoon();
             });
           fill();
         }),
@@ -1116,6 +1185,9 @@
             .forEach((r) => {
               r.topics = value;
               r.topicsLocked = true;
+              input.topics.locks ||= {};
+              input.topics.locks[r.key] = value;
+              saveSoon();
             });
           fill();
         }),
@@ -1179,6 +1251,9 @@
           c.addEventListener('input', () => {
             r[key] = c.value;
             r[key + 'Locked'] = true;
+            input[key].locks ||= {};
+            input[key].locks[r.key] = r[key];
+            saveSoon();
           });
           cell(row, c);
         }
@@ -1189,28 +1264,42 @@
         time.addEventListener('change', () => {
           r.plannedAt = Date.parse(time.value);
           r.timeLocked = true;
+          rowOverride(r, { plannedAt: r.plannedAt });
         });
         cell(row, time);
         const flags = E('div');
         flags.append(
           check('锁定', r.locked, (v) => {
-            r.locked = v;
+            lockRow(r, v);
             fill();
           }),
-          check('取消', r.cancelled, (v) => (r.cancelled = v)),
+          check('取消', r.cancelled, (v) => {
+            r.cancelled = v;
+            rowOverride(r, { cancelled: v });
+          }),
         );
         cell(row, flags);
         const actions = E('div', 'row-actions');
         actions.append(
           textButton('设置', () => {
+            if (r.locked) throw new Error('请先取消此任务的锁定，再修改参数');
             const p = E('div');
             p.append(
-              coverControl(r.cover, (v) => (r.cover = v)),
-              locationControl(r.location, (v) => (r.location = v)),
-              check('授权自动提交', r.autoSubmit, (v) => (r.autoSubmit = v)),
+              coverControl(r.cover, (v) => {
+                r.cover = v;
+                rowOverride(r, { cover: v });
+              }),
+              locationControl(r.location, (v) => {
+                r.location = v;
+                rowOverride(r, { location: v });
+              }),
+              check('授权自动提交', r.autoSubmit, (v) => {
+                r.autoSubmit = v;
+                rowOverride(r, { autoSubmit: v });
+              }),
             );
             show('单任务参数', [p], () => {
-              r.locked = true;
+              lockRow(r, true);
               fill();
             });
           }),
@@ -1228,12 +1317,18 @@
       const other = preview.rows[j];
       if (
         !r.timeLocked &&
+        !r.locked &&
         !other.timeLocked &&
+        !other.locked &&
         r.accountId === other.accountId
       ) {
         [r.plannedAt, other.plannedAt] = [other.plannedAt, r.plannedAt];
+        rowOverride(r, { plannedAt: r.plannedAt });
+        rowOverride(other, { plannedAt: other.plannedAt });
       }
       [preview.rows[i], preview.rows[j]] = [preview.rows[j], preview.rows[i]];
+      input.previewOrder = preview.rows.map((r) => r.key);
+      saveSoon();
       fill();
     }
     fill();
@@ -1756,13 +1851,19 @@
     closeDialogs();
     window.publishingNavigateEnvironment?.();
   });
+  window.browserAPI?.onState((snapshot) => {
+    if (!ready && snapshot.publishingError)
+      root.replaceChildren(E('p', 'publish-error', snapshot.publishingError));
+  });
   api?.onChanged(() => {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => refresh(), 100);
   });
   window.addEventListener('pagehide', () => {
     clearTimeout(draftTimer);
-    cmd('draft', { input, step }).catch(() => {});
+    cmd('draft', { input, step, previewId: preview?.previewId }).catch(
+      () => {},
+    );
     saveUI();
   });
   // The service is installed after account restoration; the ready event retries
