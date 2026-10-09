@@ -119,30 +119,106 @@ function observe() {
       !e.disabled &&
       e.getAttribute('aria-disabled') !== 'true',
   );
+  // Completion of the video and validity of the caption are separate platform
+  // states. Never require an enabled Publish button before filling the caption.
+  const videoInputs = [
+    ...document.querySelectorAll('input[type="file"]'),
+  ].filter((e) => /video|mp4|mov/i.test(e.accept));
+  const previews = [...document.querySelectorAll('video')].filter(
+    (e) =>
+      visible(e) &&
+      !e.closest('aside,nav') &&
+      (e.currentSrc || e.getAttribute('src')),
+  );
+  let uploadRoot = null;
+  for (
+    let parent = (videoInputs[0] || previews[0])?.parentElement;
+    parent && parent !== document.body;
+    parent = parent.parentElement
+  ) {
+    // Prefer the nearest common container of the input and preview. Some
+    // upload inputs sit in a small hidden wrapper with a sibling preview.
+    if (parent.querySelector('video')) {
+      uploadRoot = parent;
+      break;
+    }
+    if (
+      /upload|uploader/i.test(
+        [parent.id, parent.className, parent.getAttribute('data-testid')].join(
+          ' ',
+        ),
+      )
+    ) {
+      uploadRoot = parent;
+    }
+  }
+  const previewReady = previews.some(
+    (e) =>
+      (!uploadRoot || uploadRoot.contains(e)) &&
+      e.readyState >= 2 &&
+      e.videoWidth > 0 &&
+      e.videoHeight > 0,
+  );
+  const semantics = (e) =>
+    [
+      e.id,
+      e.className,
+      e.getAttribute('aria-label'),
+      e.getAttribute('data-testid'),
+    ].join(' ');
+  const related = (e) =>
+    !e.closest('aside,nav') &&
+    (uploadRoot
+      ? uploadRoot.contains(e) ||
+        /upload|上传|transcod|转码/i.test(semantics(e))
+      : true);
+  const progressNodes = [
+    ...document.querySelectorAll('[role="progressbar"],progress'),
+  ].filter((e) => visible(e) && related(e));
+  const progress = progressNodes.map((e) => {
+    const raw = e.getAttribute('aria-valuenow');
+    const value =
+      raw !== null && raw.trim() !== ''
+        ? Number(raw)
+        : e.tagName === 'PROGRESS' && e.hasAttribute('value')
+          ? e.value
+          : null;
+    const rawMax = e.getAttribute('aria-valuemax');
+    const max = rawMax
+      ? Number(rawMax)
+      : e.tagName === 'PROGRESS'
+        ? e.max
+        : 100;
+    return {
+      value: Number.isFinite(value) ? value : null,
+      max: Number.isFinite(max) && max > 0 ? max : 100,
+    };
+  });
+  const statusNodes = [
+    ...document.querySelectorAll('div,span,p,[role="status"]'),
+  ].filter(
+    (e) =>
+      visible(e) &&
+      related(e) &&
+      !e.closest('[contenteditable="true"]') &&
+      !e.contains(editor) &&
+      !e.contains(title),
+  );
+  const statusText = statusNodes
+    .map((e) => e.innerText.trim())
+    .filter((t) => t.length > 0 && t.length <= 120);
+  const uploadComplete = statusText.some((t) =>
+    /^(?:视频)?(?:已)?上传(?:完成|成功|完毕)/.test(t),
+  );
+  const busyText = statusText.some((t) =>
+    /^(?:视频)?(?:正在)?(?:上传中|处理中|转码中|正在上传|正在处理)(?:\s|[，。…:.：\d%]|$)/.test(
+      t,
+    ),
+  );
   const progressing =
-    /上传中|正在上传|处理中|正在处理|转码中/.test(text) ||
-    [...document.querySelectorAll('[role="progressbar"]')]
-      .filter(visible)
-      .some((e) => {
-        const value = e.getAttribute('aria-valuenow'),
-          max = e.getAttribute('aria-valuemax');
-        return (
-          value === null ||
-          !Number.isFinite(Number(value)) ||
-          Number(value) < Number(max || 100)
-        );
-      });
-  const media =
-    [...document.querySelectorAll('video')].some(
-      (e) => e.currentSrc || e.getAttribute('src'),
-    ) || !!upload?.files?.length;
-  const ready =
-    !!editor &&
-    !progressing &&
-    (/上传完成|上传成功/.test(text) ||
-      (media &&
-        submitReady &&
-        /重新上传|更换视频|设置封面|编辑封面/.test(text)));
+    busyText || progress.some((p) => p.value === null || p.value < p.max);
+  const ready = !!editor && !progressing && (uploadComplete || previewReady);
+  const publishReady = ready && submitReady;
   const topicPopupOpen = [
     ...document.querySelectorAll(
       '[role="listbox"], [class*="suggest" i], [class*="mention" i], [class*="popover" i]',
@@ -171,6 +247,11 @@ function observe() {
     error,
     ready,
     progressing,
+    previewReady,
+    uploadComplete,
+    submitReady,
+    publishReady,
+    progress,
     topicPopupOpen,
     submitted: /发布成功|发布完成|作品已提交|提交成功/.test(
       [
@@ -234,6 +315,34 @@ const normalizedCaption = (text) =>
     .replace(/\s*#/g, ' #')
     .replace(/\s+/g, ' ')
     .trim();
+async function waitUploadState(page, context, phase) {
+  let last = '',
+    loggedAt = 0;
+  return page.wait(observe, null, 20 * 60000, {
+    accept: (s) =>
+      s.challenge ||
+      s.login ||
+      s.error ||
+      (phase === 'form' ? s.ready : s.publishReady),
+    onPoll: (s) => {
+      const progress =
+        s.progress
+          .map((p) => (p.value === null ? '进行中' : `${p.value}/${p.max}`))
+          .join('、') || '无活动指标';
+      const summary = `上传状态检查（${phase === 'form' ? '填写前' : '提交前'}）：完成提示${s.uploadComplete ? '有' : '无'}，视频预览${s.previewReady ? '可播放' : '未就绪'}，简介${s.editorSelector ? '可编辑' : '未识别'}，上传/处理${s.progressing ? '进行中' : '未检测到进行中'}，相关进度 ${progress}，发布按钮${s.submitReady ? '可用' : '不可用'}`;
+      const now = Date.now();
+      if (
+        !loggedAt ||
+        (summary !== last && now - loggedAt >= 5000) ||
+        now - loggedAt >= 30000
+      ) {
+        context.log(summary);
+        last = summary;
+        loggedAt = now;
+      }
+    },
+  });
+}
 async function execute(task, context, { getView, validate, accountStatus }) {
   await validate(task.video);
   context.log('视频路径、可读性和内容摘要检查通过');
@@ -315,22 +424,28 @@ async function execute(task, context, { getView, validate, accountStatus }) {
           document.documentElement.dataset.qiyePublishTask = id;
         }, task.id);
         context.checkpoint({ uploadStarted: true });
-        context.log('视频已交给当前环境上传，按页面状态等待完成');
+        context.log('视频已交给当前环境上传，等待视频预览和作品表单就绪');
       } else context.log('继续等待本任务已启动的上传，未重复上传文件');
-      state = await page.wait(
-        stateWhen('s.challenge||s.login||s.error||s.ready?s:false'),
-        null,
-        20 * 60000,
-      );
+      state = await waitUploadState(page, context, 'form');
       if (state.challenge || state.login || state.error)
         return manual(state.error || '上传过程中需要登录 / 验证');
-      context.checkpoint({ uploaded: true });
-      context.log('视频上传完成，未检测到进行中的上传 / 转码进度');
-    } else if (!task.checkpoint.uploaded || !owned) {
+    } else if (
+      !(task.checkpoint.uploaded || task.checkpoint.uploadStarted) ||
+      !owned
+    ) {
       return manual(
         '发布页已有视频，无法证明是当前任务素材；请人工核实，避免覆盖',
       );
     }
+    context.checkpoint({
+      formReady: true,
+      ...(state.uploadComplete ? { uploaded: true } : {}),
+    });
+    context.log(
+      state.uploadComplete
+        ? '平台视频上传完成提示已确认，进入文案填写'
+        : '视频预览与作品表单已就绪，进入文案填写；提交前仍会检查上传状态',
+    );
     const split = !!state.titleSelector;
     const caption = split
       ? task.topics || ''
@@ -412,6 +527,30 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       );
     if (filled.error || filled.challenge || filled.login)
       return manual(filled.error || '提交前需要人工检查');
+    const preSubmit = await waitUploadState(page, context, 'submit');
+    if (preSubmit.error || preSubmit.challenge || preSubmit.login)
+      return manual(preSubmit.error || '提交前需要登录 / 验证，请人工处理');
+    if (
+      normalizedCaption(preSubmit.editorText) !== normalizedCaption(caption) ||
+      (split &&
+        normalizedCaption(preSubmit.titleText) !==
+          normalizedCaption(task.title)) ||
+      preSubmit.topicPopupOpen
+    )
+      return manual('提交前标题 / 话题状态发生变化，请人工核对；未提交');
+    if (
+      !(await page.evaluate(
+        (id) => document.documentElement.dataset.qiyePublishTask === id,
+        task.id,
+      ))
+    )
+      return manual('提交前页面素材归属发生变化，请人工核对；未提交');
+    context.checkpoint({
+      uploaded: true,
+      uploadCompletionEvidence: preSubmit.uploadComplete
+        ? 'platform-message'
+        : 'platform-publish-enabled',
+    });
     const submit = await page.evaluate(() => {
       const nodes = [
         ...document.querySelectorAll('button,[role="button"]'),

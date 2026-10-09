@@ -18,7 +18,7 @@ Page.prototype.connect = async function () {
   });
 };
 const { validate } = require('../src/publishing/media');
-globalThis.__publishingFixture = async (task) => {
+globalThis.__publishingFixture = async (task, options = {}) => {
   const view = BrowserWindow.getAllWindows()[0].contentView.children.find(
     (v) => v.webContents?.profileId === task.accountId,
   );
@@ -30,21 +30,33 @@ globalThis.__publishingFixture = async (task) => {
   const seen = await view.webContents.executeJavaScriptInIsolatedWorld(2002, [
     { code: `(${observe.toString()})()` },
   ]);
-  const result = await execute(
-    task,
-    {
-      signal: new AbortController().signal,
-      checkpoint: (patch) => {
-        task.checkpoint = { ...task.checkpoint, ...patch };
+  const controller = new AbortController();
+  const timeout = options.timeoutMs
+    ? setTimeout(() => controller.abort(), options.timeoutMs)
+    : null;
+  let result;
+  try {
+    result = await execute(
+      task,
+      {
+        signal: controller.signal,
+        checkpoint: (patch) => {
+          task.checkpoint = { ...task.checkpoint, ...patch };
+        },
+        log: (message) => logs.push(message),
       },
-      log: (message) => logs.push(message),
-    },
-    {
-      getView: async () => view.webContents,
-      validate,
-      accountStatus: () => {},
-    },
-  );
+      {
+        getView: async () => view.webContents,
+        validate,
+        accountStatus: () => {},
+      },
+    );
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+    result = { status: 'paused', reason: error.message };
+  } finally {
+    clearTimeout(timeout);
+  }
   return {
     result,
     checkpoint: task.checkpoint,

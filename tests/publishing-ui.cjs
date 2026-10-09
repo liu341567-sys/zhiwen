@@ -642,6 +642,206 @@ async function run(scale) {
         assert.equal(pendingResult.checkpoint.submitIntent, undefined);
       },
     );
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents.fromId(id).executeJavaScript(`
+      window.sequenceRound=0;window.sequenceUploads=0;window.sequenceSubmissions=0;window.sequenceFiles=[];window.sequenceUnsafeSubmissions=0;
+      window.sequenceManagement=()=>{
+        document.body.innerHTML='<h1>作品管理</h1><div id="sequence-entry">发布视频</div><div role="alert">发布成功</div>';
+        document.querySelector('#sequence-entry').onclick=window.sequenceForm;
+      };
+      window.sequenceForm=()=>{
+        document.body.innerHTML=(window.sequenceRound ? '<aside id="other-task">上一条作品视频处理中<progress aria-label="其他作品处理进度" max="100" value="20"></progress><div role="progressbar" aria-label="其他作品处理进度" aria-valuenow="20" aria-valuemax="100"></div></aside>':'')+
+          '<section class="video-upload"><input type="file" accept="video/mp4"><div id="sequence-status"></div><video controls style="width:320px;height:240px"></video></section><textarea placeholder="作品描述"></textarea><button id="sequence-submit" disabled>发布</button>';
+        let processingStarted=false;window.finalProcessingActive=false;
+        document.querySelector('textarea').oninput=()=>{
+          if(window.deferFinalProcessing&&!processingStarted){
+            processingStarted=true;window.finalProcessingActive=true;
+            const progress=document.createElement('progress');progress.max=100;progress.value=25;progress.setAttribute('aria-label','当前视频转码进度');document.querySelector('.video-upload').append(progress);
+            setTimeout(()=>{progress.remove();window.finalProcessingActive=false;document.querySelector('#sequence-submit').disabled=!document.querySelector('textarea').value.trim();},800);
+          }
+          document.querySelector('#sequence-submit').disabled=!(window.sequenceUploadComplete && document.querySelector('textarea').value.trim()&&!window.finalProcessingActive);
+        };
+        document.querySelector('input').onchange=event=>{
+          window.sequenceUploads++;window.sequenceFiles.push(event.target.files[0].name);window.sequenceUploadComplete=false;
+          const progress=document.createElement('progress');progress.max=100;progress.value=10;progress.setAttribute('aria-label','当前视频上传进度');document.querySelector('.video-upload').append(progress);
+          const complete=()=>{
+            progress.remove();window.sequenceUploadComplete=true;
+            document.querySelector('video').src=URL.createObjectURL(event.target.files[0]);
+            document.querySelector('#sequence-status').textContent=window.sequenceRound?'':'上传完成';
+            document.querySelector('#sequence-submit').disabled=!document.querySelector('textarea').value.trim();
+          };
+          window.finishSequenceUpload=complete;
+          if(!window.holdSequenceUpload)setTimeout(complete,600);
+        };
+        document.querySelector('#sequence-submit').onclick=()=>{window.sequenceUnsafeSubmissions+=window.finalProcessingActive?1:0;window.sequenceSubmissions++;window.sequenceRound++;window.sequenceManagement();};
+      };window.sequenceForm();void 0;
+    `),
+      bWcId,
+    );
+    const firstSequential = {
+      ...splitTask,
+      id: 'sequence-first',
+      title: '第一条视频',
+      checkpoint: {},
+      autoSubmit: true,
+    };
+    const firstSequentialResult = await app.evaluate(
+      async (_electron, task) =>
+        globalThis.__publishingFixture(task, { timeoutMs: 8000 }),
+      firstSequential,
+    );
+    assert.equal(firstSequentialResult.result.status, 'submitted');
+    const secondSource = path.join(dir, 'second-video.mp4');
+    await binary(require('ffmpeg-static'), [
+      '-nostdin',
+      '-v',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=red:s=320x240:r=10',
+      '-t',
+      '1',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-y',
+      secondSource,
+    ]);
+    await command('import', [secondSource]);
+    const secondVideo = (await command('state')).videos.find(
+      (v) => v.path === secondSource,
+    );
+    assert.ok(secondVideo);
+    const secondSequential = {
+      ...firstSequential,
+      id: 'sequence-second',
+      video: secondVideo,
+      title: '第二条视频',
+      checkpoint: {},
+    };
+    const secondSequentialResult = await app.evaluate(
+      async (_electron, task) =>
+        globalThis.__publishingFixture(task, { timeoutMs: 8000 }),
+      secondSequential,
+    );
+    if (secondSequentialResult.result.status !== 'submitted')
+      console.log(JSON.stringify({ secondSequentialResult }));
+    check(
+      `publishing-${scale}: consecutive tasks use a playable preview without a completion label or initially enabled publish button`,
+      () => {
+        assert.equal(secondSequentialResult.result.status, 'submitted');
+        assert.equal(secondSequentialResult.checkpoint.filled, true);
+        assert.equal(secondSequentialResult.checkpoint.uploaded, true);
+      },
+    );
+    const sequenceStats = await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            '({uploads:window.sequenceUploads,submissions:window.sequenceSubmissions,files:window.sequenceFiles})',
+          ),
+      bWcId,
+    );
+    assert.deepEqual(sequenceStats, {
+      uploads: 2,
+      submissions: 2,
+      files: [path.basename(source), path.basename(secondSource)],
+    });
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript('window.holdSequenceUpload=true;void 0;'),
+      bWcId,
+    );
+    const resumable = {
+      ...secondSequential,
+      id: 'sequence-resumed',
+      checkpoint: {},
+    };
+    const pausedSequence = await app.evaluate(
+      async (_electron, task) =>
+        globalThis.__publishingFixture(task, { timeoutMs: 1200 }),
+      resumable,
+    );
+    assert.equal(pausedSequence.result.status, 'paused');
+    assert.equal(pausedSequence.checkpoint.uploadStarted, true);
+    assert.equal(pausedSequence.checkpoint.uploaded, undefined);
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            'window.holdSequenceUpload=false;window.finishSequenceUpload();void 0;',
+          ),
+      bWcId,
+    );
+    await until(
+      () =>
+        app.evaluate(
+          async ({ webContents }, id) =>
+            webContents
+              .fromId(id)
+              .executeJavaScript(
+                'document.querySelector("video").readyState>=2',
+              ),
+          bWcId,
+        ),
+      'resumed preview',
+    );
+    const resumedSequence = await app.evaluate(
+      async (_electron, task) =>
+        globalThis.__publishingFixture(task, { timeoutMs: 8000 }),
+      { ...resumable, checkpoint: pausedSequence.checkpoint },
+    );
+    check(
+      `publishing-${scale}: pause then resume an already playable upload without reselecting its file`,
+      () => {
+        assert.equal(resumedSequence.result.status, 'submitted');
+        assert.equal(resumedSequence.checkpoint.uploaded, true);
+      },
+    );
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript('window.deferFinalProcessing=true;void 0;'),
+      bWcId,
+    );
+    const deferredSequence = await app.evaluate(
+      async (_electron, task) =>
+        globalThis.__publishingFixture(task, { timeoutMs: 8000 }),
+      { ...resumable, id: 'sequence-processing', checkpoint: {} },
+    );
+    const finalSequence = await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            '({uploads:window.sequenceUploads,submissions:window.sequenceSubmissions,unsafe:window.sequenceUnsafeSubmissions})',
+          ),
+      bWcId,
+    );
+    check(
+      `publishing-${scale}: real processing still blocks submit after filling while unrelated progress does not`,
+      () => {
+        assert.equal(deferredSequence.result.status, 'submitted');
+        assert.deepEqual(finalSequence, {
+          uploads: 4,
+          submissions: 4,
+          unsafe: 0,
+        });
+        assert.ok(
+          deferredSequence.logs.some(
+            (log) => log.includes('提交前') && log.includes('25/100'),
+          ),
+        );
+      },
+    );
     await shell.locator('button[data-module="publish"]').click();
     await shell.locator('[data-publish-page="tasks"]').click();
     await shell.screenshot({ path: path.join(out, `publishing-${scale}.png`) });

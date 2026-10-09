@@ -96,12 +96,13 @@ class Page {
     this.check();
     return this.awaitOperation(this.wc.debugger.sendCommand(method, args));
   }
-  async wait(predicate, arg, timeout = 120000) {
+  async wait(predicate, arg, timeout = 120000, options = {}) {
     const end = Date.now() + timeout;
     while (Date.now() < end) {
       this.check();
       const value = await this.evaluate(predicate, arg);
-      if (value) return value;
+      options.onPoll?.(value);
+      if (options.accept ? options.accept(value) : value) return value;
       await new Promise((resolve, reject) => {
         const timer = setTimeout(done, 400);
         const signal = this.signal;
