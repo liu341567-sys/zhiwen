@@ -637,6 +637,13 @@ function registerIPC() {
   });
 }
 
+function saveWindowLayout() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+  const { width, height } = mainWindow.getNormalBounds();
+  try { uiPreferences.update({ windowSize: { width, height }, windowMaximized: mainWindow.isMaximized() }); }
+  catch { /* UI preferences must not prevent the live window from operating. */ }
+}
+
 async function createWindow() {
   // Work-area sizes are device-independent pixels, so a scaled display must
   // not receive a window or minimum size larger than its available desktop.
@@ -667,15 +674,12 @@ async function createWindow() {
   mainWindow.on('resize', updateViews);
   mainWindow.on('resize', () => {
     clearTimeout(windowSizeTimer);
-    windowSizeTimer = setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
-      const { width, height } = mainWindow.getNormalBounds();
-      try { uiPreferences.update({ windowSize: { width, height }, windowMaximized: mainWindow.isMaximized() }); } catch { /* Keep the live layout on a write failure. */ }
-    }, 180);
+    windowSizeTimer = setTimeout(saveWindowLayout, 180);
   });
   mainWindow.once('ready-to-show', () => {
     if (uiPreferences.get().windowMaximized) mainWindow.maximize();
     mainWindow.show();
+    saveWindowLayout();
   });
   mainWindow.on('close', event => {
     if (!canQuit) { event.preventDefault(); app.quit(); }
@@ -724,10 +728,7 @@ if (!app.requestSingleInstanceLock()) {
         if (mainWindow && !mainWindow.isDestroyed()) {
           const next = await mainWindow.webContents.executeJavaScript('window.getNavigationPreferences?.()');
           if (next) uiPreferences.update(next);
-          if (!mainWindow.isMinimized()) {
-            const { width, height } = mainWindow.getNormalBounds();
-            uiPreferences.update({ windowSize: { width, height }, windowMaximized: mainWindow.isMaximized() });
-          }
+          saveWindowLayout();
         }
       } catch { /* UI state must not prevent browser data from being flushed. */ }
       await mutationQueue;

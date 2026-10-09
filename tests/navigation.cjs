@@ -28,6 +28,8 @@ async function run(scale, origin) {
       `--force-device-scale-factor=${scale}`, path.join(root, 'tests/electron-launch.cjs')], cwd: root, env: { ...process.env, QIYE_DATA_DIR: directory } });
     let shell; await until(() => { shell = app.windows().find(page => page.url().endsWith('/renderer/index.html')); return shell; }, 'manager');
     await shell.waitForFunction(() => document.querySelector('[data-module="environment"]') && !document.body.classList.contains('navigation-loading'));
+    await until(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), 'native window ready');
+    await until(() => { const file = path.join(directory, 'ui-preferences.json'); return fs.existsSync(file) && !!JSON.parse(fs.readFileSync(file, 'utf8')).windowSize; }, 'initial layout saved even without a resize');
     return shell;
   };
   try {
