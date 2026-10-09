@@ -42,6 +42,7 @@ globalThis.__publishingFixture = async (task, options = {}) => {
         signal: controller.signal,
         checkpoint: (patch) => {
           task.checkpoint = { ...task.checkpoint, ...patch };
+          if (options.pauseOnUpload && patch.uploadStarted) controller.abort();
         },
         log: (message) => logs.push(message),
       },

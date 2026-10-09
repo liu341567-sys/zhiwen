@@ -710,9 +710,10 @@ async function run(scale) {
       '-y',
       secondSource,
     ]);
-    await command('import', [secondSource]);
+    const secondImported = await command('import', [secondSource]);
+    assert.equal(secondImported.added.length, 1);
     const secondVideo = (await command('state')).videos.find(
-      (v) => v.path === secondSource,
+      (v) => v.id === secondImported.added[0],
     );
     assert.ok(secondVideo);
     const secondSequential = {
@@ -765,7 +766,10 @@ async function run(scale) {
     };
     const pausedSequence = await app.evaluate(
       async (_electron, task) =>
-        globalThis.__publishingFixture(task, { timeoutMs: 1200 }),
+        globalThis.__publishingFixture(task, {
+          timeoutMs: 8000,
+          pauseOnUpload: true,
+        }),
       resumable,
     );
     assert.equal(pausedSequence.result.status, 'paused');
