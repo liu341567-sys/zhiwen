@@ -61,10 +61,46 @@ async function verifyInteractions(context) {
     result.splice(beforeId === null ? result.length : result.indexOf(beforeId), 0, id);
     return result;
   };
-  const waitOrder = expected => eventually(async () => {
-    const actual = await order();
-    return actual.length === expected.length && actual.every((id, index) => id === expected[index]);
-  }, 'released drag order reaches the authoritative saved state');
+  let lastDropEvidence = null;
+  const dragEvidence = () => shell.evaluate(() => {
+    const list = document.getElementById('profile-list');
+    const bounds = list.getBoundingClientRect();
+    const compact = id => id?.slice(0, 8) || null;
+    const rows = [...list.querySelectorAll('.profile-row')];
+    const source = list.dataset.draggingId;
+    const others = rows.filter(node => node.dataset.profileId !== source);
+    const rowBox = node => {
+      if (!node) return null;
+      const box = node.getBoundingClientRect();
+      return { id: node.dataset.profileId, top: box.top, bottom: box.bottom, midpoint: box.top + box.height / 2 };
+    };
+    const pointer = window.__qiyeSortPointer || null;
+    return { bounds: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, height: bounds.height },
+      scrollTop: list.scrollTop, maximum: list.scrollHeight - list.clientHeight,
+      draggingId: source || null, captured: Boolean(pointer && list.hasPointerCapture(pointer.pointerId)),
+      pointer, first: rowBox(others[0]), last: rowBox(others.at(-1)),
+      markers: rows.filter(node => node.classList.contains('drop-before') || node.classList.contains('drop-after')).map(node => ({
+        id: node.dataset.profileId, side: node.classList.contains('drop-before') ? 'before' : 'after' })),
+      sidebar: rows.map(node => compact(node.dataset.profileId)), events: (window.__qiyeSortEvents || []).slice(-5) };
+  });
+  const releaseDrop = async () => {
+    lastDropEvidence = await dragEvidence();
+    await shell.mouse.up();
+  };
+  const waitOrder = async expected => {
+    let actual;
+    try {
+      await eventually(async () => {
+        actual = await order();
+        return actual.length === expected.length && actual.every((id, index) => id === expected[index]);
+      }, 'released drag order reaches the authoritative saved state');
+    } catch (error) {
+      error.uiDetails = { check: 'saved order after release', expected: expected.map(id => id.slice(0, 8)),
+        actual: actual?.map(id => id.slice(0, 8)), disk: disk().profiles.map(profile => profile.id.slice(0, 8)),
+        released: lastDropEvidence, live: await dragEvidence() };
+      throw error;
+    }
+  };
   const closeDialog = () => eventually(() => shell.locator('#profile-dialog').evaluate(node => !node.open), 'dialog closed');
   const form = () => shell.evaluate(() => ({
     open: document.getElementById('profile-dialog').open,
@@ -140,6 +176,42 @@ async function verifyInteractions(context) {
     });
     assert.equal(actual[0].background, brandBlue, 'Insertion feedback must use the existing brand blue');
     return actual[0];
+  };
+  const reachEdge = async (direction, id, x) => {
+    const deadline = Date.now() + 12_000;
+    let stable = 0, previousBounds = null, latest;
+    while (Date.now() < deadline) {
+      const current = await dragEvidence();
+      const targetX = Math.min(current.bounds.right - 4, Math.max(current.bounds.left + 4, x));
+      const targetY = direction === 'down' ? current.bounds.bottom - 2 : current.bounds.top + 2;
+      await shell.mouse.move(targetX, targetY);
+      await new Promise(resolve => setTimeout(resolve, 16));
+      latest = await dragEvidence();
+      const target = direction === 'down' ? latest.last : latest.first;
+      const side = direction === 'down' ? 'after' : 'before';
+      const atEnd = direction === 'down' ? latest.scrollTop >= latest.maximum - 2 : latest.scrollTop <= 1;
+      const point = latest.pointer;
+      const pointInside = point && point.x > latest.bounds.left && point.x < latest.bounds.right && point.y > latest.bounds.top && point.y < latest.bounds.bottom;
+      const passedMidpoint = target && point && (direction === 'down' ? point.y > target.midpoint : point.y < target.midpoint);
+      const correctMarker = latest.markers.length === 1 && latest.markers[0].id === id && latest.markers[0].side === side;
+      const sameBounds = previousBounds === JSON.stringify(latest.bounds);
+      if (atEnd && pointInside && passedMidpoint && target?.id === id && correctMarker && latest.captured && point.buttons === 1) {
+        stable = sameBounds ? stable + 1 : 1;
+        if (stable >= 3) {
+          // Endpoints are fixed: confirm the final account's blue insertion
+          // marker before the real release, not merely scrollTop clamping.
+          const displayed = await marker();
+          assert.equal(displayed.id, id);
+          assert.equal(displayed.side, side);
+          console.log(JSON.stringify({ edgeDrop: direction, evidence: latest }));
+          return latest;
+        }
+      } else stable = 0;
+      previousBounds = JSON.stringify(latest.bounds);
+    }
+    const error = new Error(`Held mouse did not reach the strict ${direction} insertion position`);
+    error.uiDetails = { check: 'live edge destination', direction, expectedId: id, latest };
+    throw error;
   };
   let originalWindow;
   try {
@@ -278,15 +350,26 @@ async function verifyInteractions(context) {
       window.__qiyeSortEvents = [];
       window.__qiyeSortEventListeners = [];
       const listen = (node, type) => {
-        const handler = event => window.__qiyeSortEvents.push({ type, pointerId: event.pointerId,
-          buttons: event.buttons, key: event.key, focus: document.activeElement?.dataset.focusKey || document.activeElement?.id,
-          draggingId: document.getElementById('profile-list').dataset.draggingId });
+        const handler = event => {
+          const list = document.getElementById('profile-list');
+          const entry = { type, pointerId: event.pointerId, buttons: event.buttons, key: event.key,
+            x: event.clientX, y: event.clientY, time: performance.now(),
+            captured: event.pointerId !== undefined && list.hasPointerCapture(event.pointerId),
+            focus: document.activeElement?.dataset.focusKey || document.activeElement?.id,
+            draggingId: list.dataset.draggingId };
+          window.__qiyeSortEvents.push(entry);
+          if (type.startsWith('pointer')) window.__qiyeSortPointer = entry;
+          if (window.__qiyeSortEvents.length > 100) window.__qiyeSortEvents.shift();
+        };
         node.addEventListener(type, handler, true);
         window.__qiyeSortEventListeners.push({ node, type, handler });
       };
       listen(window, 'blur');
-      listen(document.getElementById('profile-list'), 'lostpointercapture');
-      listen(document, 'pointercancel');
+      listen(window, 'lostpointercapture');
+      listen(window, 'pointercancel');
+      listen(window, 'pointermove');
+      listen(window, 'pointerdown');
+      listen(window, 'pointerup');
       listen(document, 'keydown');
       listen(document.getElementById('profile-search'), 'input');
       window.__qiyeSortObserver = new MutationObserver(records => { window.__qiyeSortMutations += records.length; });
@@ -365,7 +448,7 @@ async function verifyInteractions(context) {
         return { top: bounds.top, bottom: bounds.bottom, height: bounds.height, scrollTop: node.scrollTop };
       }) }));
     await screenshot('sidebar-sort-preview');
-    await shell.mouse.up();
+    await releaseDrop();
     await waitOrder(expected);
     await clearDrag();
     const afterDrag = await state();
@@ -436,29 +519,23 @@ async function verifyInteractions(context) {
     const downwardOrder = await order();
     const downId = downwardOrder[0];
     const downStart = await begin(downId);
-    const listBox = await geometry('#profile-list');
     const scrollRange = await shell.locator('#profile-list').evaluate(node => node.scrollHeight - node.clientHeight);
     assert.ok(scrollRange > 80, 'Edge scrolling requires genuinely hidden rows');
-    await shell.mouse.move(downStart.x, listBox.bottom - 5, { steps: 6 });
-    await eventually(() => shell.locator('#profile-list').evaluate(node => node.scrollTop >= node.scrollHeight - node.clientHeight - 2), 'held drag automatically reaches the bottom of the saved list');
-    const atBottom = await shell.locator('#profile-list').evaluate(node => node.scrollTop);
-    await marker();
-    await shell.mouse.up();
+    const bottomDrop = await reachEdge('down', downwardOrder.at(-1), downStart.x);
+    const atBottom = bottomDrop.scrollTop;
+    await releaseDrop();
     const downExpected = moved(downwardOrder, downId);
     await waitOrder(downExpected);
     await clearDrag();
     check(prefix('holding a drag at the bottom edge scrolls to an unseen final account and drops at the end'), () => {
-      assert.ok(atBottom >= scrollRange - 2);
+      assert.ok(atBottom >= bottomDrop.maximum - 2);
       assert.deepEqual(disk().profiles.map(profile => profile.id), downExpected);
     });
     assert.equal((await state()).activeId, clickTarget);
 
     const upStart = await begin(downId);
-    const topBox = await geometry('#profile-list');
-    await shell.mouse.move(upStart.x, topBox.y + 5, { steps: 6 });
-    await eventually(() => shell.locator('#profile-list').evaluate(node => node.scrollTop <= 1), 'held drag automatically reaches the top of the saved list');
-    await marker();
-    await shell.mouse.up();
+    await reachEdge('up', downExpected[0], upStart.x);
+    await releaseDrop();
     const upExpected = moved(downExpected, downId, downExpected[0]);
     await waitOrder(upExpected);
     await clearDrag();
@@ -532,7 +609,7 @@ async function verifyInteractions(context) {
     const filteredStart = await begin(second.id);
     await moveTo(first.id, .25, filteredStart.x);
     await marker();
-    await shell.mouse.up();
+    await releaseDrop();
     const filteredExpected = moved(filteredBefore, second.id, first.id);
     await waitOrder(filteredExpected);
     await clearDrag();
