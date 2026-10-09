@@ -124,7 +124,7 @@ class Page {
     });
   }
   async click(target) {
-    const point = await this.evaluate(({ selector, text }) => {
+    const locate = ({ selector, text }) => {
       const visible = (e) => {
         const r = e.getBoundingClientRect();
         return (
@@ -145,7 +145,30 @@ class Page {
       const x = r.x + r.width / 2,
         y = r.y + r.height / 2;
       return e.contains(document.elementFromPoint(x, y)) ? { x, y } : null;
-    }, target);
+    };
+    let point = await this.evaluate(locate, target);
+    if (point) {
+      // A newly navigated hidden native view may have DOM layout but no
+      // compositor surface yet. Flush a tiny frame before trusted input; keep
+      // the view hidden and discard the image without saving page contents.
+      const frame = await this.awaitOperation(
+        this.wc.capturePage(
+          { x: 0, y: 0, width: 1, height: 1 },
+          { stayHidden: true, stayAwake: true },
+        ),
+      );
+      if (frame.isEmpty()) point = null;
+      else {
+        await this.command('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          ...point,
+          button: 'none',
+        });
+        // Hover may reveal a menu or move a control. Hit-test it again rather
+        // than clicking a stale location or a different element.
+        point = await this.evaluate(locate, target);
+      }
+    }
     if (!point)
       throw Object.assign(
         new Error(

@@ -481,7 +481,8 @@ async function run(scale) {
       await app.evaluate(
         async ({ webContents }, { id, handlers }) => {
           await webContents.fromId(id).executeJavaScript(`
-          window.entryClicks=0;window.imageEntryClicks=0;window.entryUploads=0;window.entrySubmits=0;
+          window.entryClicks=0;window.imageEntryClicks=0;window.entryUploads=0;window.entrySubmits=0;window.entryEvents=[];
+          if(!window.entryEventListenersInstalled){['mousemove','mousedown','mouseup','click'].forEach(type=>document.addEventListener(type,event=>window.entryEvents.push({type,target:event.target.id,x:event.clientX,y:event.clientY,trusted:event.isTrusted}),{capture:true}));window.entryEventListenersInstalled=true;}
           window.openVideoForm=()=>{
             document.body.innerHTML='<h1>视频发布</h1><input type="file" accept="video/mp4"><div id="entry-status"></div><textarea aria-label="作品描述" style="display:none"></textarea><button id="entry-submit" disabled>发布</button>';
             document.querySelector('input').onchange=()=>{window.entryUploads++;document.querySelector('#entry-status').textContent='上传完成';document.querySelector('textarea').style.display='block';document.querySelector('#entry-submit').disabled=false;};
@@ -501,6 +502,23 @@ async function run(scale) {
         },
       );
       assert.equal(result.result.status, 'manual');
+      if (!result.checkpoint.filled)
+        throw new Error(
+          JSON.stringify({
+            entryFailure: name,
+            reason: result.result.reason,
+            checkpoint: result.checkpoint,
+            logs: result.logs,
+            html: result.geometry.html.slice(0, 2500),
+            bounds: result.bounds,
+            metrics: result.activeMetrics,
+            events: await app.evaluate(
+              async ({ webContents }, id) =>
+                webContents.fromId(id).executeJavaScript('window.entryEvents'),
+              bWcId,
+            ),
+          }),
+        );
       assert.equal(result.checkpoint.filled, true);
       assert.equal(result.checkpoint.submitIntent, undefined);
       const actions = await app.evaluate(
@@ -508,30 +526,43 @@ async function run(scale) {
           webContents
             .fromId(id)
             .executeJavaScript(
-              '({clicks:window.entryClicks,images:window.imageEntryClicks,uploads:window.entryUploads,submits:window.entrySubmits,path:location.pathname})',
+              '({clicks:window.entryClicks,images:window.imageEntryClicks,uploads:window.entryUploads,submits:window.entrySubmits,path:location.pathname,events:window.entryEvents})',
             ),
         bWcId,
       );
       assert.equal(actions.images, 0);
       assert.equal(actions.uploads, 1);
       assert.equal(actions.submits, 0);
+      if (actions.clicks)
+        assert.ok(
+          actions.events.some((e) => e.type === 'mousemove' && e.trusted),
+        );
       return { result, actions };
     };
-    const homeEntry = await runEntry(
-      '<nav><button id="work-publish"><span>作品发布</span></button></nav>',
-      "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;window.openVideoForm();}",
-      'home-entry-fixture',
-    );
-    assert.equal(homeEntry.actions.clicks, 1);
-    assert.equal(homeEntry.actions.path, '/creator-micro/home');
-    assert.ok(homeEntry.result.logs.some((log) => log.includes('作品发布')));
+    for (let iteration = 0; iteration < 3; iteration++) {
+      await app.evaluate(
+        async ({ webContents }, id) =>
+          webContents
+            .fromId(id)
+            .loadURL('https://creator.douyin.com/creator-micro/home'),
+        bWcId,
+      );
+      const homeEntry = await runEntry(
+        '<nav><button id="work-publish"><span>作品发布</span></button></nav>',
+        "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;window.openVideoForm();}",
+        'home-entry-fixture',
+      );
+      assert.equal(homeEntry.actions.clicks, 1);
+      assert.equal(homeEntry.actions.path, '/creator-micro/home');
+      assert.ok(homeEntry.result.logs.some((log) => log.includes('作品发布')));
+    }
     check(
       `publishing-${scale}: reported home-page Works Publish entry opens the upload form in the original environment`,
       () => assert.ok(true),
     );
     const menuEntry = await runEntry(
       '<nav><button id="work-publish"><span>作品发布</span></button><div role="menu" hidden><button role="menuitem" id="menu-video">发布视频</button><button role="menuitem" id="menu-image">发布图文</button></div></nav>',
-      "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;document.querySelector('[role=menu]').hidden=false;};document.querySelector('#menu-video').onclick=()=>{window.entryClicks++;window.openVideoForm();};document.querySelector('#menu-image').onclick=()=>window.imageEntryClicks++;",
+      "document.querySelector('#work-publish').onmouseenter=()=>{document.querySelector('[role=menu]').hidden=false;};document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;document.querySelector('[role=menu]').hidden=false;};document.querySelector('#menu-video').onclick=()=>{window.entryClicks++;window.openVideoForm();};document.querySelector('#menu-image').onclick=()=>window.imageEntryClicks++;",
       'menu-entry-fixture',
     );
     assert.equal(menuEntry.actions.clicks, 2);
@@ -563,7 +594,7 @@ async function run(scale) {
       () => assert.ok(true),
     );
     await setScenario(
-      '<button id="unsafe-submit">发布</button><button disabled><span>发布视频</span></button><div style="opacity:0">发布视频</div><a href="https://example.com/upload">发布视频</a>',
+      '<header><button id="unsafe-submit">发布</button></header><button disabled><span>发布视频</span></button><div style="opacity:0">发布视频</div><a href="https://example.com/upload">发布视频</a>',
     );
     let probe = await app.evaluate(
       async (_electron, id) => globalThis.__publishingEntryProbe(id),
@@ -1291,7 +1322,10 @@ async function run(scale) {
   }
 }
 (async () => {
-  for (const scale of [1, 1.25, 1.5]) await run(scale);
+  const scales = process.argv[2] ? [Number(process.argv[2])] : [1, 1.25, 1.5];
+  if (scales.some((scale) => ![1, 1.25, 1.5].includes(scale)))
+    throw new Error('Unsupported test scale');
+  for (const scale of scales) await run(scale);
   console.log(`${checks} publishing real-window checks passed`);
 })().catch((error) => {
   console.error(

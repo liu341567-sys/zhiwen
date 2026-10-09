@@ -308,13 +308,7 @@ function findEntry({ excluded = [] } = {}) {
       e.getAttribute('title'),
     ].map(normalize);
     const name = names.find(
-      (name) =>
-        explicit.includes(name) ||
-        generic.includes(name) ||
-        (name === '发布' &&
-          e.matches('a,button,[role="button"]') &&
-          (e.closest('nav,aside,header,[role="navigation"]') ||
-            e.getAttribute('aria-haspopup') === 'menu')),
+      (name) => explicit.includes(name) || generic.includes(name),
     );
     if (name) labels.set(e, name);
   }
@@ -381,7 +375,6 @@ function findEntry({ excluded = [] } = {}) {
   );
   if (!matches.length)
     matches = available.filter((c) => generic.includes(c.name));
-  if (!matches.length) matches = available.filter((c) => c.name === '发布');
   let target = matches.length === 1 ? matches[0] : null;
   let reason = !matches.length
     ? '没有可操作的视频入口或发布菜单'
@@ -426,12 +419,10 @@ function findEntry({ excluded = [] } = {}) {
         }
       : null,
     reason: target ? (matches.length === 1 ? '唯一明确入口' : reason) : reason,
-    candidates: available
-      .slice(0, 12)
-      .map((c) => ({
-        name: c.name,
-        path: c.href ? new URL(c.href).pathname : null,
-      })),
+    candidates: available.slice(0, 12).map((c) => ({
+      name: c.name,
+      path: c.href ? new URL(c.href).pathname : null,
+    })),
     count: available.length,
   };
 }
