@@ -470,6 +470,120 @@ async function run(scale) {
       `publishing-${scale}: captcha, expired login and unowned uploaded media pause before any submit`,
       () => assert.equal(unknownMaterial.checkpoint.submitIntent, undefined),
     );
+    // Reproduce the reported home route and its exact “作品发布” label.
+    await app.evaluate(async ({ webContents }, id) => {
+      await webContents
+        .fromId(id)
+        .loadURL('https://creator.douyin.com/creator-micro/home');
+    }, bWcId);
+    const runEntry = async (html, handlers, name) => {
+      await setScenario(html);
+      await app.evaluate(
+        async ({ webContents }, { id, handlers }) => {
+          await webContents.fromId(id).executeJavaScript(`
+          window.entryClicks=0;window.imageEntryClicks=0;window.entryUploads=0;window.entrySubmits=0;
+          window.openVideoForm=()=>{
+            document.body.innerHTML='<h1>视频发布</h1><input type="file" accept="video/mp4"><div id="entry-status"></div><textarea aria-label="作品描述" style="display:none"></textarea><button id="entry-submit" disabled>发布</button>';
+            document.querySelector('input').onchange=()=>{window.entryUploads++;document.querySelector('#entry-status').textContent='上传完成';document.querySelector('textarea').style.display='block';document.querySelector('#entry-submit').disabled=false;};
+            document.querySelector('#entry-submit').onclick=()=>window.entrySubmits++;
+          };
+          ${handlers};void 0;`);
+        },
+        { id: bWcId, handlers },
+      );
+      const result = await app.evaluate(
+        async (_electron, task) => globalThis.__publishingFixture(task),
+        {
+          ...tasks.find((t) => t.accountId === b.id),
+          id: name,
+          checkpoint: {},
+          autoSubmit: false,
+        },
+      );
+      assert.equal(result.result.status, 'manual');
+      assert.equal(result.checkpoint.filled, true);
+      assert.equal(result.checkpoint.submitIntent, undefined);
+      const actions = await app.evaluate(
+        async ({ webContents }, id) =>
+          webContents
+            .fromId(id)
+            .executeJavaScript(
+              '({clicks:window.entryClicks,images:window.imageEntryClicks,uploads:window.entryUploads,submits:window.entrySubmits,path:location.pathname})',
+            ),
+        bWcId,
+      );
+      assert.equal(actions.images, 0);
+      assert.equal(actions.uploads, 1);
+      assert.equal(actions.submits, 0);
+      return { result, actions };
+    };
+    const homeEntry = await runEntry(
+      '<nav><button id="work-publish"><span>作品发布</span></button></nav>',
+      "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;window.openVideoForm();}",
+      'home-entry-fixture',
+    );
+    assert.equal(homeEntry.actions.clicks, 1);
+    assert.equal(homeEntry.actions.path, '/creator-micro/home');
+    assert.ok(homeEntry.result.logs.some((log) => log.includes('作品发布')));
+    check(
+      `publishing-${scale}: reported home-page Works Publish entry opens the upload form in the original environment`,
+      () => assert.ok(true),
+    );
+    const menuEntry = await runEntry(
+      '<nav><button id="work-publish"><span>作品发布</span></button><div role="menu" hidden><button role="menuitem" id="menu-video">发布视频</button><button role="menuitem" id="menu-image">发布图文</button></div></nav>',
+      "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;document.querySelector('[role=menu]').hidden=false;};document.querySelector('#menu-video').onclick=()=>{window.entryClicks++;window.openVideoForm();};document.querySelector('#menu-image').onclick=()=>window.imageEntryClicks++;",
+      'menu-entry-fixture',
+    );
+    assert.equal(menuEntry.actions.clicks, 2);
+    check(
+      `publishing-${scale}: Works Publish menu selects video only and never clicks image publication or final submit`,
+      () => assert.ok(true),
+    );
+    const duplicateEntry = await runEntry(
+      '<header><a class="video-entry" href="/creator-micro/content/upload">发布视频</a></header><main><a class="video-entry" href="/creator-micro/content/upload">发布视频</a></main>',
+      "document.querySelectorAll('.video-entry').forEach(e=>e.onclick=event=>{event.preventDefault();window.entryClicks++;window.openVideoForm();});",
+      'duplicate-entry-fixture',
+    );
+    assert.equal(duplicateEntry.actions.clicks, 1);
+    assert.ok(
+      duplicateEntry.result.logs.some((log) => log.includes('重复入口')),
+    );
+    check(
+      `publishing-${scale}: duplicate controls with the same actual platform upload URL are handled once`,
+      () => assert.ok(true),
+    );
+    const delayedForm = await runEntry(
+      '<h1>创作者中心</h1>',
+      'setTimeout(window.openVideoForm,600)',
+      'delayed-form-fixture',
+    );
+    assert.equal(delayedForm.actions.clicks, 0);
+    check(
+      `publishing-${scale}: asynchronous upload form appearing during entry discovery is used without extra navigation`,
+      () => assert.ok(true),
+    );
+    await setScenario(
+      '<button id="unsafe-submit">发布</button><button disabled><span>发布视频</span></button><div style="opacity:0">发布视频</div><a href="https://example.com/upload">发布视频</a>',
+    );
+    let probe = await app.evaluate(
+      async (_electron, id) => globalThis.__publishingEntryProbe(id),
+      b.id,
+    );
+    assert.equal(probe.target, null);
+    assert.equal(probe.count, 0);
+    await setScenario(
+      '<a href="/creator-micro/content/upload?type=video&item=A">发布视频</a><a href="/creator-micro/content/upload?type=video&item=B">发布视频</a>',
+    );
+    probe = await app.evaluate(
+      async (_electron, id) => globalThis.__publishingEntryProbe(id),
+      b.id,
+    );
+    assert.equal(probe.target, null);
+    assert.equal(probe.count, 2);
+    check(
+      `publishing-${scale}: disabled/transparent/external controls and ambiguous URLs never become entry targets`,
+      () => assert.ok(true),
+    );
     // Creator pages can use an SPA div entry, a short title input and a rich
     // description editor with placeholder/zero-width nodes. Keep this distinct
     // from the original textarea fixture so regressions cannot hide behind it.

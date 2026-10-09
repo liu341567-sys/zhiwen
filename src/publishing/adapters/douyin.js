@@ -267,45 +267,241 @@ function observe() {
     url: location.href,
   };
 }
-function findEntry() {
+function findEntry({ excluded = [] } = {}) {
+  const normalize = (text) =>
+    (text || '').replace(/[\u200B-\u200D\uFEFF\s]/g, '').replace(/^[+＋]/, '');
   const visible = (e) => {
     const r = e.getBoundingClientRect();
-    return (
-      r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'
-    );
+    if (
+      !r.width ||
+      !r.height ||
+      e.closest(
+        '[hidden],[inert],[aria-hidden="true"],[aria-disabled="true"]',
+      ) ||
+      e.matches(':disabled')
+    )
+      return false;
+    for (let p = e; p; p = p.parentElement) {
+      const style = getComputedStyle(p);
+      if (
+        style.visibility === 'hidden' ||
+        style.display === 'none' ||
+        Number(style.opacity) === 0
+      )
+        return false;
+    }
+    return getComputedStyle(e).pointerEvents !== 'none';
   };
-  const names = ['发布视频', '发布作品', '上传视频'];
-  // SPA navigation often uses a div/span with a delegated click listener.
-  // Match the exact visible label and deduplicate nested copies of that label.
-  const candidates = [
-    ...document.querySelectorAll('a,button,[role="button"],div,span'),
-  ].filter(
-    (e) =>
-      visible(e) &&
-      names.includes(e.textContent.trim()) &&
-      !e.disabled &&
-      e.getAttribute('aria-disabled') !== 'true',
-  );
-  const leaves = candidates.filter(
-    (e) => !candidates.some((other) => other !== e && e.contains(other)),
-  );
-  const video = leaves.filter((e) => e.textContent.trim() === '发布视频');
-  const matches = video.length ? video : leaves;
-  let target = matches.length === 1 ? matches[0] : null;
-  if (!target) {
-    const links = [...document.querySelectorAll('a[href]')].filter(
-      (e) =>
-        visible(e) &&
-        /\/content\/upload(?:\?|$|\/)/.test(e.getAttribute('href')),
+  const explicit = ['发布视频', '上传视频', '发布视频作品'];
+  const generic = ['作品发布', '发布作品', '去发布'];
+  const all = [
+    ...document.querySelectorAll(
+      'a,button,[role="button"],[role="menuitem"],div,span',
+    ),
+  ];
+  const labels = new Map();
+  for (const e of all) {
+    if (!visible(e)) continue;
+    const names = [
+      e.innerText,
+      e.getAttribute('aria-label'),
+      e.getAttribute('title'),
+    ].map(normalize);
+    const name = names.find(
+      (name) =>
+        explicit.includes(name) ||
+        generic.includes(name) ||
+        (name === '发布' &&
+          e.matches('a,button,[role="button"]') &&
+          (e.closest('nav,aside,header,[role="navigation"]') ||
+            e.getAttribute('aria-haspopup') === 'menu')),
     );
-    if (links.length === 1) target = links[0];
+    if (name) labels.set(e, name);
+  }
+  // Keep the actual clickable owner, not a duplicate child label. Delegated SPA
+  // spans remain supported when the page supplies no semantic control wrapper.
+  const candidates = new Map();
+  for (const [e, name] of labels) {
+    if (
+      [...labels.keys()].some(
+        (other) =>
+          other !== e && e.contains(other) && labels.get(other) === name,
+      )
+    )
+      continue;
+    const control =
+      e.closest('a,button,[role="button"],[role="menuitem"]') || e;
+    if (!visible(control)) continue;
+    const anchor = control.closest('a[href]');
+    let href = null;
+    if (anchor) {
+      try {
+        const u = new URL(anchor.getAttribute('href'), location.href);
+        if (u.origin !== location.origin) continue;
+        href = u.href;
+      } catch {
+        continue;
+      }
+    }
+    control.dataset.qiyeEntryKey ||= crypto.randomUUID();
+    candidates.set(control, {
+      e: control,
+      name,
+      href,
+      key: control.dataset.qiyeEntryKey,
+    });
+  }
+  // Actual links supplied by the platform are usable even when their visual
+  // label is an icon. Never invent a route or follow an external origin.
+  for (const e of document.querySelectorAll('a[href]')) {
+    if (!visible(e) || candidates.has(e)) continue;
+    try {
+      const u = new URL(e.getAttribute('href'), location.href);
+      if (
+        u.origin !== location.origin ||
+        !/\/creator-micro\/content\/upload(?:\/|$)/.test(u.pathname)
+      )
+        continue;
+      const type = u.searchParams.get('type');
+      if (type && type !== 'video') continue;
+      e.dataset.qiyeEntryKey ||= crypto.randomUUID();
+      candidates.set(e, {
+        e,
+        name: '视频上传链接',
+        href: u.href,
+        key: e.dataset.qiyeEntryKey,
+      });
+    } catch {}
+  }
+  const available = [...candidates.values()].filter(
+    (c) => !excluded.includes(c.key),
+  );
+  let matches = available.filter(
+    (c) => explicit.includes(c.name) || c.name === '视频上传链接',
+  );
+  if (!matches.length)
+    matches = available.filter((c) => generic.includes(c.name));
+  if (!matches.length) matches = available.filter((c) => c.name === '发布');
+  let target = matches.length === 1 ? matches[0] : null;
+  let reason = !matches.length
+    ? '没有可操作的视频入口或发布菜单'
+    : '多个入口指向不明确';
+  if (!target && matches.length > 1) {
+    if (
+      matches.every(
+        (c) =>
+          c.href &&
+          /\/content\/upload(?:\/|$)/.test(new URL(c.href).pathname) &&
+          c.href === matches[0].href,
+      )
+    ) {
+      target = matches[0];
+      reason = '重复入口指向同一平台网址';
+    } else {
+      const menu = matches.filter((c) =>
+        c.e.closest('[role="menu"],[role="menuitem"]'),
+      );
+      const nav = matches.filter((c) =>
+        c.e.closest('nav,aside,header,[role="navigation"]'),
+      );
+      if (menu.length === 1) {
+        target = menu[0];
+        reason = '菜单内明确的视频入口';
+      } else if (nav.length === 1 && explicit.includes(nav[0].name)) {
+        target = nav[0];
+        reason = '导航内明确的视频入口';
+      }
+    }
   }
   document
     .querySelectorAll('[data-qiye-entry]')
     .forEach((e) => e.removeAttribute('data-qiye-entry'));
-  if (!target) return null;
-  target.setAttribute('data-qiye-entry', 'video');
-  return { selector: '[data-qiye-entry="video"]' };
+  if (target) target.e.setAttribute('data-qiye-entry', 'video');
+  return {
+    target: target
+      ? {
+          selector: '[data-qiye-entry="video"]',
+          key: target.key,
+          name: target.name,
+        }
+      : null,
+    reason: target ? (matches.length === 1 ? '唯一明确入口' : reason) : reason,
+    candidates: available
+      .slice(0, 12)
+      .map((c) => ({
+        name: c.name,
+        path: c.href ? new URL(c.href).pathname : null,
+      })),
+    count: available.length,
+  };
+}
+async function openPublishingPage(page, context, state) {
+  const excluded = [];
+  const probe = new Function(
+    'input',
+    `const state=(${observe.toString()})();const entry=(${findEntry.toString()})(input);return {state,entry};`,
+  );
+  for (
+    let attempt = 0;
+    attempt < 3 && !state.hasUpload && !state.editorSelector;
+    attempt++
+  ) {
+    let found;
+    try {
+      found = await page.wait(probe, { excluded }, attempt ? 60000 : 15000, {
+        accept: (p) =>
+          p.state.login ||
+          p.state.challenge ||
+          p.state.hasUpload ||
+          !!p.state.editorSelector ||
+          !!p.entry.target,
+      });
+    } catch (error) {
+      if (context.signal.aborted) throw error;
+      found = await page.evaluate(probe, { excluded });
+    }
+    state = found.state;
+    if (
+      state.login ||
+      state.challenge ||
+      state.hasUpload ||
+      state.editorSelector
+    )
+      return state;
+    const info = found.entry;
+    context.log(
+      `发布入口检查：页面 ${new URL(state.url).pathname}，视频上传控件 ${state.uploadCount} 个，候选 ${info.count} 个；${info.reason}；${info.candidates.map((c) => c.name + (c.path ? ' → ' + c.path : '')).join('、') || '无匹配入口'}`,
+    );
+    if (!info.target) return state;
+    excluded.push(info.target.key);
+    await page.click(info.target);
+    context.log(
+      `已点击平台页面中的「${info.target.name}」，等待视频入口或上传表单`,
+    );
+    state = await page.evaluate(observe);
+  }
+  // The last click may be an asynchronous SPA transition.
+  if (
+    !state.hasUpload &&
+    !state.editorSelector &&
+    !state.login &&
+    !state.challenge
+  ) {
+    const latest = await page
+      .wait(
+        stateWhen(
+          's.login||s.challenge||s.hasUpload||s.editorSelector?s:false',
+        ),
+        null,
+        60000,
+      )
+      .catch((error) => {
+        if (context.signal.aborted) throw error;
+        return null;
+      });
+    if (latest) state = latest;
+  }
+  return state;
 }
 const normalizedCaption = (text) =>
   text
@@ -372,28 +568,16 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       );
     }
     if (!state.hasUpload && !state.editorSelector) {
-      const target = await page.wait(findEntry, null, 15000).catch((error) => {
-        if (context.signal.aborted) throw error;
-        return null;
-      });
-      if (!target) {
-        const latest = await page.evaluate(observe);
-        if (latest.login || latest.challenge)
-          return manual(
-            latest.challenge
-              ? '平台要求安全验证，请人工接管'
-              : '账号登录失效，请在原环境登录后继续',
-          );
+      state = await openPublishingPage(page, context, state);
+      if (
+        !state.login &&
+        !state.challenge &&
+        !state.hasUpload &&
+        !state.editorSelector
+      )
         return manual(
-          '未识别到唯一的视频发布入口，请打开发布页后继续；未尝试盲点',
+          '未识别到可操作的视频发布入口；日志已记录页面路径和候选，请人工打开发布页后继续',
         );
-      }
-      await page.click(target);
-      state = await page.wait(
-        stateWhen('s.login||s.challenge||s.hasUpload||s.ready?s:false'),
-        null,
-        60000,
-      );
     }
     if (state.login || state.challenge)
       return manual('发布页要求登录或验证，请人工处理');
@@ -599,4 +783,4 @@ async function execute(task, context, { getView, validate, accountStatus }) {
     page.detach();
   }
 }
-module.exports = { descriptor, execute, observe };
+module.exports = { descriptor, execute, observe, findEntry };

@@ -1,7 +1,11 @@
 'use strict';
 // Test-only access to the real adapter, never included in packaged application.
 const { BrowserWindow } = require('electron');
-const { execute, observe } = require('../src/publishing/adapters/douyin');
+const {
+  execute,
+  observe,
+  findEntry,
+} = require('../src/publishing/adapters/douyin');
 const { Page } = require('../src/publishing/adapters/page');
 const activeMetrics = new Map(),
   originalConnect = Page.prototype.connect;
@@ -70,4 +74,17 @@ globalThis.__publishingFixture = async (task, options = {}) => {
     identity,
     activeMetrics: activeMetrics.get(view.webContents.id),
   };
+};
+
+globalThis.__publishingEntryProbe = async (accountId) => {
+  const view = BrowserWindow.getAllWindows()[0].contentView.children.find(
+    (v) => v.webContents?.profileId === accountId,
+  );
+  const page = new Page(view.webContents, new AbortController().signal);
+  try {
+    await page.connect();
+    return await page.evaluate(findEntry, {});
+  } finally {
+    page.detach();
+  }
 };
