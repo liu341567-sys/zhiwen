@@ -465,6 +465,183 @@ async function run(scale) {
       `publishing-${scale}: captcha, expired login and unowned uploaded media pause before any submit`,
       () => assert.equal(unknownMaterial.checkpoint.submitIntent, undefined),
     );
+    // Creator pages can use an SPA div entry, a short title input and a rich
+    // description editor with placeholder/zero-width nodes. Keep this distinct
+    // from the original textarea fixture so regressions cannot hide behind it.
+    await setScenario(`<h1>作品管理</h1><textarea placeholder="搜索作品"></textarea>
+      <div id="video-entry" style="width:120px;height:40px"><span>发布视频</span></div>`);
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents.fromId(id).executeJavaScript(`
+      window.setupRich=()=>{
+        document.body.innerHTML='<h1>视频发布</h1><input placeholder="填写作品标题" maxlength="30"><textarea placeholder="搜索"></textarea><input type="file" accept=".mov,.mp4"><div id="status">选择视频</div><div id="caption" contenteditable="true" data-placeholder="添加作品简介" style="width:500px;min-height:60px"><span data-slate-placeholder="true" contenteditable="false">添加作品简介</span></div><button id="publish" disabled>发布</button>';
+        document.querySelector('input[type=file]').onchange=e=>{
+          document.querySelector('#status').textContent='上传中';
+          const progress=document.createElement('div');progress.id='upload-progress';progress.setAttribute('role','progressbar');progress.setAttribute('aria-valuenow','10');progress.setAttribute('aria-valuemax','100');document.body.append(progress);
+          document.querySelector('#status').textContent='设置封面';
+          setTimeout(()=>{progress.remove();document.querySelector('#status').textContent='上传完成';document.querySelector('#publish').disabled=false;window.uploadFinished=true;},800);
+        };
+        document.querySelector('#caption').addEventListener('input',()=>{
+          window.filledBeforeUpload=!window.uploadFinished;
+          const editor=document.querySelector('#caption');
+          const text=[...editor.childNodes].filter(n=>!n.dataset?.slatePlaceholder).map(n=>n.textContent).join('');
+          document.querySelector('[role=listbox]')?.remove();
+          const match=text.match(/#([^\\s#]+)$/);
+          if(match){
+            const list=document.createElement('div');list.setAttribute('role','listbox');
+            for(const name of [match[1],'不匹配的热门话题']){
+              const option=document.createElement('div');option.setAttribute('role','option');option.textContent='#'+name;
+              option.onclick=()=>{window.candidateClicks=(window.candidateClicks||0)+1;};list.append(option);
+            }
+            document.body.append(list);
+          }
+
+          if(!document.querySelector('[data-slate-placeholder]')){
+            const hint=document.createElement('span');hint.dataset.slatePlaceholder='true';hint.contentEditable='false';hint.textContent='添加作品简介';document.querySelector('#caption').append(hint);
+          }
+        });
+        document.querySelector('#caption').addEventListener('keydown',event=>{
+          if(event.code!=='Space')return;
+          const editor=event.currentTarget,list=document.querySelector('[role=listbox]');
+          if(!list)return;
+          event.preventDefault();
+          if(window.simulateSpaceFailure)return;
+          const name=list.querySelector('[role=option]').textContent.slice(1);
+          window.topicConversions=(window.topicConversions||[]).concat(name);
+          list.remove();
+          const content=[...editor.childNodes].filter(n=>!n.dataset?.slatePlaceholder).map(n=>n.textContent).join('');
+          editor.querySelector('[data-slate-placeholder]')?.remove();
+          const walker=document.createTreeWalker(editor,NodeFilter.SHOW_TEXT);const plain=[];while(walker.nextNode())plain.push(walker.currentNode);
+          const pending=plain.findLast(n=>n.textContent.endsWith('#'+name));
+          if(pending) pending.textContent=pending.textContent.slice(0,-name.length-1);
+          const chip=document.createElement('span');chip.contentEditable='false';chip.dataset.topicId=name;chip.textContent='#'+name;editor.append(chip,document.createTextNode('\u200B'));
+
+          const range=document.createRange();range.selectNodeContents(editor);range.collapse(false);getSelection().removeAllRanges();getSelection().addRange(range);
+        });
+        document.querySelector('#publish').onclick=()=>{window.splitSubmissions=(window.splitSubmissions||0)+1;const n=document.createElement('div');n.setAttribute('role','alert');n.textContent='作品已提交';document.body.append(n);};
+      };document.querySelector('#video-entry').onclick=window.setupRich;void 0;
+    `),
+      bWcId,
+    );
+    const splitTask = {
+      ...tasks.find((t) => t.accountId === b.id),
+      id: 'split-editor-fixture',
+      checkpoint: {},
+      autoSubmit: true,
+    };
+    const splitResult = await app.evaluate(
+      async (_electron, task) => globalThis.__publishingFixture(task),
+      splitTask,
+    );
+    if (splitResult.result.status !== 'submitted')
+      console.log(JSON.stringify({ splitResult }));
+    check(
+      `publishing-${scale}: SPA entry, split title/description, rich placeholder and upload progress work without manual intervention`,
+      () => {
+        assert.equal(splitResult.result.status, 'submitted');
+        assert.equal(splitResult.checkpoint.uploaded, true);
+        assert.equal(splitResult.checkpoint.filled, true);
+      },
+    );
+    const splitFields = await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            `({title:document.querySelector('input[placeholder]').value,caption:document.querySelector('#caption').innerText,early:window.filledBeforeUpload,count:window.splitSubmissions,search:document.querySelector('textarea').value,topics:window.topicConversions,candidateClicks:window.candidateClicks||0,pending:!!document.querySelector('[role=listbox]')})`,
+          ),
+      bWcId,
+    );
+    assert.equal(splitFields.title, splitTask.title);
+    assert.deepEqual(splitFields.caption.match(/#[^\s#\u200B]+/g), [
+      '#AI',
+      '#运营',
+    ]);
+    assert.equal(splitFields.early, false);
+    assert.equal(splitFields.count, 1);
+    assert.equal(splitFields.search, '');
+    assert.deepEqual(splitFields.topics, ['AI', '运营']);
+    assert.equal(splitFields.candidateClicks, 0);
+    assert.equal(splitFields.pending, false);
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            `window.setupRich();document.querySelector('input[placeholder]').remove();window.topicConversions=[];window.splitSubmissions=0;window.uploadFinished=false;void 0;`,
+          ),
+      bWcId,
+    );
+    const combinedTask = {
+      ...splitTask,
+      id: 'combined-editor-fixture',
+      checkpoint: {},
+      autoSubmit: false,
+    };
+    const combinedResult = await app.evaluate(
+      async (_electron, task) => globalThis.__publishingFixture(task),
+      combinedTask,
+    );
+    check(
+      `publishing-${scale}: single description commits topics with Space and retains manual authorization`,
+      () => {
+        assert.equal(combinedResult.result.status, 'manual');
+        assert.ok(combinedResult.result.reason.includes('人工确认模式'));
+        assert.equal(combinedResult.checkpoint.filled, true);
+        assert.equal(combinedResult.checkpoint.submitIntent, undefined);
+      },
+    );
+    const continued = await app.evaluate(
+      async (_electron, task) => globalThis.__publishingFixture(task),
+      {
+        ...combinedTask,
+        checkpoint: {
+          ...combinedResult.checkpoint,
+          submissionAuthorized: true,
+        },
+      },
+    );
+    assert.equal(continued.result.status, 'submitted');
+    assert.ok(continued.logs.some((log) => log.includes('未重复填写')));
+    const combinedFields = await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            `({topics:window.topicConversions,count:window.splitSubmissions,clicks:window.candidateClicks||0,pending:!!document.querySelector('[role=listbox]')})`,
+          ),
+      bWcId,
+    );
+    assert.deepEqual(combinedFields.topics, ['AI', '运营']);
+    assert.equal(combinedFields.count, 1);
+    assert.equal(combinedFields.clicks, 0);
+    assert.equal(combinedFields.pending, false);
+    await app.evaluate(
+      async ({ webContents }, id) =>
+        webContents
+          .fromId(id)
+          .executeJavaScript(
+            `window.setupRich();document.querySelector('input[placeholder]').remove();window.simulateSpaceFailure=true;window.splitSubmissions=0;void 0;`,
+          ),
+      bWcId,
+    );
+    const pendingResult = await app.evaluate(
+      async (_electron, task) => globalThis.__publishingFixture(task),
+      {
+        ...combinedTask,
+        id: 'pending-topic-fixture',
+        checkpoint: {},
+        autoSubmit: true,
+      },
+    );
+    check(
+      `publishing-${scale}: an uncommitted topic popup pauses before submit instead of accepting visible text`,
+      () => {
+        assert.equal(pendingResult.result.status, 'manual');
+        assert.ok(pendingResult.result.reason.includes('候选框尚未收起'));
+        assert.equal(pendingResult.checkpoint.submitIntent, undefined);
+      },
+    );
     await shell.locator('button[data-module="publish"]').click();
     await shell.locator('[data-publish-page="tasks"]').click();
     await shell.screenshot({ path: path.join(out, `publishing-${scale}.png`) });

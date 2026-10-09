@@ -161,7 +161,7 @@ class Scheduler {
       task.checkpoint.submitIntent
     )
       throw new Error('此状态不能直接重试，请先核实提交结果');
-    if (task.attempts >= 5)
+    if (task.status === 'failed' && task.attempts >= 5)
       throw new Error('已执行 5 次，请检查配置后创建新任务');
     this.store.setTask(id, { status: 'pending', result: null });
     this.store.log(id, '用户确认继续 / 重试');

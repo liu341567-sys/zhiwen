@@ -479,3 +479,28 @@ test('preview regeneration preserves manual caption locks, task order and locked
   assert.equal(rows[1].platformId, 'douyin');
   assert.deepEqual(rows[1].cover, { mode: 'frame', seconds: 2 });
 });
+
+test('manual review and staged confirmations do not exhaust the failed-task retry limit', async () => {
+  const dir = temporary(),
+    store = new PublishingStore(dir);
+  store.addBatch('review', [snapshot('v', 'a')]);
+  const task = store.tasks()[0];
+  const scheduler = new Scheduler({
+    store,
+    execute: async () => ({ status: 'manual', reason: 'Review' }),
+  });
+  store.setTask(task.id, { status: 'manual', attempts: 6 });
+  await scheduler.resume(task.id);
+  await Promise.all([...scheduler.running.values()].map((r) => r.job));
+  assert.equal(store.task(task.id).status, 'manual');
+  store.setTask(task.id, { status: 'failed', attempts: 5 });
+  await assert.rejects(() => scheduler.resume(task.id), /5 次/);
+  store.setTask(task.id, {
+    status: 'manual',
+    checkpoint: { submitIntent: true },
+  });
+  await assert.rejects(() => scheduler.resume(task.id), /核实/);
+  await scheduler.shutdown();
+  store.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});

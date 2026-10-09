@@ -165,38 +165,85 @@ class Page {
       clickCount: 1,
     });
   }
-  async fill(selector, text) {
-    const focused = await this.evaluate((selector) => {
-      const nodes = [...document.querySelectorAll(selector)].filter((e) => {
-        const r = e.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && !e.disabled && !e.readOnly;
-      });
-      if (nodes.length !== 1) return false;
-      nodes[0].focus({ preventScroll: true });
-      return (
-        nodes[0] === document.activeElement ||
-        nodes[0].contains(document.activeElement)
-      );
-    }, selector);
+  async focusEditor(selector, replace) {
+    const focused = await this.evaluate(
+      ({ selector, replace }) => {
+        const nodes = [...document.querySelectorAll(selector)].filter((e) => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && !e.disabled && !e.readOnly;
+        });
+        if (nodes.length !== 1) return false;
+        const editor = nodes[0];
+        editor.focus({ preventScroll: true });
+        if (editor.isContentEditable) {
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          if (!replace) range.collapse(false);
+          const selection = getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } else if (typeof editor.setSelectionRange === 'function') {
+          editor.setSelectionRange(
+            replace ? 0 : editor.value.length,
+            editor.value.length,
+          );
+        }
+        return (
+          nodes[0] === document.activeElement ||
+          nodes[0].contains(document.activeElement)
+        );
+      },
+      { selector, replace },
+    );
     if (!focused)
       throw Object.assign(new Error('作品描述输入区无法唯一聚焦'), {
         manual: true,
       });
+  }
+  async fill(selector, text) {
+    await this.focusEditor(selector, true);
+    // Native insertion keeps the site's normal beforeinput/input handling. A
+    // DOM range also works in a background rich editor where Ctrl+A can target
+    // a different selection or leave a noneditable placeholder selected.
+    if (text) await this.command('Input.insertText', { text });
+    else {
+      await this.command('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key: 'Backspace',
+        code: 'Backspace',
+        windowsVirtualKeyCode: 8,
+      });
+      await this.command('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key: 'Backspace',
+        code: 'Backspace',
+        windowsVirtualKeyCode: 8,
+      });
+    }
+  }
+  async append(selector, text) {
+    await this.focusEditor(selector, false);
+    await this.command('Input.insertText', { text });
+  }
+  async space(selector) {
+    await this.focusEditor(selector, false);
+    // Rich editors commit a hashtag on the normal Space key handler. A single
+    // bulk insertText call does not emit keydown/keyup and leaves suggestions
+    // pending even if the inserted string contains spaces.
     await this.command('Input.dispatchKeyEvent', {
       type: 'keyDown',
-      key: 'a',
-      code: 'KeyA',
-      modifiers: process.platform === 'darwin' ? 4 : 2,
-      windowsVirtualKeyCode: 65,
+      key: ' ',
+      code: 'Space',
+      windowsVirtualKeyCode: 32,
+      text: ' ',
+      unmodifiedText: ' ',
     });
     await this.command('Input.dispatchKeyEvent', {
       type: 'keyUp',
-      key: 'a',
-      code: 'KeyA',
-      modifiers: process.platform === 'darwin' ? 4 : 2,
-      windowsVirtualKeyCode: 65,
+      key: ' ',
+      code: 'Space',
+      windowsVirtualKeyCode: 32,
     });
-    await this.command('Input.insertText', { text });
   }
   async upload(selector, file) {
     const marker = `qiye-${randomUUID()}`;
