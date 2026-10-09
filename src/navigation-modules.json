@@ -1,5 +1,5 @@
 [
-  { "id": "environment", "label": "环境管理", "shortName": "环境", "icon": "layers", "mode": "environments", "items": [] },
+  { "id": "environment", "label": "账号环境管理", "shortName": "环境", "icon": "layers", "mode": "environments", "items": [] },
   { "id": "publish", "label": "内容发布中心", "shortName": "发布", "icon": "upload", "mode": "planned", "description": "统一管理内容发布的入口，功能正在规划中。", "items": [
     { "id": "video", "label": "视频发布", "icon": "video" },
     { "id": "image", "label": "图文发布", "icon": "image" },

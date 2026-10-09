@@ -97,6 +97,11 @@ async function verifyCreateModal(context) {
   };
   await shell.locator('#profile-dialog').waitFor({ state: 'visible' });
   await eventually(() => shell.evaluate(() => document.activeElement.id === 'profile-name' && document.getElementById('profile-dialog-body').scrollTop <= 1), 'new modal starts at the name field');
+  // Opening over the previous pointer position can briefly hover the primary
+  // action. Sample its normal color only after the real hover transition ends.
+  await shell.mouse.move(2, 2);
+  await eventually(() => shell.locator('#profile-save').evaluate(node => !node.matches(':hover') &&
+    node.getAnimations().every(animation => animation.playState !== 'running')), 'normal primary color transition settled');
   const initial = await snapshot();
   check(prefix('creation uses one bounded header/body/footer form without shrinking its readable controls'), () => {
     assert.deepEqual(initial.children, ['profile-dialog-header', 'profile-dialog-body', 'profile-dialog-footer']);

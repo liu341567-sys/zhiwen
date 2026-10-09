@@ -75,15 +75,20 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
     shell.classList.toggle('sidebar-collapsed', collapsed());
     shell.classList.toggle('sidebar-overlay', overlay);
     shell.dataset.module = activeModule;
-    $('secondary-title').textContent = item?.label || '环境管理';
-    $('sidebar-expand').hidden = !collapsed();
-    $('sidebar-collapse').hidden = overlay;
+    $('secondary-title').textContent = item?.label || '账号环境管理';
+    const expanded = !collapsed() || overlay;
+    const toggleButton = $('sidebar-toggle');
+    const toggleLabel = expanded ? '收起侧栏' : '展开侧栏';
+    toggleButton.title = compact && !expanded ? `${toggleLabel}（窗口较窄，临时显示）` : toggleLabel;
+    toggleButton.setAttribute('aria-label', toggleLabel);
+    toggleButton.setAttribute('aria-expanded', String(expanded));
+    if (toggleButton.dataset.expanded !== String(expanded)) {
+      toggleButton.dataset.expanded = String(expanded);
+      const label = document.createElement('span'); label.textContent = expanded ? '收起' : '展开';
+      toggleButton.replaceChildren(icon(expanded ? 'arrow-left' : 'arrow-right'), label);
+    }
     $('sidebar-overlay-close').hidden = !overlay;
     $('sidebar-overlay-backdrop').hidden = !overlay;
-    $('sidebar-collapse').disabled = compact;
-    $('sidebar-collapse').title = compact ? '窗口较窄，使用临时侧栏' : '收起二级侧栏';
-    $('settings-sidebar-toggle').textContent = collapsed() ? '展开二级侧栏' : '收起二级侧栏';
-    $('settings-sidebar-toggle').disabled = compact;
     for (const button of document.querySelectorAll('button[data-module]')) {
       const selected = button.dataset.module === activeModule;
       button.classList.toggle('active', selected);
@@ -147,17 +152,28 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
     // Persist and switch native visibility together before changing local panes.
     try { await save(); } catch (error) { activeModule = previous; preferences.activeModule = previous; throw error; }
     render();
-    if (collapsed() && !force) await showOverlay();
+    // Module selection never changes the pinned sidebar preference or opens a
+    // temporary cover. Only an explicit layout / context-menu action does so.
   }
   async function toggle() {
-    if (blocked() || compact) return;
-    const initiator = document.activeElement;
+    if (blocked()) return;
+    if (overlay) {
+      await closeOverlay();
+      $('sidebar-toggle').focus({ preventScroll: true });
+      return;
+    }
+    // A narrow workspace retains the saved pinned preference and uses a cover
+    // only when the user explicitly requests it with this same fixed control.
+    if (compact) {
+      await showOverlay();
+      $('sidebar-toggle').focus({ preventScroll: true });
+      return;
+    }
     collect(); beforeChange();
-    if (overlay) await closeOverlay();
     preferences.sidebarCollapsed = !preferences.sidebarCollapsed;
     try { await save(); } catch (error) { preferences.sidebarCollapsed = !preferences.sidebarCollapsed; throw error; }
     render();
-    if (initiator === $('sidebar-collapse')) $('sidebar-expand').focus({ preventScroll: true });
+    $('sidebar-toggle').focus({ preventScroll: true });
   }
   function guarded(action) {
     return async () => {
@@ -168,19 +184,10 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
     };
   }
 
-  $('sidebar-collapse').addEventListener('click', guarded(toggle));
-  $('sidebar-expand').addEventListener('click', guarded(async () => {
-    if (compact) await showOverlay(); else {
-      collect(); preferences.sidebarCollapsed = false;
-      try { await save(); } catch (error) { preferences.sidebarCollapsed = true; throw error; }
-      render();
-      $('sidebar-collapse').focus({ preventScroll: true });
-    }
-  }));
+  $('sidebar-toggle').addEventListener('click', guarded(toggle));
   $('sidebar-overlay-close').addEventListener('click', guarded(closeOverlay));
   $('sidebar-overlay-backdrop').addEventListener('click', guarded(closeOverlay));
   $('module-return').addEventListener('click', guarded(() => select('environment')));
-  $('settings-sidebar-toggle').addEventListener('click', guarded(toggle));
   $('profile-list').addEventListener('scroll', () => { if (initialized && environmentVisible()) scheduleSave(); }, { passive: true });
   $('profile-search').addEventListener('input', scheduleSave);
   $('overview-view').addEventListener('scroll', scheduleSave, { passive: true });
@@ -210,11 +217,24 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       $('profile-search').value = preferences.environmentSearch;
       for (const item of modules) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'rail-button';
-        button.dataset.module = item.id; button.title = item.mode === 'planned' ? `${item.label} · 规划中` : item.label;
-        button.setAttribute('aria-label', button.title); button.setAttribute('aria-controls', 'secondary-sidebar');
+        button.dataset.module = item.id;
+        const moduleLabel = item.mode === 'planned' ? `${item.label} · 规划中` : item.label;
+        button.title = `${moduleLabel}；收起后右键可临时查看菜单`;
+        button.setAttribute('aria-label', moduleLabel); button.setAttribute('aria-controls', 'secondary-sidebar');
         const label = document.createElement('span'); label.textContent = item.shortName;
         button.append(icon(item.icon), label);
         button.addEventListener('click', guarded(() => select(item.id)));
+        const preview = guarded(async () => {
+          if (!collapsed()) return;
+          if (activeModule !== item.id) await select(item.id);
+          await showOverlay();
+        });
+        button.addEventListener('contextmenu', event => { event.preventDefault(); preview(); });
+        button.addEventListener('keydown', event => {
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault(); preview();
+          }
+        });
         $(item.pinned ? 'pinned-navigation' : 'primary-navigation').append(button);
       }
       initialized = true; render(); document.body.classList.remove('navigation-loading');

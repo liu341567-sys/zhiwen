@@ -89,6 +89,8 @@ async function launch(executable, dataDirectory) {
     }
     assert.ok(instance.shell, 'The installed account-management window must load');
     await instance.shell.waitForFunction(() => Boolean(window.browserAPI?.getState));
+    await instance.shell.waitForFunction(() => !document.body.classList.contains('navigation-loading') &&
+      document.querySelector('button[data-module="environment"]'));
     return instance;
   } catch (error) {
     await cleanupFailedInstance(instance);
@@ -243,6 +245,9 @@ async function assertInstalledCreationLayout(shell, accountPage, outputDirectory
     await shell.locator('#sidebar-create').click();
     await shell.locator('#profile-dialog').waitFor({ state: 'visible' });
     await shell.waitForFunction(() => document.activeElement.id === 'profile-name' && document.getElementById('profile-dialog-body').scrollTop <= 1);
+    await shell.mouse.move(2, 2);
+    await shell.waitForFunction(() => { const button = document.getElementById('profile-save'); return !button.matches(':hover') &&
+      button.getAnimations().every(animation => animation.playState !== 'running'); });
     const top = await measure();
     assert.ok(top.dialog.height <= top.viewport.height * .9 + 2 && top.dialog.top >= 15 && top.dialog.bottom <= top.viewport.height - 15);
     assert.ok(['hidden', 'clip'].includes(top.overflow.outer) && ['auto', 'scroll'].includes(top.overflow.body));
@@ -313,7 +318,9 @@ async function main() {
   }
   assert.equal(fs.existsSync(dataDirectory), false, 'Use a new directory rather than overwriting existing browser data');
   fs.mkdirSync(outputDirectory, { recursive: true });
-  const wordmark = fs.readFileSync(path.join(__dirname, '..', 'src', 'assets', 'qiye-wordmark.png'));
+  const wordmark = fs.readFileSync(path.join(__dirname, '..', 'src', 'assets', 'qiye-vertical.png'));
+  assert.deepEqual(wordmark, fs.readFileSync(path.join(__dirname, '..', 'branding', 'originals', 'vertical.png')),
+    'The navigation asset must use the original uploaded PNG bytes');
   assert.equal(wordmark.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   const expectedBrand = { width: wordmark.readUInt32BE(16), height: wordmark.readUInt32BE(20) };
   const server = http.createServer((_request, response) => {
@@ -332,9 +339,9 @@ async function main() {
   try {
     instance = await launch(executable, dataDirectory);
     const shell = instance.shell;
-    await shell.waitForFunction(() => { const image = document.querySelector('.brand-logo'); return image?.complete && image.naturalWidth > 0; });
+    await shell.waitForFunction(() => { const image = document.querySelector('.rail-logo'); return image?.complete && image.naturalWidth > 0; });
     const brand = await shell.evaluate(() => {
-      const image = document.querySelector('.brand-logo');
+      const image = document.querySelector('.rail-logo');
       const rect = image.getBoundingClientRect();
       return { width: image.naturalWidth, height: image.naturalHeight, displayWidth: rect.width, displayHeight: rect.height,
         clipped: rect.right > innerWidth || rect.bottom > innerHeight, webdriver: navigator.webdriver, source: image.currentSrc };
@@ -343,7 +350,10 @@ async function main() {
     assert.ok(brand.displayWidth > 0 && brand.displayHeight > 0 && !brand.clipped);
     assert.ok(Math.abs((brand.displayWidth / brand.displayHeight) / (brand.width / brand.height) - 1) < 0.01, 'The packaged brand image must retain its original aspect ratio');
     assert.equal(brand.webdriver, false, 'This installed smoke test must not load Playwright Electron automation switches');
-    assert.match(brand.source, /\/assets\/qiye-wordmark\.png$/);
+    assert.match(brand.source, /\/assets\/qiye-vertical\.png$/);
+    assert.equal(await shell.locator('#environment-sidebar-content .brand, .brand-logo, #sidebar-collapse, #sidebar-expand, #settings-sidebar-toggle').count(), 0);
+    assert.equal(await shell.locator('#secondary-title').textContent(), '账号环境管理');
+    const fixedToggle = await shell.locator('#sidebar-toggle').boundingBox();
     const platformImages = await assertLocalPlatformImages(shell);
     await assertPlatformAvatar(shell, platformProfile.id, preset);
     await assertLaunchLocked(shell, platformProfile.id);
@@ -369,7 +379,7 @@ async function main() {
     assert.equal(await shell.locator('.secondary-menu-button:disabled').count(), 5);
     assert.equal((await shell.evaluate(() => browserAPI.getState())).activeId, id);
     await shell.locator('button[data-module="environment"]').click();
-    await shell.locator('#sidebar-collapse').click();
+    await shell.locator('#sidebar-toggle').click();
     await shell.waitForFunction(() => document.querySelector('.app-shell').classList.contains('sidebar-collapsed'));
     const collapsedNavigationLayout = await shell.evaluate(() => {
       const r = document.querySelector('.main-panel').getBoundingClientRect();
@@ -377,14 +387,22 @@ async function main() {
     });
     assert.equal(collapsedNavigationLayout.x, 64);
     assert.equal(collapsedNavigationLayout.width - initialNavigationLayout.width, 240);
+    assert.deepEqual(await shell.locator('#sidebar-toggle').boundingBox(), fixedToggle);
+    await shell.locator('button[data-module="publish"]').click();
+    await shell.locator('#planned-module').waitFor({ state: 'visible' });
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     await shell.locator('button[data-module="environment"]').click();
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
+    await shell.locator('button[data-module="environment"]').click({ button: 'right' });
     await shell.waitForFunction(() => document.querySelector('.app-shell').classList.contains('sidebar-overlay'));
     assert.deepEqual(await shell.evaluate(() => {
       const r = document.querySelector('.main-panel').getBoundingClientRect(); return { x: r.x, width: r.width };
     }), collapsedNavigationLayout);
     assert.equal(await shell.locator('#navigation-page-frame').isVisible(), true);
+    assert.deepEqual(await shell.locator('#sidebar-toggle').boundingBox(), fixedToggle);
     await shell.locator('#sidebar-overlay-close').click();
-    await shell.locator('#sidebar-expand').click();
+    await shell.locator('#sidebar-toggle').click();
+    assert.deepEqual(await shell.locator('#sidebar-toggle').boundingBox(), fixedToggle);
     assert.equal(await accountPage.evaluate(() => window.__navigationToken), nativeToken,
       'Installed navigation and cover mode cannot reload the account');
     assertAccount(await accountState(accountPage));
@@ -439,6 +457,8 @@ async function main() {
     assert.equal(popupIdentity.node, 'undefined');
     assert.equal(popupIdentity.manager, 'undefined');
     await popup.close();
+    await shell.locator('#sidebar-toggle').click();
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     await closeNormally(instance);
     instance = null;
 
@@ -453,6 +473,15 @@ async function main() {
     assert.equal(manifest.profiles[1].startUrl, preset.launchUrl);
     instance = await launch(executable, dataDirectory);
     const restored = await instance.shell.evaluate(() => window.browserAPI.getState());
+    assert.equal(restored.uiPreferences.sidebarCollapsed, true);
+    assert.equal(await instance.shell.locator('#secondary-sidebar').isVisible(), false);
+    await instance.shell.locator('button[data-module="publish"]').click();
+    await instance.shell.locator('#planned-module').waitFor({ state: 'visible' });
+    assert.equal(await instance.shell.locator('#secondary-sidebar').isVisible(), false);
+    await instance.shell.locator('button[data-module="environment"]').click();
+    assert.equal(await instance.shell.locator('#secondary-sidebar').isVisible(), false);
+    await instance.shell.locator('#sidebar-toggle').click();
+    await instance.shell.locator('#secondary-sidebar').waitFor({ state: 'visible' });
     assert.equal(restored.profiles.length, 2);
     assert.deepEqual(restored.profiles.map(profile => profile.id), [id, platformProfile.id]);
     assert.equal(restored.profiles[0].startUrl, fixtureUrl);
@@ -478,6 +507,7 @@ async function main() {
       profileOrderRestored: true, launchConfigurationLocked: true,
       fixedCreationHeaderAndFooter: true, creationLayout,
       threeLevelNavigationAndTemporaryCover: true, plannedPublishingNavigationOnly: true,
+      fixedSingleCollapseControl: true, collapsedModuleSwitchAndRestart: true, originalVerticalLogo: true,
       stableSidebarRowsAndImages: true, floatingToastWithoutSidebarLayoutChanges: true,
     }, null, 2));
     console.log('Installed Windows native launch, original brand ratio, fixed creation header/footer, stable sidebar icons and floating toast, three-level navigation and temporary cover, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');

@@ -59,5 +59,20 @@
       256
     ],
     "format": "32-bit RGBA/DIB multi-resolution ICO"
+  },
+  "navigationLogo": {
+    "source": "branding/originals/vertical.png",
+    "upload": "用户上传竖版图标.zip / 竖版图标.png",
+    "sha256": "ca894e4976bfe4c04d9ccf5654e456244f3a55bef6afd5046469236fecd9d841",
+    "originalSize": [
+      998,
+      1313
+    ],
+    "output": "src/assets/qiye-vertical.png",
+    "outputSize": [
+      998,
+      1313
+    ],
+    "processing": "原始 PNG 逐字节复制；无裁剪、重绘或颜色修改；显示时等比缩放"
   }
 }

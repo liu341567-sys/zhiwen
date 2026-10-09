@@ -199,15 +199,15 @@ async function runScale(scale, origin) {
     });
     console.log(JSON.stringify({ scale, actualDpr: dpr, workArea: startup.workArea, initialWindow: startup.bounds,
       note: 'Real Electron scaling; host OS is recorded, not a claim of physical Windows DPI verification.', platform: process.platform }));
-    await shell.locator('.brand-logo').waitFor({ state: 'visible' });
-    await eventually(() => shell.locator('.brand-logo').evaluate(node => node.complete && node.naturalWidth > 0), 'real wordmark image loaded');
-    const brand = await shell.locator('.brand-logo').evaluate(node => {
+    await shell.locator('.rail-logo').waitFor({ state: 'visible' });
+    await eventually(() => shell.locator('.rail-logo').evaluate(node => node.complete && node.naturalWidth > 0), 'original vertical logo loaded');
+    const brand = await shell.locator('.rail-logo').evaluate(node => {
       const rect = node.getBoundingClientRect();
       return { naturalWidth: node.naturalWidth, naturalHeight: node.naturalHeight, width: rect.width, height: rect.height };
     });
-    check(prefix('real wordmark loads at its original aspect ratio'), () => {
-      assert.equal(brand.naturalWidth, 1253);
-      assert.equal(brand.naturalHeight, 559);
+    check(prefix('original vertical logo loads at its original aspect ratio'), () => {
+      assert.equal(brand.naturalWidth, 998);
+      assert.equal(brand.naturalHeight, 1313);
       assert.ok(Math.abs(brand.width / brand.height - brand.naturalWidth / brand.naturalHeight) < .03);
     });
     await verifyLegacyPlatforms({ shell, state, check, prefix, eventually, directory, legacy });

@@ -41,6 +41,8 @@ async function run(scale, origin) {
     });
     const state = () => shell.evaluate(() => browserAPI.getState());
     const select = id => shell.locator(`button[data-module="${id}"]`).click();
+    const preview = id => shell.locator(`button[data-module="${id}"]`).click({ button: 'right' });
+    const toggleBounds = () => shell.locator('#sidebar-toggle').boundingBox();
     const layout = () => shell.evaluate(() => {
       const r = n => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; };
       return { main: r(document.querySelector('.main-panel')), rail: r(document.querySelector('.global-navigation')), sidebar: r(document.querySelector('.sidebar')), list: r(document.querySelector('#profile-list')) };
@@ -60,6 +62,27 @@ async function run(scale, origin) {
     const sameRows = () => shell.evaluate(() => window.__navRows.every(old => old.row.isConnected && old.row.querySelector('.profile-icon') === old.icon && old.row.querySelector('img') === old.image));
     const initial = await layout();
     check(`navigation-${scale}: fixed rail and secondary width leave a flexible workspace`, () => { assert.equal(initial.rail.width, 64); assert.equal(initial.sidebar.width, 240); assert.ok(initial.main.width >= 360); });
+    await shell.waitForFunction(() => { const logo = document.querySelector('.rail-logo'); return logo.complete && logo.naturalWidth > 0; });
+    const branding = await shell.evaluate(() => {
+      const logo = document.querySelector('.rail-logo'), rect = logo.getBoundingClientRect();
+      const rail = document.querySelector('.global-navigation').getBoundingClientRect();
+      const title = document.getElementById('secondary-title'), heading = title.getBoundingClientRect();
+      const create = document.getElementById('sidebar-create').getBoundingClientRect();
+      return { natural: [logo.naturalWidth, logo.naturalHeight], rect: { width: rect.width, height: rect.height },
+        centered: Math.abs((rect.left + rect.right) / 2 - (rail.left + rail.right) / 2) <= 1,
+        oldLogoCount: document.querySelectorAll('#environment-sidebar-content .brand, .brand-logo').length,
+        title: title.textContent, titleFits: title.scrollWidth <= title.clientWidth && title.scrollHeight <= title.clientHeight,
+        titleGap: create.top - heading.bottom, toggleCount: document.querySelectorAll('#sidebar-toggle').length,
+        oldControls: document.querySelectorAll('#sidebar-collapse, #sidebar-expand, #settings-sidebar-toggle').length };
+    });
+    const fixedToggle = await toggleBounds();
+    await shell.screenshot({ path: path.join(output, `navigation-${scale}-expanded.png`) });
+    check(`navigation-${scale}: original vertical logo is proportional and centered; redundant logo and collapse controls are absent`, () => {
+      assert.deepEqual(branding.natural, [998, 1313]); assert.ok(branding.centered);
+      assert.ok(Math.abs(branding.rect.width / branding.rect.height - 998 / 1313) < .01);
+      assert.equal(branding.oldLogoCount, 0); assert.equal(branding.oldControls, 0); assert.equal(branding.toggleCount, 1);
+      assert.equal(branding.title, '账号环境管理'); assert.equal(branding.titleFits, true); assert.ok(branding.titleGap < 30);
+    });
     const scroll = await shell.locator('#profile-list').evaluate(n => n.scrollTop);
     await select('publish');
     await shell.locator('#planned-module').waitFor({ state: 'visible' });
@@ -86,13 +109,31 @@ async function run(scale, origin) {
     check(`navigation-${scale}: module switches preserve the environment search`, () => assert.ok(true));
     await shell.locator('#profile-search').fill('');
     await shell.locator('#profile-list').evaluate(n => n.scrollTop = 1800);
-    await shell.locator('#sidebar-collapse').click();
+    await shell.locator('#sidebar-toggle').click();
     await until(() => shell.locator('.app-shell').getAttribute('class').then(c => c.includes('sidebar-collapsed')), 'collapsed');
     await until(() => identity().then(v => v[0].bounds.x === 64), 'expanded native account viewport');
     const collapsed = await layout(), collapsedNative = await identity();
     check(`navigation-${scale}: full collapse releases exactly the secondary width without recreating the account`, () => { assert.equal(collapsed.main.width - initial.main.width, 240); assert.equal(collapsedNative[0].wc, baseNative[0].wc); });
-    await select('environment');
-    await until(() => shell.locator('.app-shell').getAttribute('class').then(c => c.includes('sidebar-overlay')), 'temporary cover');
+    await shell.evaluate(() => {
+      window.__sidebarTransitions = [];
+      window.__sidebarObserver = new MutationObserver(records => {
+        window.__sidebarTransitions.push(...records.map(record => record.oldValue));
+      });
+      window.__sidebarObserver.observe(document.querySelector('.app-shell'), { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+    });
+    for (const id of ['publish', 'data', 'ai', 'settings', 'environment', 'environment']) {
+      await select(id);
+      assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
+      assert.deepEqual((await layout()).main, collapsed.main);
+      assert.equal((await state()).uiPreferences.sidebarCollapsed, true);
+      assert.deepEqual(await toggleBounds(), fixedToggle);
+    }
+    const transitions = await shell.evaluate(() => { window.__sidebarObserver.disconnect(); return window.__sidebarTransitions; });
+    check(`navigation-${scale}: every normal module click keeps the sidebar hidden without a transient cover or changing layout preference`, () => {
+      assert.ok(transitions.every(value => value.includes('sidebar-collapsed') && !value.includes('sidebar-overlay')));
+    });
+    await preview('environment');
+    await until(() => shell.locator('.app-shell').getAttribute('class').then(c => c.includes('sidebar-overlay')), 'explicit temporary cover');
     await pause(200);
     assert.deepEqual((await layout()).main, collapsed.main);
     assert.equal((await layout()).sidebar.x, 64);
@@ -110,6 +151,7 @@ async function run(scale, origin) {
     const beforeRailScroll = await shell.locator('#profile-list').evaluate(n => n.scrollTop);
     await shell.locator('#primary-navigation').evaluate(n => n.scrollTop = n.scrollHeight);
     assert.equal(await shell.locator('#profile-list').evaluate(n => n.scrollTop), beforeRailScroll);
+    assert.deepEqual(await toggleBounds(), fixedToggle);
     await shell.evaluate(count => { const rail = document.getElementById('primary-navigation'); while (rail.children.length > count) rail.lastElementChild.remove(); rail.scrollTop = 0; }, railCount);
     check(`navigation-${scale}: adding and scrolling global entries cannot compress or scroll the account list`, () => assert.ok(true));
     const mainBox = collapsed.main;
@@ -117,23 +159,33 @@ async function run(scale, origin) {
     await until(() => shell.locator('.app-shell').getAttribute('class').then(c => !c.includes('sidebar-overlay')), 'outside close');
     await until(() => identity().then(v => v[0].visible), 'live native page restored');
     assert.deepEqual((await layout()).main, collapsed.main); assert.equal(await account.evaluate(() => window.navigationToken), token);
-    await select('environment');
+    await preview('environment');
     await shell.locator('#sidebar-overlay-close').click();
-    await select('environment');
+    await preview('environment');
+    await shell.locator('#sidebar-toggle').click();
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
+    assert.equal((await state()).uiPreferences.sidebarCollapsed, true);
+    await shell.locator('button[data-module="environment"]').focus();
+    await shell.locator('button[data-module="environment"]').press('Shift+F10');
     await shell.locator(`[data-focus-key="open:${ids[31]}"]`).click();
     await until(async () => (await state()).activeId === ids[31] && !(await shell.locator('.app-shell').getAttribute('class')).includes('sidebar-overlay'), 'selection closes temporary menu');
     assert.deepEqual((await layout()).main, collapsed.main);
     check(`navigation-${scale}: outside click, close control and successful account selection close only the temporary sidebar`, () => assert.ok(true));
-    await shell.locator('#sidebar-expand').click();
+    await shell.locator('#sidebar-toggle').click();
     await until(() => shell.locator('.app-shell').getAttribute('class').then(c => !c.includes('sidebar-collapsed')), 'pinned expansion');
     assert.equal((await layout()).main.x, 304);
     assert.equal(await sameRows(), true);
     check(`navigation-${scale}: explicit expansion restores the sidebar without remounting its rows`, () => assert.ok(true));
+    const toggleLabel = await shell.locator('#sidebar-toggle').getAttribute('aria-label');
+    check(`navigation-${scale}: one fixed bottom control retains position across expanded, collapsed, cover and rail scrolling states`, () => {
+      assert.equal(toggleLabel, '收起侧栏');
+    });
+    assert.deepEqual(await toggleBounds(), fixedToggle);
     await shell.locator('#profile-search').fill('导航账号');
     await shell.locator('#profile-list').evaluate(n => n.scrollTop = 1600);
     await pause(180); const savedScroll = await shell.locator('#profile-list').evaluate(n => n.scrollTop);
-    await shell.locator('#sidebar-collapse').click(); await select('publish');
-    await shell.locator('#sidebar-overlay-close').click();
+    await shell.locator('#sidebar-toggle').click(); await select('publish');
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     await pause(250);
     const saved = JSON.parse(fs.readFileSync(path.join(directory, 'ui-preferences.json'), 'utf8'));
     assert.equal(saved.sidebarCollapsed, true); assert.equal(saved.activeModule, 'publish'); assert.equal(saved.environmentSearch, '导航账号');
@@ -154,6 +206,8 @@ async function run(scale, origin) {
     assert.ok((await shell.locator('.app-shell').getAttribute('class')).includes('sidebar-collapsed'));
     assert.ok(!(await shell.locator('.app-shell').getAttribute('class')).includes('sidebar-overlay'));
     await select('environment');
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
+    await preview('environment');
     assert.equal(await shell.locator('#profile-search').inputValue(), '导航账号');
     await until(() => shell.locator('#profile-list').evaluate(n => n.scrollTop > 1000), 'restored list position');
     assert.deepEqual((await state()).profiles.map(p => p.id), ids);
@@ -165,17 +219,23 @@ async function run(scale, origin) {
     assert.ok(Math.abs(finalPreferences.environmentScroll - lastScroll) <= 1);
     shell = await launch();
     await select('environment');
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
+    await preview('environment');
     await until(() => shell.locator('#profile-list').evaluate(n => n.scrollTop > 1000), 'last immediate scroll checkpoint');
     check(`navigation-${scale}: immediate exit after a final scroll checkpoints the current UI without preserving a temporary cover`, () => assert.ok(true));
     await shell.locator('#sidebar-overlay-close').click();
-    await shell.locator('#sidebar-expand').click();
+    await shell.locator('#sidebar-toggle').click();
     await app.evaluate(({ BrowserWindow }) => { const main = BrowserWindow.getAllWindows()[0]; main.unmaximize(); main.setMinimumSize(0, 0); main.setContentSize(600, 480); });
     await until(() => shell.locator('.app-shell').getAttribute('class').then(c => c.includes('sidebar-collapsed')), 'narrow adaptation');
     assert.equal(await shell.evaluate(() => innerWidth), 600);
     assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'ui-preferences.json'), 'utf8')).sidebarCollapsed, false);
     await select('environment');
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
+    await shell.locator('#sidebar-toggle').click();
+    await until(() => shell.locator('#secondary-sidebar').isVisible(), 'explicit narrow cover');
     assert.ok((await layout()).main.width >= 530);
-    await shell.locator('#sidebar-overlay-close').click();
+    await shell.locator('#sidebar-toggle').click();
+    assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     check(`navigation-${scale}: narrow-window cover preserves a usable main workspace`, () => assert.ok(true));
     return { scale, actualDpr: await shell.evaluate(() => devicePixelRatio), workArea: area, checks: checks - before, fixtureProfiles: 50 };
   } finally { if (app) await app.close(); fs.rmSync(directory, { recursive: true, force: true }); }

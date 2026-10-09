@@ -12,18 +12,14 @@
   <body class="navigation-loading">
     <div class="app-shell">
       <nav class="global-navigation" aria-label="全局功能导航">
-        <img class="rail-logo" src="../assets/qiye.png" alt="栖页" draggable="false" />
+        <img class="rail-logo" src="../assets/qiye-vertical.png" alt="栖页" draggable="false" />
         <div id="primary-navigation" class="primary-navigation"></div>
         <div id="pinned-navigation" class="pinned-navigation"></div>
-        <button id="sidebar-expand" class="rail-button rail-layout-button" type="button" aria-label="展开二级侧栏" title="展开二级侧栏" hidden><span data-icon="panel"></span><span>展开</span></button>
+        <button id="sidebar-toggle" class="rail-button rail-layout-button" type="button" aria-label="收起侧栏" title="收起侧栏" aria-controls="secondary-sidebar" aria-expanded="true"><span data-icon="arrow-left"></span><span>收起</span></button>
       </nav>
       <aside id="secondary-sidebar" class="sidebar" aria-label="二级功能侧栏">
-        <header class="secondary-heading"><h2 id="secondary-title">环境管理</h2><button id="sidebar-collapse" class="icon-button" type="button" aria-label="收起二级侧栏" title="收起二级侧栏"><span data-icon="panel"></span></button><button id="sidebar-overlay-close" class="icon-button" type="button" aria-label="关闭临时侧栏" hidden><span data-icon="x"></span></button></header>
+        <header class="secondary-heading"><h2 id="secondary-title">账号环境管理</h2><button id="sidebar-overlay-close" class="icon-button" type="button" aria-label="关闭临时侧栏" hidden><span data-icon="x"></span></button></header>
         <div id="environment-sidebar-content" class="environment-sidebar-content">
-        <div class="brand">
-          <img class="brand-logo" src="../assets/qiye-wordmark.png" alt="栖页" draggable="false" />
-          <span class="brand-subtitle">账号工作空间</span>
-        </div>
         <button id="sidebar-create" class="button button-primary sidebar-create" type="button"><span data-icon="plus"></span>新建独立环境<span class="shortcut">Ctrl+T</span></button>
         <button id="sidebar-overview" class="overview-button active" type="button"><span data-icon="grid"></span>工作空间<span data-icon="chevron-right"></span></button>
         <div class="sidebar-heading"><h2>我的环境</h2><span id="profile-count" class="count">0</span></div>
@@ -66,7 +62,7 @@
           <div id="planned-module" class="planned-module" hidden><span id="planned-icon" class="module-symbol"></span><span class="planned-badge">规划中</span><h1 id="planned-title"></h1><p id="planned-description"></p><button id="module-return" class="button button-primary" type="button">返回环境管理</button></div>
           <div id="settings-module" hidden>
             <div class="module-page-heading"><h1>系统设置</h1><p>管理界面布局，查看本机环境数据。</p></div>
-            <section id="settings-layout" class="settings-section"><h2>界面布局</h2><p>二级侧栏收起后，可点击一级导航临时查看菜单。</p><button id="settings-sidebar-toggle" class="button button-primary" type="button">收起二级侧栏</button></section>
+            <section id="settings-layout" class="settings-section"><h2>界面布局</h2><p>通过左下角固定按钮展开或收起侧栏。收起后切换模块保持隐藏；右键点击一级导航可主动临时查看菜单。</p></section>
             <section id="settings-storage" class="settings-section"><h2>本地数据</h2><p>各环境的浏览数据独立保存。关闭标签页不会删除环境数据。</p><p id="settings-data-path" class="settings-data-path"></p><button id="settings-edit-environment" class="button button-secondary" type="button" disabled>编辑当前环境</button></section>
           </div>
         </section>

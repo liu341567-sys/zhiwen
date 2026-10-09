@@ -608,7 +608,7 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .app-shell { position: relative; grid-template-columns: var(--rail-width) var(--sidebar-width) minmax(0, 1fr); }
 .app-shell.sidebar-collapsed { grid-template-columns: var(--rail-width) 0 minmax(0, 1fr); }
 .global-navigation { grid-column: 1; display: flex; flex-direction: column; min-height: 0; padding: 12px 6px 8px; border-right: 1px solid var(--line); background: var(--sidebar-surface); z-index: 22; }
-.rail-logo { width: 42px; height: 42px; margin: 0 auto 16px; object-fit: contain; flex-shrink: 0; }
+.rail-logo { display: block; width: 44px; height: auto; margin: 0 auto 12px; object-fit: contain; flex-shrink: 0; }
 .primary-navigation { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .pinned-navigation { display: flex; flex-direction: column; padding-top: 8px; flex-shrink: 0; }
 .rail-button { width: 100%; min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 7px 2px; border: 0; border-radius: var(--radius-control); color: var(--secondary); background: transparent; font-size: var(--font-small); flex-shrink: 0; }
@@ -619,11 +619,8 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .rail-layout-button { margin-top: 6px; }
 .sidebar { grid-column: 2; padding: 12px; overflow: hidden; }
 .secondary-heading { display: flex; align-items: center; min-height: 34px; gap: 6px; margin-bottom: 12px; flex-shrink: 0; }
-.secondary-heading h2 { margin: 0; flex: 1; font-size: var(--font-title); font-weight: 650; }
+.secondary-heading h2 { margin: 0; flex: 1; font-size: var(--font-title); font-weight: 650; white-space: nowrap; }
 .environment-sidebar-content { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
-.sidebar .brand { padding: 0 4px; margin-bottom: 12px; gap: 3px; }
-.sidebar .brand-logo { width: 136px; }
-.sidebar .brand-subtitle { letter-spacing: .5px; }
 .sidebar .overview-button { margin-top: 8px; }
 .sidebar .sidebar-heading { margin: 12px 8px 10px; }
 .sidebar .profile-list { flex: 1 1 0; min-height: 48px; max-height: none; overscroll-behavior: contain; }
@@ -658,9 +655,6 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 @media (max-height: 550px) {
   .sidebar { overflow: hidden; padding: 8px 12px; }
   .secondary-heading { margin-bottom: 8px; }
-  .sidebar .brand { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .sidebar .brand-logo { width: 86px; }
-  .sidebar .brand-subtitle { font-size: var(--font-small); letter-spacing: 0; }
   .sidebar .sidebar-bottom { max-height: 80px; }
   .sidebar .sidebar-heading { margin-top: 10px; }
   .rail-logo { margin-bottom: 10px; }
