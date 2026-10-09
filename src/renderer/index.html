@@ -87,19 +87,19 @@
       </main>
     </div>
 
-    <dialog id="profile-dialog" class="modal" aria-labelledby="profile-dialog-title">
+    <dialog id="profile-dialog" class="modal" aria-labelledby="profile-dialog-title" closedby="none">
       <form id="profile-form">
         <div class="modal-heading"><span class="modal-symbol" data-icon="layers"></span><button id="profile-dialog-close" class="icon-button" type="button" aria-label="关闭对话框"><span data-icon="x"></span></button></div>
         <h2 id="profile-dialog-title">新建独立环境</h2><p id="profile-dialog-description" class="modal-description">从全新的登录状态开始，为一个账号创建专属空间。</p>
         <label class="form-field">环境名称 <span class="required">*</span><input id="profile-name" name="name" type="text" placeholder="例如：抖音 · 主账号" required maxlength="60" autocomplete="off" /></label>
         <label class="form-field">备注 <span class="field-optional">选填</span><textarea id="profile-notes" name="notes" placeholder="记录账号用途，方便下次识别" maxlength="500" rows="2"></textarea></label>
-        <fieldset class="platform-field">
+        <fieldset id="profile-launch-settings" class="platform-field">
           <legend>启动网址</legend>
           <div id="platform-presets" class="platform-presets"></div>
           <p id="platform-presets-status" class="field-help" role="status">正在加载平台选项…</p>
           <label class="custom-platform-choice"><input id="custom-platform" name="platform" type="radio" value="custom" checked /><span>自定义网址</span></label>
           <label id="profile-url-field" class="form-field custom-url-field">网址<input id="profile-url" name="startUrl" type="text" placeholder="https://www.douyin.com" required maxlength="4096" spellcheck="false" autocomplete="off" /></label>
-          <span class="field-help">首次打开时访问的网址；再次打开会恢复上次的页面。</span>
+          <span id="profile-launch-help" class="field-help">首次打开时访问的网址；再次打开会恢复上次的页面。</span>
         </fieldset>
         <fieldset class="color-field"><legend>环境颜色</legend><div id="color-choices" class="color-choices"></div></fieldset>
         <p id="profile-form-error" class="form-error" role="alert" hidden></p>

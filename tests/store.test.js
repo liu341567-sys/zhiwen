@@ -122,6 +122,54 @@ test('an invalid edit leaves the existing environment and saved data intact', (t
   assert.equal(JSON.stringify(new ProfileStore(directory).getState()), before);
 });
 
+test('custom launch settings are locked even when renamed in the same update', (t) => {
+  const { directory, store } = temporaryStore(t);
+  const profile = store.create({ name: '原账号', notes: '原备注', startUrl: 'https://example.com/start' });
+  store.touchUrl(profile.id, 'https://example.com/account');
+  const before = store.getState();
+  const file = path.join(directory, 'profiles.json');
+  const manifest = fs.readFileSync(file, 'utf8');
+  for (const input of [
+    { startUrl: 'https://example.com/other' },
+    { startUrl: null },
+    { startUrl: '' },
+    { startUrl: false },
+    { startUrl: {} },
+    { platformId: 'douyin' },
+    { platformId: null },
+    { platformId: '' },
+  ]) {
+    assert.throws(() => store.update(profile.id, { name: '不应改名', notes: '不应改备注', color: '#ca7181', ...input }), /不可修改启动网址或平台/);
+    assert.deepEqual(store.getState(), before);
+    assert.equal(fs.readFileSync(file, 'utf8'), manifest);
+    assert.deepEqual(new ProfileStore(directory).getState(), before);
+  }
+  const updated = store.update(profile.id, { name: '允许改名', notes: '允许改备注', color: '#ca7181', startUrl: undefined, platformId: undefined });
+  assert.deepEqual(updated, { ...before.profiles[0], name: '允许改名', notes: '允许改备注', color: '#ca7181' });
+  assert.equal(Object.hasOwn(updated, 'platformId'), false);
+});
+
+test('loading and editing an old manifest never rewrites a raw launch URL or opaque platform metadata', (t) => {
+  const { directory, store } = temporaryStore(t);
+  const profile = store.create({ name: '旧环境', startUrl: 'https://example.com/' });
+  const saved = store.getState();
+  saved.profiles[0].startUrl = 'https://example.com';
+  saved.profiles[0].platformId = { future: '保留元数据' };
+  saved.profiles[0].oldExtension = { extra: '保留字段' };
+  const file = path.join(directory, 'profiles.json');
+  const manifest = `${JSON.stringify(saved, null, 2)}\n`;
+  fs.writeFileSync(file, manifest);
+  const restored = new ProfileStore(directory);
+  assert.equal(fs.readFileSync(file, 'utf8'), manifest);
+  const renamed = restored.update(profile.id, { name: '旧环境改名', startUrl: 'https://example.com' });
+  assert.deepEqual(renamed, { ...saved.profiles[0], name: '旧环境改名' });
+  const before = restored.getState();
+  assert.throws(() => restored.update(profile.id, { startUrl: 'https://example.com/', name: '不应归一化' }), /不可修改/);
+  assert.throws(() => restored.update(profile.id, { platformId: null, notes: '不应清关联' }), /不可修改/);
+  assert.deepEqual(restored.getState(), before);
+  assert.deepEqual(new ProfileStore(directory).getState(), before);
+});
+
 test('unsafe IDs cannot be used as partition names or file paths', () => {
   for (const id of ['', '../other-profile', 'persist:other', 'a/b', null]) {
     assert.throws(() => partitionFor(id));

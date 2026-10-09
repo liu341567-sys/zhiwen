@@ -4,6 +4,7 @@
 // CDP is confined to loopback and the app uses a fresh, explicit user-data path.
 const assert = require('node:assert/strict');
 const platformPresets = require('../src/platform-presets.json');
+const { ProfileStore } = require('../src/profile-store');
 const fs = require('node:fs');
 const http = require('node:http');
 const net = require('node:net');
@@ -188,6 +189,22 @@ async function assertPlatformAvatar(shell, id, preset) {
   assert.equal(source, new URL(preset.iconResource, shell.url()).href);
 }
 
+async function assertLaunchLocked(shell, id) {
+  const result = await shell.evaluate(async id => {
+    const before = (await window.browserAPI.getState()).profiles;
+    const errors = [];
+    for (const change of [{ startUrl: 'https://example.com/forbidden' }, { platformId: 'zhihu' }, { platformId: null }]) {
+      try {
+        await window.browserAPI.updateProfile(id, { ...change, name: '不应保存的名称' });
+        errors.push(null);
+      } catch (error) { errors.push(error.message); }
+    }
+    return { before, after: (await window.browserAPI.getState()).profiles, errors };
+  }, id);
+  assert.ok(result.errors.every(message => typeof message === 'string' && /不可修改/.test(message)), 'Installed IPC must reject launch configuration changes');
+  assert.deepEqual(result.after, result.before, 'A rejected edit must preserve every profile and its metadata');
+}
+
 async function main() {
   if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true' || !process.env.RUNNER_TEMP) {
     throw new Error('This installation smoke test runs only on an ephemeral GitHub Windows runner');
@@ -212,6 +229,12 @@ async function main() {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const fixtureUrl = `http://127.0.0.1:${server.address().port}/account`;
+  // A closed, previously saved platform environment exercises upgrade loading
+  // without issuing any real platform request. Its last page remains loopback.
+  const preset = platformPresets.find(item => item.id === 'douyin');
+  const seedStore = new ProfileStore(dataDirectory);
+  const platformProfile = seedStore.create({ name: '安装检查 · 已有平台', platformId: preset.id });
+  seedStore.touchUrl(platformProfile.id, fixtureUrl);
   let instance;
   try {
     instance = await launch(executable, dataDirectory);
@@ -229,10 +252,12 @@ async function main() {
     assert.equal(brand.webdriver, false, 'This installed smoke test must not load Playwright Electron automation switches');
     assert.match(brand.source, /\/assets\/qiye-wordmark\.png$/);
     const platformImages = await assertLocalPlatformImages(shell);
+    await assertPlatformAvatar(shell, platformProfile.id, preset);
+    await assertLaunchLocked(shell, platformProfile.id);
     await shell.screenshot({ path: path.join(outputDirectory, 'installed-startup.png') });
     const created = await shell.evaluate(startUrl => window.browserAPI.createProfile({ name: '安装检查', notes: 'Local native app fixture', startUrl }), fixtureUrl);
-    assert.equal(created.profiles.length, 1);
-    const id = created.profiles[0].id;
+    assert.equal(created.profiles.length, 2);
+    const id = created.profiles.find(profile => profile.name === '安装检查').id;
     let accountPage = await pageFor(instance, fixtureUrl);
     await accountPage.evaluate(() => {
       document.cookie = 'installedAccount=native-preview; Max-Age=86400; Path=/; SameSite=Lax';
@@ -241,21 +266,19 @@ async function main() {
       sessionStorage.setItem('installedAccount', 'native-preview');
     });
     const edited = await shell.evaluate(id => window.browserAPI.updateProfile(id, { name: '安装检查 · 已编辑', notes: 'Saved local note' }), id);
-    assert.equal(edited.profiles[0].name, '安装检查 · 已编辑');
-    assert.equal(edited.profiles[0].notes, 'Saved local note');
-    // Associate an existing loopback environment without changing lastUrl or
-    // issuing real platform login requests. Restart must retain both metadata
-    // and the original account session while the packaged logo stays local.
-    const preset = platformPresets.find(item => item.id === 'douyin');
-    const associated = await shell.evaluate(({ id, platformId }) => window.browserAPI.updateProfile(id, { platformId }), { id, platformId: preset.id });
-    assert.equal(associated.profiles[0].platformId, preset.id);
-    assert.equal(associated.profiles[0].startUrl, preset.launchUrl);
-    assert.equal(associated.profiles[0].lastUrl, fixtureUrl);
-    await assertPlatformAvatar(shell, id, preset);
+    assert.equal(edited.profiles.find(profile => profile.id === id).name, '安装检查 · 已编辑');
+    assert.equal(edited.profiles.find(profile => profile.id === id).notes, 'Saved local note');
+    await assertLaunchLocked(shell, id);
+    const moved = await shell.evaluate(({ id, beforeId }) => window.browserAPI.moveProfile(id, beforeId), { id, beforeId: platformProfile.id });
+    assert.deepEqual(moved.profiles.map(profile => profile.id), [id, platformProfile.id]);
+    assert.deepEqual(moved.openTabs.map(tab => tab.id), [id]);
+    assert.equal(moved.activeId, id);
+    assert.equal(moved.profiles[1].platformId, preset.id);
+    assert.equal(moved.profiles[1].startUrl, preset.launchUrl);
     await shell.evaluate(id => window.browserAPI.closeProfile(id), id);
     const closed = await shell.evaluate(() => window.browserAPI.getState());
     assert.equal(closed.openTabs.length, 0);
-    assert.equal(closed.profiles.length, 1);
+    assert.equal(closed.profiles.length, 2);
     await shell.evaluate(id => window.browserAPI.openProfile(id), id);
     accountPage = await pageFor(instance, fixtureUrl);
     assertAccount(await accountState(accountPage));
@@ -273,17 +296,26 @@ async function main() {
     assert.equal(manifest.profiles[0].id, id);
     assert.equal(manifest.profiles[0].name, '安装检查 · 已编辑');
     assert.equal(manifest.profiles[0].notes, 'Saved local note');
-    assert.equal(manifest.profiles[0].platformId, preset.id);
-    assert.equal(manifest.profiles[0].startUrl, preset.launchUrl);
+    assert.deepEqual(manifest.profiles.map(profile => profile.id), [id, platformProfile.id]);
+    assert.equal(Object.hasOwn(manifest.profiles[0], 'platformId'), false);
+    assert.equal(manifest.profiles[0].startUrl, fixtureUrl);
+    assert.equal(manifest.profiles[1].platformId, preset.id);
+    assert.equal(manifest.profiles[1].startUrl, preset.launchUrl);
     instance = await launch(executable, dataDirectory);
     const restored = await instance.shell.evaluate(() => window.browserAPI.getState());
-    assert.equal(restored.profiles.length, 1);
-    assert.equal(restored.profiles[0].id, id);
-    assert.equal(restored.profiles[0].platformId, preset.id);
-    assert.equal(restored.profiles[0].startUrl, preset.launchUrl);
+    assert.equal(restored.profiles.length, 2);
+    assert.deepEqual(restored.profiles.map(profile => profile.id), [id, platformProfile.id]);
+    assert.equal(restored.profiles[0].startUrl, fixtureUrl);
+    assert.equal(Object.hasOwn(restored.profiles[0], 'platformId'), false);
+    assert.equal(restored.profiles[1].platformId, preset.id);
+    assert.equal(restored.profiles[1].startUrl, preset.launchUrl);
     assert.equal(restored.openTabs.length, 1);
     await assertLocalPlatformImages(instance.shell);
-    await assertPlatformAvatar(instance.shell, id, preset);
+    await assertPlatformAvatar(instance.shell, platformProfile.id, preset);
+    await assertLaunchLocked(instance.shell, id);
+    await assertLaunchLocked(instance.shell, platformProfile.id);
+    const sidebarOrder = await instance.shell.evaluate(() => [...document.querySelectorAll('.profile-open')].map(node => node.dataset.focusKey.slice('open:'.length)));
+    assert.deepEqual(sidebarOrder, [id, platformProfile.id]);
     assertAccount(await accountState(await pageFor(instance, fixtureUrl)));
     await instance.shell.screenshot({ path: path.join(outputDirectory, 'installed-restored.png') });
     await closeNormally(instance);
@@ -293,6 +325,7 @@ async function main() {
       nativeElectronLaunch: true, profileCreatedEditedReopenedAndRestarted: true,
       persistentAndSessionCookiesRestored: true, localAndSessionStorageRestored: true,
       localPlatformImageCount: platformImages.length, platformAssociationAndIconRestored: true,
+      profileOrderRestored: true, launchConfigurationLocked: true,
     }, null, 2));
     console.log('Installed Windows native launch, original brand ratio, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
   } finally {

@@ -89,43 +89,50 @@ test('renaming a platform environment retains its association and last visited p
   assert.deepEqual(new ProfileStore(directory).get(profile.id), { ...before, name: '新名称', notes: '改备注' });
 });
 
-test('switching the associated platform updates only the launch destination and retains lastUrl restoration', (t) => {
+test('changing a created platform or launch destination is rejected atomically', (t) => {
   const { directory, store } = temporaryStore(t);
   const profile = store.create({ platformId: 'douyin', name: '账号一' });
   const peer = store.create({ platformId: 'douyin', name: '账号二' });
   store.touchUrl(profile.id, 'https://creator.douyin.com/creator-micro/home');
-  const before = store.get(profile.id);
-  const updated = store.update(profile.id, { platformId: 'zhihu', startUrl: 'https://example.com/wrong' });
-  assert.deepEqual(updated, { ...before, platformId: 'zhihu', startUrl: destinations.zhihu });
-  assert.deepEqual(new ProfileStore(directory).get(peer.id), peer);
-  assert.deepEqual(new ProfileStore(directory).get(profile.id), updated);
-  store.close(profile.id);
   store.open(profile.id);
-  assert.equal(store.get(profile.id).lastUrl, before.lastUrl);
-});
-
-test('clearing a platform association uses the original custom-URL normalization', (t) => {
-  const { directory, store } = temporaryStore(t);
-  for (const platformId of [null, '']) {
-    const profile = store.create({ platformId: 'zhihu' });
-    store.touchUrl(profile.id, 'https://www.zhihu.com/creator');
-    const updated = store.update(profile.id, { platformId, startUrl: 'example.com/custom', name: '自定义账号' });
-    assert.equal(Object.hasOwn(updated, 'platformId'), false);
-    assert.equal(updated.startUrl, 'https://example.com/custom');
-    assert.equal(updated.lastUrl, 'https://www.zhihu.com/creator');
-    assert.equal(updated.name, '自定义账号');
-    assert.deepEqual(new ProfileStore(directory).get(profile.id), updated);
+  store.open(peer.id);
+  const before = store.getState();
+  const file = path.join(directory, 'profiles.json');
+  const manifest = fs.readFileSync(file, 'utf8');
+  for (const input of [
+    { platformId: 'zhihu' },
+    { startUrl: destinations.zhihu },
+    { platformId: 'zhihu', startUrl: destinations.zhihu },
+    { platformId: 'douyin', startUrl: 'https://example.com/wrong' },
+  ]) {
+    assert.throws(() => store.update(profile.id, { name: '不应改名', notes: '不应改备注', color: '#ca7181', ...input }), /不可修改启动网址或平台/);
+    assert.deepEqual(store.getState(), before);
+    assert.equal(fs.readFileSync(file, 'utf8'), manifest);
+    assert.deepEqual(new ProfileStore(directory).getState(), before);
   }
 });
 
-test('clearing only the association leaves both saved URLs and the partition intact', (t) => {
+test('a created preset cannot be cleared or switched to custom URL mode', (t) => {
+  const { directory, store } = temporaryStore(t);
+  const profile = store.create({ platformId: 'zhihu' });
+  store.touchUrl(profile.id, 'https://www.zhihu.com/creator');
+  const before = store.getState();
+  for (const platformId of [null, '']) {
+    assert.throws(() => store.update(profile.id, { platformId, startUrl: 'example.com/custom', name: '不应改名' }), /不可修改/);
+    assert.deepEqual(store.getState(), before);
+    assert.deepEqual(new ProfileStore(directory).getState(), before);
+  }
+});
+
+test('clearing only the association is also refused while normal navigation remains allowed', (t) => {
   const { store } = temporaryStore(t);
   const profile = store.create({ platformId: 'weixin-channels' });
   store.touchUrl(profile.id, 'https://channels.weixin.qq.com/platform');
   const before = store.get(profile.id);
-  const expected = { ...before };
-  delete expected.platformId;
-  assert.deepEqual(store.update(profile.id, { platformId: null }), expected);
+  assert.throws(() => store.update(profile.id, { platformId: null }), /不可修改/);
+  assert.deepEqual(store.get(profile.id), before);
+  store.touchUrl(profile.id, 'https://channels.weixin.qq.com/platform/account');
+  assert.deepEqual(store.get(profile.id), { ...before, lastUrl: 'https://channels.weixin.qq.com/platform/account' });
   assert.equal(partitionFor(store.get(profile.id).id), partitionFor(profile.id));
 });
 
@@ -147,18 +154,20 @@ test('custom environments retain legacy defaults and do not infer a platform fro
   }
 });
 
-test('legacy URL edits retain a matching preset but clear the association for a different destination', (t) => {
-  const { store } = temporaryStore(t);
+test('unchanged launch settings may be resent without normalizing saved values', (t) => {
+  const { directory, store } = temporaryStore(t);
   const profile = store.create({ platformId: 'douyin' });
-  const matching = store.update(profile.id, { startUrl: 'https://creator.douyin.com' });
-  assert.equal(matching.platformId, 'douyin');
-  assert.equal(matching.startUrl, destinations.douyin);
-  const changed = store.update(profile.id, { startUrl: 'https://creator.douyin.com/custom-path' });
-  assert.equal(Object.hasOwn(changed, 'platformId'), false);
-  assert.equal(changed.startUrl, 'https://creator.douyin.com/custom-path');
-  const custom = store.update(profile.id, { startUrl: destinations.zhihu });
-  assert.equal(Object.hasOwn(custom, 'platformId'), false);
-  assert.equal(custom.startUrl, destinations.zhihu);
+  const updated = store.update(profile.id, { platformId: 'douyin', startUrl: destinations.douyin, name: '正常改名', notes: '正常备注' });
+  assert.deepEqual(updated, { ...profile, name: '正常改名', notes: '正常备注' });
+  assert.throws(() => store.update(profile.id, { startUrl: 'https://creator.douyin.com' }), /不可修改/);
+  assert.deepEqual(new ProfileStore(directory).get(profile.id), updated);
+  const custom = store.create({ startUrl: destinations.zhihu });
+  const renamed = store.update(custom.id, { platformId: undefined, startUrl: custom.startUrl, name: '自定义仍可改名' });
+  assert.equal(Object.hasOwn(renamed, 'platformId'), false);
+  assert.equal(renamed.startUrl, destinations.zhihu);
+  for (const platformId of ['zhihu', null, '']) {
+    assert.throws(() => store.update(custom.id, { platformId }), /不可修改/);
+  }
 });
 
 test('invalid incoming platform values reject creation and edits without changing saved metadata', (t) => {
@@ -169,7 +178,7 @@ test('invalid incoming platform values reject creation and edits without changin
   const manifest = fs.readFileSync(file, 'utf8');
   for (const platformId of ['unknown', 'ZHihu', ' zhihu ', '__proto__', 'constructor', false, 0, [], {}, NaN]) {
     assert.throws(() => store.create({ platformId, name: '不应创建' }), /有效的平台/);
-    assert.throws(() => store.update(profile.id, { platformId, name: '不应重命名', startUrl: destinations.douyin }), /有效的平台/);
+    assert.throws(() => store.update(profile.id, { platformId, name: '不应重命名', startUrl: destinations.douyin }), /不可修改/);
     assert.deepEqual(store.getState(), before);
     assert.equal(fs.readFileSync(file, 'utf8'), manifest);
   }
@@ -193,6 +202,11 @@ test('unknown optional platform metadata loads without rewriting or being erased
     assert.deepEqual(restored.get(legacy.id), { ...legacy, platformId });
     restored.update(peer.id, { notes: '只修改另一个环境' });
     assert.deepEqual(new ProfileStore(directory).get(legacy.id), { ...legacy, platformId });
+    restored.update(legacy.id, { name: '未知平台也能改名' });
+    assert.deepEqual(restored.get(legacy.id), { ...legacy, platformId, name: '未知平台也能改名' });
+    const before = restored.getState();
+    assert.throws(() => restored.update(legacy.id, { platformId: 'zhihu', name: '不应改名' }), /不可修改/);
+    assert.deepEqual(restored.getState(), before);
     assert.equal(new ProfileStore(directory).getState().version, 1);
   }
 });

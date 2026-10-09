@@ -217,10 +217,16 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .search-field:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-halo); background: var(--surface); }
 .search-field input:focus-visible { outline: 0; }
 .profile-list { flex: 1 1 120px; min-height: 64px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
-.profile-row { display: flex; align-items: center; gap: 2px; margin-bottom: 5px; padding: 3px; border: 1px solid transparent; border-radius: var(--radius-control); }
+.profile-row { display: flex; position: relative; align-items: center; gap: 2px; margin-bottom: 5px; padding: 3px; border: 1px solid transparent; border-radius: var(--radius-control); user-select: none; }
 .profile-row:hover { background: var(--sidebar-hover); }
 .profile-row.active { background: var(--sidebar-selected); border-color: var(--sidebar-selected-border); box-shadow: none; }
 .profile-row.active:hover { background: var(--sidebar-selected-hover); }
+.profile-row.is-dragging { opacity: .5; }
+.profile-list[data-dragging-id], .profile-list[data-dragging-id] button { cursor: grabbing; }
+.profile-row.drop-before::before, .profile-row.drop-after::after { content: ""; position: absolute; left: 4px; right: 4px; height: 2px; border-radius: 2px; background: var(--sidebar-action); pointer-events: none; }
+.profile-row.drop-before::before { top: -2px; }
+.profile-row.drop-before:first-child::before { top: 0; }
+.profile-row.drop-after::after { bottom: -4px; }
 .profile-open { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 7px 4px; border: 0; border-radius: 5px; background: transparent; text-align: left; }
 .profile-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--profile-border); border-radius: 9px; color: var(--text); background: var(--profile-tint); font-size: 16px; font-weight: 600; flex-shrink: 0; }
 .profile-icon.has-platform-icon { border-color: var(--line); background: var(--surface); }
@@ -401,6 +407,7 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .form-field input { min-height: 42px; }
 .form-field textarea { min-height: 72px; max-height: 180px; resize: vertical; }
 .form-field input::placeholder, .form-field textarea::placeholder { color: var(--muted); }
+.form-field input:disabled { color: var(--text-disabled); border-color: var(--line-disabled); background: var(--surface-disabled); cursor: default; }
 .form-field input:focus, .form-field textarea:focus { border-color: var(--focus); background: var(--surface); box-shadow: 0 0 0 2px var(--focus-halo); }
 .required { color: var(--danger); }
 .field-optional { margin-left: 6px; color: var(--muted); font-size: var(--font-small); font-weight: 400; }
@@ -417,6 +424,8 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .platform-preset-input:focus-visible + .platform-preset-content { outline: 2px solid var(--focus); outline-offset: 2px; }
 .platform-preset-input:disabled { cursor: default; }
 .platform-preset-input:disabled + .platform-preset-content { color: var(--text-disabled); background: var(--surface-disabled); border-color: var(--line-disabled); }
+.platform-preset-input:disabled:checked + .platform-preset-content { color: var(--text); background: var(--sidebar-selected); border-color: var(--sidebar-selected-border); }
+.platform-field:disabled .platform-preset, .platform-field:disabled .custom-platform-choice { cursor: default; }
 .platform-preset-image, .platform-preset-fallback { width: 24px; height: 24px; flex-shrink: 0; }
 .platform-preset-image { display: block; object-fit: contain; }
 .platform-preset-fallback { display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; color: var(--secondary); background: var(--surface-inset); font-size: var(--font-small); }

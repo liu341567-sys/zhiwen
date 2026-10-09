@@ -47,9 +47,12 @@
   let platformChoicesBuilt = false;
   let selectedPlatformId = null;
   let customUrlDraft = '';
-  let originalStartUrl = '';
-  let profileUrlAtOpen = '';
-  let platformSelectionChanged = false;
+  let profileDrag = null;
+  let profileRowsDeferred = false;
+  let dragScrollFrame = 0;
+  let cancelledDragPointerId = null;
+  let suppressProfileClick = false;
+  let suppressClickTimer = 0;
   const dialogIds = ['profile-dialog', 'delete-dialog', 'diagnostics-dialog'];
   let diagnosticsReport = null;
   let diagnosticsBusy = false;
@@ -117,6 +120,7 @@
     if (platform) {
       const image = element('img', 'profile-platform-image');
       image.alt = '';
+      image.draggable = false;
       image.hidden = true;
       image.addEventListener('load', () => {
         image.hidden = false;
@@ -139,12 +143,13 @@
     for (const input of $('platform-presets').querySelectorAll('input[name="platform"]')) input.checked = input.value === selectedPlatformId;
     $('custom-platform').checked = selectedPlatformId === null;
     $('profile-url-field').hidden = selectedPlatformId !== null;
-    $('profile-url').readOnly = selectedPlatformId !== null;
+    $('profile-url').readOnly = Boolean(editId) || selectedPlatformId !== null;
+    $('profile-url').disabled = dialogBusy || Boolean(editId);
+    $('profile-launch-settings').disabled = dialogBusy || Boolean(editId);
   }
 
   function choosePlatform(id) {
-    if (dialogBusy) return;
-    platformSelectionChanged = true;
+    if (dialogBusy || editId) return;
     const platform = findPlatform(id);
     if (platform) {
       if (selectedPlatformId === null) customUrlDraft = $('profile-url').value;
@@ -166,7 +171,7 @@
       input.type = 'radio';
       input.name = 'platform';
       input.value = platform.id;
-      input.disabled = dialogBusy;
+      input.disabled = dialogBusy || Boolean(editId);
       input.setAttribute('aria-label', platform.displayName);
       input.addEventListener('change', () => { if (input.checked) choosePlatform(platform.id); });
       const content = element('span', 'platform-preset-content');
@@ -229,8 +234,9 @@
     $('overview-count').textContent = String(state.profiles.length);
     $('sidebar-overview').classList.toggle('active', !state.activeId);
     $('sidebar-overview').setAttribute('aria-current', state.activeId ? 'false' : 'page');
-    const rows = filtered.map((profile) => {
+    const rows = profileDrag ? null : filtered.map((profile) => {
       const row = element('div', `profile-row${state.activeId === profile.id ? ' active' : ''}`);
+      row.dataset.profileId = profile.id;
       const open = button('profile-open', '', () => action('openProfile', profile.id));
       open.setAttribute('aria-label', `打开环境：${profile.name}`);
       open.title = profile.notes ? `${profile.name}\n${profile.notes}` : profile.name;
@@ -245,11 +251,20 @@
       row.append(open, edit);
       return row;
     });
-    $('profile-list').replaceChildren(...rows);
-    $('profile-list').hidden = !rows.length;
-    $('sidebar-empty').hidden = Boolean(rows.length);
+    // Keep the pressed/captured button and insertion markers stable while
+    // pages publish updates, including a click still below the drag threshold.
+    if (rows) {
+      profileRowsDeferred = false;
+      $('profile-list').replaceChildren(...rows);
+      $('profile-list').hidden = !rows.length;
+      $('sidebar-empty').hidden = Boolean(rows.length);
+    } else {
+      profileRowsDeferred = true;
+      for (const row of $('profile-list').children) row.classList.toggle('active', row.dataset.profileId === state.activeId);
+    }
     $('sidebar-empty').replaceChildren(document.createTextNode(state.profiles.length ? '没有找到匹配的环境' : '还没有保存的环境'), element('br'), element('span', '', state.profiles.length ? '试试其他名称或备注' : '从新建第一个环境开始'));
-    $('profile-cards').replaceChildren(...state.profiles.map((profile) => {
+    const creationOrder = [...state.profiles].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id));
+    $('profile-cards').replaceChildren(...creationOrder.map((profile) => {
       const card = element('article', 'profile-card');
       const top = element('div', 'card-top');
       const edit = button('icon-button', '', () => openProfileDialog(profile), 'pencil');
@@ -273,6 +288,152 @@
     $('overview-empty').hidden = Boolean(state.profiles.length);
     $('profile-cards').hidden = !state.profiles.length;
   }
+
+  function clearDropIndicators() {
+    for (const row of $('profile-list').children) row.classList.remove('drop-before', 'drop-after');
+  }
+
+  function updateDropTarget() {
+    if (!profileDrag?.started) return;
+    clearDropIndicators();
+    profileDrag.validTarget = false;
+    const list = $('profile-list');
+    const bounds = list.getBoundingClientRect();
+    if (profileDrag.x < bounds.left || profileDrag.x > bounds.right || profileDrag.y < bounds.top || profileDrag.y > bounds.bottom) return;
+    const rows = [...list.children].filter((row) => row.dataset.profileId !== profileDrag.id && findProfile(row.dataset.profileId));
+    if (!rows.length) return;
+    const before = rows.find((row) => {
+      const rect = row.getBoundingClientRect();
+      return profileDrag.y < rect.top + rect.height / 2;
+    });
+    if (before) {
+      profileDrag.beforeId = before.dataset.profileId;
+      before.classList.add('drop-before');
+    } else {
+      const last = rows[rows.length - 1];
+      // In a filtered list, drop after the last visible result without moving
+      // it past the hidden records that originally followed that result.
+      const lastIndex = state.profiles.findIndex((profile) => profile.id === last.dataset.profileId);
+      profileDrag.beforeId = state.profiles.slice(lastIndex + 1).find((profile) => profile.id !== profileDrag.id)?.id || null;
+      last.classList.add('drop-after');
+    }
+    profileDrag.validTarget = true;
+  }
+
+  function scrollDuringDrag(time) {
+    dragScrollFrame = 0;
+    if (!profileDrag?.started) return;
+    const list = $('profile-list');
+    const rect = list.getBoundingClientRect();
+    const edge = Math.min(36, rect.height / 3);
+    const elapsed = Math.min(32, Math.max(1, time - (profileDrag.scrollTime || time)));
+    profileDrag.scrollTime = time;
+    if (profileDrag.x >= rect.left && profileDrag.x <= rect.right && profileDrag.y >= rect.top && profileDrag.y <= rect.bottom) {
+      const upward = Math.max(0, Math.min(1, (rect.top + edge - profileDrag.y) / edge));
+      const downward = Math.max(0, Math.min(1, (profileDrag.y - rect.bottom + edge) / edge));
+      list.scrollTop += (downward - upward) * elapsed * .55;
+    }
+    updateDropTarget();
+    dragScrollFrame = requestAnimationFrame(scrollDuringDrag);
+  }
+
+  function suppressDragClick() {
+    suppressProfileClick = true;
+    window.clearTimeout(suppressClickTimer);
+    // Pointer-up's synthetic click belongs to this gesture; the next deliberate
+    // click remains a normal open/switch action.
+    suppressClickTimer = window.setTimeout(() => { suppressProfileClick = false; }, 0);
+  }
+
+  function finishProfileDrag(save = false, released = false) {
+    const drag = profileDrag;
+    if (!drag) return;
+    profileDrag = null;
+    cancelAnimationFrame(dragScrollFrame);
+    dragScrollFrame = 0;
+    if (drag.started) {
+      if (released) suppressDragClick();
+      else cancelledDragPointerId = drag.pointerId;
+      delete $('profile-list').dataset.draggingId;
+      drag.row.classList.remove('is-dragging');
+      clearDropIndicators();
+      if ($('profile-list').hasPointerCapture(drag.pointerId)) $('profile-list').releasePointerCapture(drag.pointerId);
+      const moving = findProfile(drag.id);
+      const currentIndex = state.profiles.findIndex((profile) => profile.id === drag.id);
+      const currentNext = state.profiles[currentIndex + 1]?.id || null;
+      const canSave = save && drag.validTarget && moving && (drag.beforeId === null || findProfile(drag.beforeId));
+      if (canSave && currentNext !== drag.beforeId) {
+        const profiles = state.profiles.filter((profile) => profile.id !== drag.id);
+        const index = drag.beforeId === null ? profiles.length : profiles.findIndex((profile) => profile.id === drag.beforeId);
+        profiles.splice(index, 0, moving);
+        state = { ...state, profiles };
+        render();
+        // Submit just the moved ID and destination to preserve concurrent edits
+        // and newly created environments in the main process's current list.
+        action('moveProfile', drag.id, drag.beforeId).then((result) => { if (!result) action('getState'); });
+      } else render();
+    } else if (profileRowsDeferred) {
+      // A click is dispatched after pointer-up. Do not remove its original
+      // button until the browser has delivered that normal open/switch action.
+      requestAnimationFrame(() => render());
+    }
+  }
+
+  $('profile-list').addEventListener('pointerdown', (event) => {
+    if (event.button === 0 && profileDrag) finishProfileDrag();
+    cancelledDragPointerId = null;
+    if (event.button !== 0 || event.pointerType !== 'mouse' || dialogIsOpen() || event.target.closest('.profile-edit')) return;
+    const row = event.target.closest('.profile-row');
+    if (!row || !findProfile(row.dataset.profileId)) return;
+    profileDrag = { id: row.dataset.profileId, pointerId: event.pointerId, row, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, started: false, validTarget: false, beforeId: null };
+  });
+  document.addEventListener('pointermove', (event) => {
+    if (!profileDrag || event.pointerId !== profileDrag.pointerId) return;
+    if (!(event.buttons & 1)) { finishProfileDrag(); return; }
+    profileDrag.x = event.clientX;
+    profileDrag.y = event.clientY;
+    if (!profileDrag.started) {
+      if (Math.hypot(event.clientX - profileDrag.startX, event.clientY - profileDrag.startY) < 8) return;
+      const row = [...$('profile-list').children].find((item) => item.dataset.profileId === profileDrag.id);
+      if (!row || !findProfile(profileDrag.id)) { finishProfileDrag(); return; }
+      profileDrag.row = row;
+      profileDrag.started = true;
+      row.classList.add('is-dragging');
+      $('profile-list').dataset.draggingId = profileDrag.id;
+      $('profile-list').setPointerCapture(event.pointerId);
+      dragScrollFrame = requestAnimationFrame(scrollDuringDrag);
+    }
+    event.preventDefault();
+    updateDropTarget();
+  }, { capture: true });
+  document.addEventListener('pointerup', (event) => {
+    if (event.pointerId === cancelledDragPointerId) {
+      cancelledDragPointerId = null;
+      suppressDragClick();
+    }
+    if (!profileDrag || event.pointerId !== profileDrag.pointerId) return;
+    profileDrag.x = event.clientX;
+    profileDrag.y = event.clientY;
+    updateDropTarget();
+    finishProfileDrag(true, true);
+  }, { capture: true });
+  document.addEventListener('pointercancel', (event) => { if (profileDrag?.pointerId === event.pointerId) finishProfileDrag(); }, { capture: true });
+  $('profile-list').addEventListener('lostpointercapture', (event) => {
+    if (profileDrag?.started && event.pointerId === profileDrag.pointerId && !$('profile-list').hasPointerCapture(event.pointerId)) finishProfileDrag();
+  });
+  $('profile-list').addEventListener('click', (event) => {
+    if (!suppressProfileClick || event.detail === 0) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    suppressProfileClick = false;
+  }, { capture: true });
+  $('profile-list').addEventListener('dragstart', (event) => event.preventDefault());
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !profileDrag) return;
+    event.preventDefault();
+    finishProfileDrag();
+  }, { capture: true });
+  window.addEventListener('blur', () => finishProfileDrag());
 
   function renderTabs() {
     const overview = element('div', `tab overview-tab${state.activeId ? '' : ' active'}`);
@@ -369,7 +530,8 @@
   function setDialogBusy(value) {
     dialogBusy = value;
     ['profile-save', 'profile-cancel', 'profile-dialog-close', 'profile-delete', 'delete-confirm', 'delete-cancel', 'delete-dialog-close'].forEach((id) => { $(id).disabled = value; });
-    document.querySelectorAll('input[name="platform"]').forEach((input) => { input.disabled = value; });
+    document.querySelectorAll('input[name="platform"]').forEach((input) => { input.disabled = value || Boolean(editId); });
+    syncPlatformSelection();
     $('profile-save').textContent = value ? '正在保存…' : (editId ? '保存修改' : '创建并打开');
     $('delete-confirm').textContent = value ? '正在删除…' : '永久删除';
   }
@@ -395,6 +557,7 @@
 
   async function openProfileDialog(profile = null) {
     if (dialogIsOpen()) return;
+    finishProfileDrag();
     modalOpening = true;
     focusBeforeModal = document.activeElement;
     focusKeyBeforeModal = focusBeforeModal?.dataset.focusKey;
@@ -404,17 +567,18 @@
       $('profile-form').reset();
       $('profile-name').value = profile?.name || '';
       $('profile-notes').value = profile?.notes || '';
-      originalStartUrl = profile?.startUrl || 'https://www.douyin.com';
-      $('profile-url').value = originalStartUrl;
+      $('profile-url').value = profile?.startUrl || 'https://www.douyin.com';
       customUrlDraft = $('profile-url').value;
       selectedPlatformId = findPlatform(profile?.platformId)?.id || null;
-      if (selectedPlatformId) $('profile-url').value = findPlatform(selectedPlatformId).launchUrl;
-      profileUrlAtOpen = $('profile-url').value;
-      platformSelectionChanged = false;
       syncPlatformSelection();
       selectColor(profile?.color || colors[state.profiles.length % colors.length].value);
       $('profile-dialog-title').textContent = profile ? '编辑环境' : '新建独立环境';
-      $('profile-dialog-description').textContent = profile ? '更新名称、备注与启动网址，便于识别这个账号空间。' : '从全新的登录状态开始，为一个账号创建专属空间。';
+      // Disable native close requests too: Chromium's repeated Escape can
+      // issue a non-cancelable request after a prevented cancel event.
+      $('profile-dialog').setAttribute('closedby', profile ? 'closerequest' : 'none');
+      $('profile-dialog-description').textContent = profile ? '更新名称、备注与环境颜色，便于识别这个账号空间。' : '从全新的登录状态开始，为一个账号创建专属空间。';
+      $('profile-launch-help').textContent = profile ? '启动网址及平台在创建后不可修改；再次打开会恢复上次的页面。' : '首次打开时访问的网址；再次打开会恢复上次的页面。';
+      $('profile-cancel').hidden = !profile;
       $('profile-delete').hidden = !profile;
       $('new-profile-tip').hidden = Boolean(profile);
       $('profile-form-error').hidden = true;
@@ -493,6 +657,7 @@
 
   async function openDiagnosticsDialog() {
     if (!activeTab() || dialogIsOpen()) return;
+    finishProfileDrag();
     modalOpening = true;
     focusBeforeModal = document.activeElement;
     focusKeyBeforeModal = focusBeforeModal?.dataset.focusKey;
@@ -568,11 +733,10 @@
     try {
       const name = $('profile-name').value.trim();
       if (!name) throw new Error('请为环境填写一个名称。');
-      const platform = findPlatform(selectedPlatformId);
-      if (selectedPlatformId && !platform) throw new Error('所选平台暂不可用，请重新选择平台或填写自定义网址。');
       const input = { name, notes: $('profile-notes').value.trim(), color: $('color-choices').querySelector('input:checked')?.value || colors[0].value };
-      const launchSettingsUnchanged = Boolean(editId) && !platformSelectionChanged && $('profile-url').value === profileUrlAtOpen;
-      if (!launchSettingsUnchanged) {
+      if (!editId) {
+        const platform = findPlatform(selectedPlatformId);
+        if (selectedPlatformId && !platform) throw new Error('所选平台暂不可用，请重新选择平台或填写自定义网址。');
         input.startUrl = platform ? platform.launchUrl : normalizeUrl($('profile-url').value);
         input.platformId = platform?.id || null;
       }
@@ -610,7 +774,7 @@
   $('custom-platform').addEventListener('change', () => { if ($('custom-platform').checked) choosePlatform(null); });
   $('profile-url').addEventListener('input', () => { if (selectedPlatformId === null) customUrlDraft = $('profile-url').value; });
   for (const id of ['sidebar-overview', 'error-overview']) $(id).addEventListener('click', () => action('showOverview'));
-  $('profile-search').addEventListener('input', renderProfiles);
+  $('profile-search').addEventListener('input', () => { finishProfileDrag(); renderProfiles(); });
   $('active-settings').addEventListener('click', () => { const profile = findProfile(state.activeId); if (profile) openProfileDialog(profile); });
   $('login-diagnostics-button').addEventListener('click', openDiagnosticsDialog);
   $('diagnostics-start').addEventListener('click', () => runDiagnosticsAction('startLoginDiagnostics'));
@@ -639,14 +803,19 @@
     if (!expanded) $('data-path-detail').scrollIntoView({ block: 'nearest' });
   });
   $('profile-delete').addEventListener('click', openDeleteDialog);
-  for (const id of ['profile-cancel', 'profile-dialog-close']) $(id).addEventListener('click', () => closeDialog($('profile-dialog')));
+  $('profile-cancel').addEventListener('click', () => { if (editId) closeDialog($('profile-dialog')); });
+  $('profile-dialog-close').addEventListener('click', () => closeDialog($('profile-dialog')));
   for (const id of ['delete-cancel', 'delete-dialog-close']) $(id).addEventListener('click', () => closeDialog($('delete-dialog')));
   for (const id of ['diagnostics-close', 'diagnostics-dialog-close']) $(id).addEventListener('click', () => closeDialog($('diagnostics-dialog')));
   for (const id of dialogIds) {
     const dialog = $(id);
-    dialog.addEventListener('cancel', (event) => { event.preventDefault(); closeDialog(dialog); });
+    dialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      if (dialog.id !== 'profile-dialog' || editId) closeDialog(dialog);
+    });
     dialog.addEventListener('click', (event) => {
       if (event.target !== dialog) return;
+      if (dialog.id === 'profile-dialog' && !editId) return;
       const rect = dialog.getBoundingClientRect();
       if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog(dialog);
     });

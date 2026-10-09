@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('browserAPI', {
   getState: () => ipcRenderer.invoke('browser:state'),
   createProfile: input => ipcRenderer.invoke('browser:create', input),
   updateProfile: (id, input) => ipcRenderer.invoke('browser:update', id, input),
+  moveProfile: (id, beforeId = null) => ipcRenderer.invoke('browser:move', id, beforeId),
   openProfile: id => ipcRenderer.invoke('browser:open', id),
   closeProfile: id => ipcRenderer.invoke('browser:close', id),
   deleteProfile: id => ipcRenderer.invoke('browser:delete', id),

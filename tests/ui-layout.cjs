@@ -10,6 +10,7 @@ const path = require('node:path');
 const { _electron } = require('playwright-core');
 const { verifyInputFocus } = require('./ui-focus.cjs');
 const { seedLegacyPlatforms, verifyLegacyPlatforms, verifyPlatforms } = require('./ui-platforms.cjs');
+const { verifyInteractions } = require('./ui-interactions.cjs');
 
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'ui');
@@ -116,7 +117,19 @@ async function runScale(scale, origin) {
           width: innerWidth, height: innerHeight, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight };
       });
       assert.ok(outer.left >= -1 && outer.top >= -1 && outer.right <= outer.width + 1 && outer.bottom <= outer.height + 1, `${dialogId} frame must fit`);
-      for (const control of controls) await clickable(`#${control}`);
+      for (const control of controls) {
+        const locator = shell.locator(`#${control}`);
+        if (control === 'profile-url' && await locator.isDisabled()) {
+          await locator.scrollIntoViewIfNeeded();
+          const locked = await locator.evaluate(node => {
+            const box = node.getBoundingClientRect();
+            return { readOnly: node.readOnly, width: box.width, height: box.height,
+              inside: box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1 };
+          });
+          assert.equal(locked.readOnly, true, 'An existing environment URL must be read-only');
+          assert.ok(locked.inside && locked.width > 0 && locked.height > 0, 'The locked URL must remain legible inside the editor');
+        } else await clickable(`#${control}`);
+      }
       check(prefix(`${label} controls can scroll fully into view; native website is hidden`), () => assert.ok(outer.clientHeight > 0));
       await screenshot(label);
       if (outer.scrollHeight > outer.clientHeight + 1) {
@@ -304,8 +317,9 @@ async function runScale(scale, origin) {
       await screenshot('tabs-browser');
 
       await shortcut(ids[1], 't');
-      await checkDialog('profile-dialog', ['profile-name', 'profile-notes', 'profile-url', 'profile-save', 'profile-cancel', 'profile-dialog-close'], 'create-dialog');
-      await closeDialog('profile-cancel');
+      await checkDialog('profile-dialog', ['profile-name', 'profile-notes', 'profile-url', 'profile-save', 'profile-dialog-close'], 'create-dialog');
+      assert.equal(await shell.locator('#profile-cancel').isVisible(), false, 'Only the close icon dismisses creation');
+      await closeDialog('profile-dialog-close');
       await shell.locator(key('edit', ids[2])).click();
       await checkDialog('profile-dialog', ['profile-name', 'profile-notes', 'profile-url', 'profile-delete', 'profile-save', 'profile-cancel'], 'edit-dialog');
       await shell.locator('#profile-delete').click();
@@ -327,6 +341,8 @@ async function runScale(scale, origin) {
 
     await verifyInputFocus({ shell, state, ids, check, prefix, screenshot, eventually, clickable });
     await verifyPlatforms({ app, shell, state, check, prefix, screenshot, eventually, clickable,
+      origin, directory, viewScript, waitForView });
+    await verifyInteractions({ app, shell, state, ids, check, prefix, screenshot, eventually, clickable,
       origin, directory, viewScript, waitForView });
 
     // User flow after the smallest geometry pass: rename, navigation, close and

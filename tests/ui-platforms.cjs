@@ -39,11 +39,15 @@ async function verifyLegacyPlatforms(context) {
   await shell.locator('#profile-dialog').waitFor({ state: 'visible' });
   const custom = await shell.evaluate(() => ({ checked: document.getElementById('custom-platform').checked,
     hidden: document.getElementById('profile-url-field').hidden, readOnly: document.getElementById('profile-url').readOnly,
+    disabled: document.getElementById('profile-url').disabled,
+    platformsDisabled: [...document.querySelectorAll('#profile-dialog input[name="platform"]')].every(input => input.disabled),
     url: document.getElementById('profile-url').value }));
-  check(prefix('a loaded legacy URL matching a preset still opens as editable custom URL'), () => {
+  check(prefix('a legacy URL matching a preset stays custom, with launch settings locked after upgrade'), () => {
     assert.equal(custom.checked, true);
     assert.equal(custom.hidden, false);
-    assert.equal(custom.readOnly, false);
+    assert.equal(custom.readOnly, true);
+    assert.equal(custom.disabled, true);
+    assert.equal(custom.platformsDisabled, true);
     assert.equal(custom.url, legacy.custom.startUrl);
   });
   await shell.locator('#profile-cancel').click();
@@ -97,6 +101,8 @@ async function verifyPlatforms(context) {
     url: document.getElementById('profile-url').value,
     hidden: document.getElementById('profile-url-field').hidden,
     readOnly: document.getElementById('profile-url').readOnly,
+    disabled: document.getElementById('profile-url').disabled,
+    platformsDisabled: [...document.querySelectorAll('#profile-dialog input[name="platform"]')].every(input => input.disabled),
     willValidate: document.getElementById('profile-url').willValidate,
   }));
   const save = async () => {
@@ -116,13 +122,15 @@ async function verifyPlatforms(context) {
         const box = node.getBoundingClientRect();
         return { loaded: Boolean(image?.complete && image.naturalWidth > 0 && !image.hidden),
           platformId: node.dataset.platformId, src: image?.currentSrc,
-          expectedSrc: new URL(preset.iconResource, location.href).href, width: box.width, height: box.height };
+          expectedSrc: new URL(preset.iconResource, location.href).href, connected: node.isConnected,
+          width: box.width, height: box.height };
       }, preset);
-      return actual.loaded && actual.platformId === preset.id && actual.src === actual.expectedSrc;
+      return actual.loaded && actual.platformId === preset.id && actual.src === actual.expectedSrc && actual.connected && actual.width === 36 && actual.height === 36;
     }, 'saved platform avatar loaded');
     assert.equal(actual.platformId, preset.id);
     assert.equal(actual.src, actual.expectedSrc);
     assert.equal(new URL(actual.src).protocol, 'file:');
+    assert.equal(actual.connected, true);
     assert.equal(actual.width, 36);
     assert.equal(actual.height, 36);
   };
@@ -319,38 +327,84 @@ async function verifyPlatforms(context) {
       assert.equal(renamed.lastUrl, oldUrl);
     });
     await edit(first.id);
-    await choose(presets[1].id);
-    await save();
-    await hasImage(first.id, presets[1]);
-    const switched = await profile(first.id);
+    const lockedPreset = await selection();
+    check(prefix('preset editing displays its original selection but disables every launch-setting control'), () => {
+      assert.deepEqual(lockedPreset.checked, [presets[0].id]);
+      assert.equal(lockedPreset.readOnly, true);
+      assert.equal(lockedPreset.disabled, true);
+      assert.equal(lockedPreset.platformsDisabled, true);
+      assert.equal(lockedPreset.url, presets[0].launchUrl);
+    });
+    await shell.locator('#profile-cancel').click();
+    await dialogClosed();
+    const beforeRejected = await profile(first.id);
+    const diskBeforeRejected = fs.readFileSync(path.join(directory, 'profiles.json'), 'utf8');
+    const rejected = await shell.evaluate(async ({ id, input }) => {
+      try { await window.browserAPI.updateProfile(id, input); return null; }
+      catch (error) { return error.message; }
+    }, { id: first.id, input: { name: '不得保存的名称', platformId: presets[1].id, startUrl: presets[1].launchUrl } });
+    const afterRejected = await profile(first.id);
     const unchangedPage = await viewScript(first.id, 'location.href');
-    check(prefix('editing a platform changes its saved start URL and avatar without navigating the current account'), () => {
-      assert.equal(switched.platformId, presets[1].id);
-      assert.equal(switched.startUrl, presets[1].launchUrl);
-      assert.equal(switched.lastUrl, oldUrl);
+    check(prefix('configuration updates reject platform and URL changes atomically without changing the account page or icon'), () => {
+      assert.ok(rejected?.includes('环境创建后不可修改启动网址或平台'));
+      assert.deepEqual(afterRejected, beforeRejected);
+      assert.equal(fs.readFileSync(path.join(directory, 'profiles.json'), 'utf8'), diskBeforeRejected);
       assert.equal(unchangedPage, oldUrl);
     });
-    await edit(first.id);
-    await shell.locator('#custom-platform').check();
+    await hasImage(first.id, presets[0]);
+
+    // Different launch modes remain available at creation. Existing accounts
+    // must never be repurposed just to exercise another platform or avatar.
+    await openCreate();
+    await shell.locator('#profile-name').fill('首次设置小红书');
+    await choose(presets[1].id);
+    await save();
+    const alternative = (await state()).profiles.find(item => item.name === '首次设置小红书');
+    assert.ok(alternative);
+    created.push(alternative.id);
+    await waitForView(alternative.id);
+    await hasImage(alternative.id, presets[1]);
+    check(prefix('new environments still choose another platform with its own canonical URL and logo'), () => {
+      assert.equal(alternative.platformId, presets[1].id);
+      assert.equal(alternative.startUrl, presets[1].launchUrl);
+      assert.equal(afterRejected.platformId, presets[0].id);
+    });
+
+    await openCreate();
+    await shell.locator('#profile-name').fill('首次设置自定义');
     await shell.locator('#profile-url').fill(presets[2].launchUrl);
     await save();
-    const custom = await profile(first.id);
-    await eventually(() => shell.locator(`${avatar(first.id)} img`).count().then(count => count === 0), 'custom profile has initials avatar');
-    check(prefix('explicit custom selection clears platform metadata; even a matching official URL keeps the default avatar'), () => {
+    const custom = (await state()).profiles.find(item => item.name === '首次设置自定义');
+    assert.ok(custom);
+    created.push(custom.id);
+    await waitForView(custom.id);
+    check(prefix('a newly created custom URL matching an official entry retains the default avatar without platform inference'), () => {
       assert.equal(Object.hasOwn(custom, 'platformId'), false);
       assert.equal(custom.startUrl, new URL(presets[2].launchUrl).href);
-      assert.equal(custom.lastUrl, oldUrl);
     });
-    await edit(first.id);
+    assert.equal(await shell.locator(`${avatar(custom.id)} img`).count(), 0);
+    await edit(custom.id);
     const customEdit = await selection();
-    check(prefix('an existing custom environment reopens its editor with the custom URL visible and editable'), () => {
+    check(prefix('custom editing shows its original URL while locking the URL and every platform mode'), () => {
       assert.deepEqual(customEdit.checked, ['custom']);
       assert.equal(customEdit.hidden, false);
-      assert.equal(customEdit.readOnly, false);
+      assert.equal(customEdit.readOnly, true);
+      assert.equal(customEdit.disabled, true);
+      assert.equal(customEdit.platformsDisabled, true);
       assert.equal(customEdit.url, new URL(presets[2].launchUrl).href);
     });
     await shell.locator('#profile-cancel').click();
     await dialogClosed();
+    const customBefore = await profile(custom.id);
+    const customRejected = await shell.evaluate(async ({ id, platformId }) => {
+      try { await window.browserAPI.updateProfile(id, { notes: '不得保存的备注', platformId }); return null; }
+      catch (error) { return error.message; }
+    }, { id: custom.id, platformId: presets[0].id });
+    const customAfter = await profile(custom.id);
+    check(prefix('a custom environment cannot acquire a platform through another update path'), () => {
+      assert.ok(customRejected?.includes('环境创建后不可修改启动网址或平台'));
+      assert.deepEqual(customAfter, customBefore);
+    });
 
     await shell.locator(key('close', second.id)).click();
     await eventually(async () => !(await state()).openTabs.some(tab => tab.id === second.id), 'preset account closed');

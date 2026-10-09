@@ -396,7 +396,7 @@ function registerIPC() {
     } catch { /* A closing frame cannot checkpoint after it is detached. */ }
     finally { event.returnValue = true; }
   });
-  const serialized = new Set(['create', 'update', 'open', 'close', 'delete', 'overview', 'navigate', 'back', 'forward', 'reload',
+  const serialized = new Set(['create', 'update', 'move', 'open', 'close', 'delete', 'overview', 'navigate', 'back', 'forward', 'reload',
     'diagnostics-start', 'diagnostics-stop', 'diagnostics-save']);
   const handle = (name, action) => ipcMain.handle(`browser:${name}`, async (event, ...args) => {
     if (quitting || !mainWindow || event.sender !== mainWindow.webContents ||
@@ -424,6 +424,7 @@ function registerIPC() {
     await createView(profile.id);
   });
   handle('update', (id, input) => { store.update(id, input); });
+  handle('move', (id, beforeId) => { store.move(id, beforeId); });
   handle('open', async id => { store.open(id); await createView(id); });
   handle('close', async id => {
     store.get(id);

@@ -113,27 +113,15 @@ class ProfileStore {
 
   update(id, input) {
     const profile = this.get(id);
+    // Launch settings belong to the environment's original identity. Check
+    // before editing any other field, and never normalize or rewrite legacy
+    // values when an older caller submits an unchanged setting.
+    if ((input.startUrl !== undefined && input.startUrl !== profile.startUrl) ||
+        (input.platformId !== undefined && input.platformId !== profile.platformId)) {
+      throw new Error('环境创建后不可修改启动网址或平台');
+    }
     if (input.name !== undefined) profile.name = textField(input.name, 60, '环境名称', false);
     if (input.notes !== undefined) profile.notes = textField(input.notes, 500, '备注');
-    if (input.platformId !== undefined) {
-      const preset = platformPreset(input.platformId);
-      if (preset) {
-        profile.platformId = preset.id;
-        profile.startUrl = preset.launchUrl;
-      } else {
-        delete profile.platformId;
-        if (input.startUrl !== undefined) profile.startUrl = normalizeUrl(input.startUrl);
-      }
-    } else if (input.startUrl !== undefined) {
-      const startUrl = normalizeUrl(input.startUrl);
-      const preset = PLATFORM_BY_ID.get(profile.platformId);
-      if (preset && startUrl === normalizeUrl(preset.launchUrl)) {
-        profile.startUrl = preset.launchUrl;
-      } else {
-        delete profile.platformId;
-        profile.startUrl = startUrl;
-      }
-    }
     if (input.color !== undefined) {
       if (!COLORS.includes(input.color)) throw new Error('请选择有效的环境颜色');
       profile.color = input.color;
@@ -141,6 +129,29 @@ class ProfileStore {
     this.state.profiles[this.state.profiles.findIndex(item => item.id === id)] = profile;
     this.save();
     return structuredClone(profile);
+  }
+
+  move(id, beforeId = null) {
+    this.get(id);
+    if (beforeId !== null) this.get(beforeId);
+    if (id === beforeId) return;
+
+    // Resolve against the latest list rather than replacing it with a client
+    // snapshot, so environments created since drag-start remain in the list.
+    const moving = this.state.profiles.find(profile => profile.id === id);
+    const reordered = this.state.profiles.filter(profile => profile.id !== id);
+    const index = beforeId === null ? reordered.length : reordered.findIndex(profile => profile.id === beforeId);
+    reordered.splice(index, 0, moving);
+    if (reordered.every((profile, position) => profile === this.state.profiles[position])) return;
+
+    const previous = this.state.profiles;
+    this.state.profiles = reordered;
+    try {
+      this.save();
+    } catch (error) {
+      this.state.profiles = previous;
+      throw error;
+    }
   }
 
   open(id) {
