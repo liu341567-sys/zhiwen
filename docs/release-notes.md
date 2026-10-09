@@ -10,6 +10,8 @@
 
 临时覆盖时以当前网页的内存画面承接背景，网页实例继续保留，关闭后恢复实时页面；临时画面不保存或上传。界面配置使用独立文件，不修改账号清单结构、启动网址或浏览器登录机制，无需数据迁移。
 
-本轮本地及 Windows 检查的实际结果见 [验证记录](https://github.com/liu341567-sys/zhiwen/blob/main/docs/validation.md)。Windows 安装及发布验收待完成，下载链接在成功后更新。
+本地通过 73 项单元、语法、23 项隔离、16 项兼容性、432 项既有窗口 UI、51 项列表稳定性及 36 项导航专项。[Windows 主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37913866939)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37913984475)均通过 73 项单元、语法、23 项隔离、16 项兼容性、原生 DPAPI、357 项既有 UI、51 项列表及 36 项导航专项；三档实际 DPR 的导航检查各 12 项。实际安装后的模块切换、规划菜单、收起 / 覆盖 / 展开、网页令牌未重载、图标与列表、排序和锁定、运行 / 退出、重启账号恢复及卸载通过。缩放不代表切换 Windows 物理显示器 DPI。
+
+[v0.1.10](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.10)已公开，发布页与三个附件匿名直接下载最终 HTTP 200，实际 GET 校验文件的自身摘要及两行附件摘要与 API 一致。下载 [安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.10/Qiye-Setup-0.1.10-x64.exe)后运行安装程序；也可下载 [ZIP 版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.10/Qiye-0.1.10-x64.zip)，完整解压后运行 `栖页.exe`。[SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.10/SHA256SUMS.txt)提供校验值，完整结果见 [验证记录](https://github.com/liu341567-sys/zhiwen/blob/main/docs/validation.md)。
 
 更新前正常退出旧版并备份 `%APPDATA%\栖页` 数据目录，原账号环境继续沿用。真实平台登录仍需 Windows 实机复测。
