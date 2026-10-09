@@ -17,12 +17,45 @@ async function verifyInteractions(context) {
   const disk = () => JSON.parse(fs.readFileSync(path.join(directory, 'profiles.json'), 'utf8'));
   const sidebarOrder = () => shell.locator('.profile-row .profile-open').evaluateAll(nodes =>
     nodes.map(node => node.dataset.focusKey.slice('open:'.length)));
-  const sidebarIdentity = () => shell.locator('.profile-row').evaluateAll(nodes => nodes.map(node => {
-    const avatar = node.querySelector('.profile-icon');
-    return { id: node.dataset.profileId, name: node.querySelector('.profile-name').textContent,
-      platformId: avatar.dataset.platformId || null, image: avatar.querySelector('img')?.currentSrc || null,
-      initial: avatar.textContent, tint: getComputedStyle(avatar).backgroundColor, active: node.classList.contains('active') };
-  }));
+  const sidebarIdentity = async (profiles, activeId) => {
+    // Read current rows inside one renderer task: a CDP-resolved element array
+    // may detach when a queued state broadcast replaces the sidebar. Wait for
+    // the exact account set, active row and images before sampling identities.
+    let last, previous, settled;
+    try {
+      await eventually(async () => {
+        last = await shell.evaluate(({ profiles, activeId }) => {
+          const nodes = [...document.querySelectorAll('#profile-list .profile-row')];
+          const ids = nodes.map(node => node.dataset.profileId);
+          const activeIds = nodes.filter(node => node.classList.contains('active')).map(node => node.dataset.profileId);
+          const matchesOrder = ids.length === profiles.length && ids.every((id, index) => id === profiles[index].id);
+          const matchesActive = activeIds.length === (activeId ? 1 : 0) && (!activeId || activeIds[0] === activeId);
+          const ready = matchesOrder && matchesActive && nodes.every((node, index) => {
+            const avatar = node.querySelector('.profile-icon');
+            const box = avatar?.getBoundingClientRect();
+            return node.isConnected && avatar?.isConnected && box.width === 36 && box.height === 36 &&
+              [...avatar.querySelectorAll('img')].every(image => image.isConnected && image.complete && image.naturalWidth > 0 && !image.hidden && image.currentSrc);
+          });
+          const records = ready ? nodes.map(node => {
+            const avatar = node.querySelector('.profile-icon');
+            return { id: node.dataset.profileId, name: node.querySelector('.profile-name').textContent,
+              platformId: avatar.dataset.platformId || null, image: avatar.querySelector('img')?.currentSrc || null,
+              initial: avatar.textContent, tint: getComputedStyle(avatar).backgroundColor, active: node.classList.contains('active') };
+          }) : null;
+          return { ready, ids, activeIds, records };
+        }, { profiles, activeId });
+        const serialized = last.ready && JSON.stringify(last.records);
+        if (serialized && serialized === previous) { settled = last.records; return true; }
+        previous = serialized;
+        return false;
+      }, 'connected sidebar identities, local images and the latest active row settle');
+    } catch (error) {
+      error.uiDetails = { check: 'sidebarIdentity readiness', expectedCount: profiles.length, actualCount: last?.ids.length,
+        expectedActiveId: activeId, actualActiveIds: last?.activeIds, ready: last?.ready };
+      throw error;
+    }
+    return settled;
+  };
   const moved = (list, id, beforeId = null) => {
     const result = list.filter(value => value !== id);
     result.splice(beforeId === null ? result.length : result.indexOf(beforeId), 0, id);
@@ -228,7 +261,7 @@ async function verifyInteractions(context) {
 
     await shell.locator('#profile-list').evaluate(node => { node.scrollTop = 0; });
     const beforeDrag = await state();
-    const identitiesBeforeDrag = new Map((await sidebarIdentity()).map(record => [record.id, record]));
+    const identitiesBeforeDrag = new Map((await sidebarIdentity(beforeDrag.profiles, beforeDrag.activeId)).map(record => [record.id, record]));
     const dragId = originalOrder[0], targetId = originalOrder[1];
     const source = await begin(dragId);
     const sourceVisual = await shell.locator(row(dragId)).evaluate(node => ({ opacity: parseFloat(getComputedStyle(node).opacity), active: node.classList.contains('active') }));
@@ -346,14 +379,30 @@ async function verifyInteractions(context) {
       assert.equal(disk().profiles.find(profile => profile.id === second.id).notes, '后台备注更新期间继续拖动');
     });
     assert.deepEqual(await sidebarOrder(), expected);
-    check(prefix('names, avatar resources, colors and the active highlight follow their original environment IDs after sorting'), () => assert.ok(true));
-    const identitiesAfterDrag = await sidebarIdentity();
-    assert.deepEqual(identitiesAfterDrag.filter(record => record.id !== concurrent.id), expected.filter(id => id !== concurrent.id).map(id => ({ ...identitiesBeforeDrag.get(id), active: id === duringDrag.activeId })));
+    const identitiesAfterDrag = await sidebarIdentity(afterDrag.profiles, afterDrag.activeId);
+    const expectedIdentities = expected.filter(id => id !== concurrent.id).map(id => ({ ...identitiesBeforeDrag.get(id), active: id === duringDrag.activeId }));
+    const originalIdentitiesAfterDrag = identitiesAfterDrag.filter(record => record.id !== concurrent.id);
     const concurrentIdentity = identitiesAfterDrag.find(record => record.id === concurrent.id);
-    assert.equal(concurrentIdentity.name, concurrent.name);
-    assert.equal(concurrentIdentity.initial, Array.from(concurrent.name)[0]);
-    assert.equal(concurrentIdentity.active, true);
-    assert.equal(concurrentIdentity.platformId, null);
+    check(prefix('names, avatar resources, colors and the active highlight follow their original environment IDs after sorting'), () => {
+      try {
+        assert.deepEqual(originalIdentitiesAfterDrag, expectedIdentities);
+        assert.equal(concurrentIdentity.name, concurrent.name);
+        assert.equal(concurrentIdentity.initial, Array.from(concurrent.name)[0]);
+        assert.equal(concurrentIdentity.active, true);
+        assert.equal(concurrentIdentity.platformId, null);
+      } catch (error) {
+        let firstMismatch;
+        for (let index = 0; index < expectedIdentities.length && !firstMismatch; index += 1) {
+          const actual = originalIdentitiesAfterDrag[index], wanted = expectedIdentities[index];
+          for (const field of Object.keys(wanted)) {
+            if (actual?.[field] !== wanted[field]) { firstMismatch = { id: wanted.id, field, actual: actual?.[field], expected: wanted[field] }; break; }
+          }
+        }
+        error.uiDetails = { check: 'sidebar identity after sorting', firstMismatch,
+          concurrent: { id: concurrent.id, actual: concurrentIdentity, expectedName: concurrent.name, expectedInitial: Array.from(concurrent.name)[0] } };
+        throw error;
+      }
+    });
     const account = await viewScript(ids[0], "({value:localStorage.getItem('ui-account'),cookie:document.cookie})");
     check(prefix('sorting retains the existing isolated account cookie and localStorage'), () => {
       assert.equal(account.value, 'synthetic-A');

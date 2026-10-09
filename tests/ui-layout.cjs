@@ -442,4 +442,12 @@ async function main() {
   }
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; });
+main().catch(error => {
+  console.error(error);
+  // Keep a compact diagnostic last so Windows CI retains the cause when a
+  // deepEqual assertion prints a long array diff before this line.
+  console.log(JSON.stringify({ uiFailure: { name: error.name, message: String(error.message).slice(0, 500),
+    stack: String(error.stack || '').split('\n').filter(line => /^\s+at /.test(line)).slice(0, 6),
+    details: error.uiDetails || null } }));
+  process.exitCode = 1;
+});

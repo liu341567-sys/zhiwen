@@ -16,8 +16,15 @@ if ($testExitCode -eq 0) {
   Write-Host "::notice title=Windows UI scaling measurements::$annotation"
 }
 if ($testExitCode -ne 0) {
-  $details = (Get-Content -LiteralPath $logPath -Tail 40) -join "`n"
-  $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-  Write-Host "::error title=Windows UI and display scaling checks failed::$details"
+  $failure = @(Get-Content -LiteralPath $logPath | Where-Object { $_ -match '^\{"uiFailure":' })
+  $details = if ($failure.Count) { $failure[-1] } else { (Get-Content -LiteralPath $logPath -Tail 12) -join "`n" }
+  # Keep every diagnostic chunk below GitHub's annotation limit, including
+  # Chinese text. The concise failure record includes the error and stack.
+  for ($offset = 0; $offset -lt $details.Length; $offset += 800) {
+    $part = $details.Substring($offset, [Math]::Min(800, $details.Length - $offset))
+    $part = $part.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+    $number = 1 + [Math]::Floor($offset / 800)
+    Write-Host "::error title=Windows UI failure details ${number}::$part"
+  }
 }
 exit $testExitCode
