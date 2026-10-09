@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('browserAPI', {
   setOverlayVisible: visible => ipcRenderer.invoke('browser:overlay', visible),
   showToast: notification => ipcRenderer.invoke('browser:toast', notification),
   positionToast: bounds => ipcRenderer.invoke('browser:toast', { bounds }),
+  updateUIPreferences: preferences => ipcRenderer.invoke('browser:ui-preferences', preferences),
+  setNavigationOverlay: visible => ipcRenderer.invoke('browser:navigation-overlay', visible),
   startLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-start'),
   getLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-get'),
   stopLoginDiagnostics: () => ipcRenderer.invoke('browser:diagnostics-stop'),

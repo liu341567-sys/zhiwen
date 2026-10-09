@@ -168,4 +168,4 @@ if (!$successful) {
   throw $failureMessage
 }
 Write-Host "Installed application and branding verification passed. Screenshots and JSON: $outputDirectory"
-Write-Host '::notice title=Installed Windows application verification passed::Verified source-matching PE icon frames, desktop and start-menu shortcuts, AppUserModelID, packaged wordmark, nine local platform logos, platform association and icon restoration, saved environment order, locked launch configuration, fixed creation header/footer, native installed startup, normal WM_CLOSE shutdown and account data restoration after restart.'
+Write-Host '::notice title=Installed Windows application verification passed::Verified source-matching PE icon frames, desktop and start-menu shortcuts, AppUserModelID, packaged wordmark, nine local platform logos, platform association and icon restoration, saved environment order, locked launch configuration, fixed creation header/footer, three-level navigation and temporary sidebar cover without account reload, native installed startup, normal WM_CLOSE shutdown and account data restoration after restart.'

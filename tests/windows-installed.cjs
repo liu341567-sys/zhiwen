@@ -359,6 +359,36 @@ async function main() {
       sessionStorage.setItem('installedAccount', 'native-preview');
     });
     const creationLayout = await assertInstalledCreationLayout(shell, accountPage, outputDirectory);
+    const nativeToken = await accountPage.evaluate(() => window.__navigationToken = crypto.randomUUID());
+    const initialNavigationLayout = await shell.evaluate(() => {
+      const r = document.querySelector('.main-panel').getBoundingClientRect();
+      return { x: r.x, width: r.width };
+    });
+    await shell.locator('button[data-module="publish"]').click();
+    await shell.locator('#planned-module').waitFor({ state: 'visible' });
+    assert.equal(await shell.locator('.secondary-menu-button:disabled').count(), 5);
+    assert.equal((await shell.evaluate(() => browserAPI.getState())).activeId, id);
+    await shell.locator('button[data-module="environment"]').click();
+    await shell.locator('#sidebar-collapse').click();
+    await shell.waitForFunction(() => document.querySelector('.app-shell').classList.contains('sidebar-collapsed'));
+    const collapsedNavigationLayout = await shell.evaluate(() => {
+      const r = document.querySelector('.main-panel').getBoundingClientRect();
+      return { x: r.x, width: r.width };
+    });
+    assert.equal(collapsedNavigationLayout.x, 64);
+    assert.equal(collapsedNavigationLayout.width - initialNavigationLayout.width, 240);
+    await shell.locator('button[data-module="environment"]').click();
+    await shell.waitForFunction(() => document.querySelector('.app-shell').classList.contains('sidebar-overlay'));
+    assert.deepEqual(await shell.evaluate(() => {
+      const r = document.querySelector('.main-panel').getBoundingClientRect(); return { x: r.x, width: r.width };
+    }), collapsedNavigationLayout);
+    assert.equal(await shell.locator('#navigation-page-frame').isVisible(), true);
+    await shell.locator('#sidebar-overlay-close').click();
+    await shell.locator('#sidebar-expand').click();
+    assert.equal(await accountPage.evaluate(() => window.__navigationToken), nativeToken,
+      'Installed navigation and cover mode cannot reload the account');
+    assertAccount(await accountState(accountPage));
+
     await shell.evaluate(() => {
       window.__installedStableRows = [...document.querySelectorAll('.profile-row')].map(row => ({ id: row.dataset.profileId,
         row, avatar: row.querySelector('.profile-icon'), image: row.querySelector('img') }));
@@ -447,9 +477,10 @@ async function main() {
       localPlatformImageCount: platformImages.length, platformAssociationAndIconRestored: true,
       profileOrderRestored: true, launchConfigurationLocked: true,
       fixedCreationHeaderAndFooter: true, creationLayout,
+      threeLevelNavigationAndTemporaryCover: true, plannedPublishingNavigationOnly: true,
       stableSidebarRowsAndImages: true, floatingToastWithoutSidebarLayoutChanges: true,
     }, null, 2));
-    console.log('Installed Windows native launch, original brand ratio, fixed creation header/footer, stable sidebar icons and floating toast, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
+    console.log('Installed Windows native launch, original brand ratio, fixed creation header/footer, stable sidebar icons and floating toast, three-level navigation and temporary cover, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
   } finally {
     await cleanupFailedInstance(instance);
     server.closeAllConnections();

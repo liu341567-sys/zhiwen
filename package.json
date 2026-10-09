@@ -1,7 +1,7 @@
 {
   "name": "qiye-browser",
   "productName": "栖页",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "每个账号，独立栖居。支持持久化独立会话的账号管理浏览器。",
   "main": "src/main.js",
   "license": "UNLICENSED",
@@ -12,8 +12,8 @@
     "start": "electron .",
     "test": "node --test tests/*.test.js",
     "test:integration": "node tests/isolation.cjs && node tests/login-compatibility.cjs",
-    "test:ui": "node tests/ui-layout.cjs && node tests/sidebar-stability.cjs",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/toast-preload.js && node --check src/renderer/toast.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/browser-identity.js && node --check src/login-diagnostics.js && node --check src/renderer/app.js",
+    "test:ui": "node tests/ui-layout.cjs && node tests/sidebar-stability.cjs && node tests/navigation.cjs",
+    "check": "node --check src/main.js && node --check src/ui-preferences.js && node --check src/renderer/navigation.js && node --check src/preload.js && node --check src/toast-preload.js && node --check src/renderer/toast.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/browser-identity.js && node --check src/login-diagnostics.js && node --check src/renderer/app.js",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:win:zip": "electron-builder --win zip --x64",
     "pack:win": "electron-builder --win --x64 --dir"

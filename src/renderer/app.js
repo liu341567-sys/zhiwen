@@ -12,6 +12,14 @@
     { name: 'pink', label: '粉色', value: '#ca7181' },
   ];
   const iconPaths = {
+    panel: ['M3 3h18v18H3zM9 3v18'],
+    upload: ['M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6'],
+    video: ['M3 5h12v14H3zM15 9l6-4v14l-6-4'],
+    image: ['M3 3h18v18H3zM3 16l6-6 5 5 3-3 4 4M15 7h.01'],
+    article: ['M5 3h14v18H5zM8 7h8M8 11h8M8 15h5'],
+    clock: ['M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM12 6v6l4 2'],
+    chart: ['M4 3v18h17M8 16v-5M13 16V7M18 16V4'],
+    sparkles: ['m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6ZM20 2v4M18 4h4'],
     plus: ['M12 5v14M5 12h14'],
     grid: ['M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'],
     search: ['M21 21l-5-5', 'M18 10.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z'],
@@ -62,6 +70,15 @@
   let diagnosticsBusy = false;
   let diagnosticsTimer = null;
   let diagnosticsPollGeneration = 0;
+  const navigation = window.createNavigationController({ api, icon, notify,
+    beforeChange: finishProfileDrag, blocked: dialogIsOpen,
+    changed: () => {
+      renderNavigation();
+      scheduleBounds();
+      api?.positionToast(toastBounds()).catch(() => {});
+    }
+  });
+  window.getNavigationPreferences = () => navigation.preferences();
 
   // Modifier-only key presses must not turn a mouse-focused environment
   // control into a keyboard selection. Keep actual keyboard navigation visible.
@@ -207,12 +224,14 @@
   function applyState(next) {
     if (!next || !Array.isArray(next.profiles) || !Array.isArray(next.openTabs)) return;
     state = next;
+    navigation.initialize(next);
     buildPlatformChoices();
     render();
   }
 
   async function call(method, ...args) {
     if (!api || typeof api[method] !== 'function') throw new Error('浏览器接口尚未连接，请重新启动应用。');
+    if (['openProfile', 'createProfile', 'showOverview'].includes(method)) await navigation.environmentAction();
     const result = await api[method](...args);
     applyState(result);
     return result;
@@ -225,8 +244,8 @@
 
   function toastBounds() {
     const toolbar = document.querySelector('.navigation-toolbar').getBoundingClientRect();
-    const sidebar = document.querySelector('.sidebar').getBoundingClientRect();
-    return { x: Math.round(sidebar.right), y: Math.round(toolbar.bottom), width: Math.round(innerWidth - sidebar.right) };
+    const main = document.querySelector('.main-panel').getBoundingClientRect();
+    return { x: Math.round(main.left), y: Math.round(toolbar.bottom), width: Math.round(main.width) };
   }
 
   function notify(message, type = 'success') {
@@ -317,7 +336,7 @@
       }
       list.hidden = !filtered.length;
       $('sidebar-empty').hidden = Boolean(filtered.length);
-      list.scrollTop = Math.min(savedScroll, Math.max(0, list.scrollHeight - list.clientHeight));
+      if (navigation.environmentVisible()) list.scrollTop = Math.min(savedScroll, Math.max(0, list.scrollHeight - list.clientHeight));
       sidebar.scrollTop = Math.min(savedSidebarScroll, Math.max(0, sidebar.scrollHeight - sidebar.clientHeight));
       previousProfileQuery = query;
     } else {
@@ -534,14 +553,19 @@
 
   function renderNavigation() {
     const tab = activeTab();
-    const browsing = Boolean(tab);
-    $('overview-view').hidden = browsing;
+    const environment = navigation.module() === 'environment';
+    const browsing = environment && Boolean(tab);
+    $('module-view').hidden = environment;
+    document.querySelector('.tab-bar').hidden = !environment;
+    document.querySelector('.navigation-toolbar').hidden = !environment;
+    $('overview-view').hidden = !environment || browsing;
     $('browser-view').hidden = !browsing;
     $('back-button').disabled = !tab || !tab.canGoBack;
     $('forward-button').disabled = !tab || !tab.canGoForward;
     $('reload-button').disabled = !tab;
     $('active-settings').disabled = !tab;
     $('login-diagnostics-button').disabled = !tab;
+    $('settings-edit-environment').disabled = !tab;
     $('address-input').disabled = !tab;
     $('address-environment').hidden = !tab;
     if (previousActiveId !== state.activeId || document.activeElement !== $('address-input')) {
@@ -563,6 +587,7 @@
     $('persistence-warning').hidden = !state.persistenceWarning;
     $('persistence-warning').textContent = state.persistenceWarning || '';
     $('data-path-detail').textContent = state.dataPath || '尚未取得保存位置';
+    navigation.sync();
     if (focusKey) {
       const match = [...document.querySelectorAll('[data-focus-key]')].find((node) => node.dataset.focusKey === focusKey);
       match?.focus({ preventScroll: true });
@@ -575,6 +600,9 @@
     if (boundsFrame) return;
     boundsFrame = requestAnimationFrame(() => {
       boundsFrame = 0;
+      // Hidden module panes have zero geometry. Preserve the running account's
+      // viewport instead of resizing it to zero on a navigation switch.
+      if (navigation.module() !== 'environment') return;
       const rect = $('browser-viewport').getBoundingClientRect();
       const browsing = Boolean(activeTab());
       const bounds = { x: Math.round(rect.x), y: Math.round(rect.y), width: browsing ? Math.round(rect.width) : 0, height: browsing ? Math.round(rect.height) : 0 };
@@ -887,6 +915,7 @@
   for (const id of ['sidebar-overview', 'error-overview']) $(id).addEventListener('click', () => action('showOverview'));
   $('profile-search').addEventListener('input', () => { finishProfileDrag(); renderProfiles(); });
   $('active-settings').addEventListener('click', () => { const profile = findProfile(state.activeId); if (profile) openProfileDialog(profile); });
+  $('settings-edit-environment').addEventListener('click', () => { const profile = findProfile(state.activeId); if (profile) openProfileDialog(profile); });
   $('login-diagnostics-button').addEventListener('click', openDiagnosticsDialog);
   $('diagnostics-start').addEventListener('click', () => runDiagnosticsAction('startLoginDiagnostics'));
   $('diagnostics-stop').addEventListener('click', () => runDiagnosticsAction('stopLoginDiagnostics'));

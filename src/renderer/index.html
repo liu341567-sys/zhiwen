@@ -6,11 +6,20 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>栖页 · 账号工作空间</title>
     <link rel="stylesheet" href="./styles.css" />
+    <script src="./navigation.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
-  <body>
+  <body class="navigation-loading">
     <div class="app-shell">
-      <aside class="sidebar" aria-label="环境管理">
+      <nav class="global-navigation" aria-label="全局功能导航">
+        <img class="rail-logo" src="../assets/qiye.png" alt="栖页" draggable="false" />
+        <div id="primary-navigation" class="primary-navigation"></div>
+        <div id="pinned-navigation" class="pinned-navigation"></div>
+        <button id="sidebar-expand" class="rail-button rail-layout-button" type="button" aria-label="展开二级侧栏" title="展开二级侧栏" hidden><span data-icon="panel"></span><span>展开</span></button>
+      </nav>
+      <aside id="secondary-sidebar" class="sidebar" aria-label="二级功能侧栏">
+        <header class="secondary-heading"><h2 id="secondary-title">环境管理</h2><button id="sidebar-collapse" class="icon-button" type="button" aria-label="收起二级侧栏" title="收起二级侧栏"><span data-icon="panel"></span></button><button id="sidebar-overlay-close" class="icon-button" type="button" aria-label="关闭临时侧栏" hidden><span data-icon="x"></span></button></header>
+        <div id="environment-sidebar-content" class="environment-sidebar-content">
         <div class="brand">
           <img class="brand-logo" src="../assets/qiye-wordmark.png" alt="栖页" draggable="false" />
           <span class="brand-subtitle">账号工作空间</span>
@@ -28,9 +37,12 @@
           <button id="data-path-button" class="text-button data-path-button" type="button" aria-label="查看环境数据保存位置">查看保存位置<span data-icon="chevron-right"></span></button>
           <div id="data-path-detail" class="data-path-detail" hidden></div>
         </div>
+        </div>
+        <div id="module-sidebar-content" class="module-sidebar-content" hidden></div>
       </aside>
 
       <main class="main-panel">
+        <button id="sidebar-overlay-backdrop" class="sidebar-overlay-backdrop" type="button" aria-label="关闭临时侧栏" hidden></button>
         <div class="tab-bar" aria-label="已打开环境">
           <div id="tab-list" class="tab-list" role="tablist" aria-label="环境标签页"></div>
           <button id="tab-create" class="icon-button new-tab-button" type="button" title="新建独立环境 (Ctrl / ⌘ + T)" aria-label="新建独立环境"><span data-icon="plus"></span></button>
@@ -50,6 +62,14 @@
           <button id="login-diagnostics-button" class="text-button login-diagnostics-button" type="button" disabled><span data-icon="info"></span>登录诊断</button>
           <button id="active-settings" class="icon-button" type="button" title="编辑当前环境" aria-label="编辑当前环境" disabled><span data-icon="sliders"></span></button>
         </div>
+        <section id="module-view" class="module-view" aria-label="功能模块" hidden>
+          <div id="planned-module" class="planned-module" hidden><span id="planned-icon" class="module-symbol"></span><span class="planned-badge">规划中</span><h1 id="planned-title"></h1><p id="planned-description"></p><button id="module-return" class="button button-primary" type="button">返回环境管理</button></div>
+          <div id="settings-module" hidden>
+            <div class="module-page-heading"><h1>系统设置</h1><p>管理界面布局，查看本机环境数据。</p></div>
+            <section id="settings-layout" class="settings-section"><h2>界面布局</h2><p>二级侧栏收起后，可点击一级导航临时查看菜单。</p><button id="settings-sidebar-toggle" class="button button-primary" type="button">收起二级侧栏</button></section>
+            <section id="settings-storage" class="settings-section"><h2>本地数据</h2><p>各环境的浏览数据独立保存。关闭标签页不会删除环境数据。</p><p id="settings-data-path" class="settings-data-path"></p><button id="settings-edit-environment" class="button button-secondary" type="button" disabled>编辑当前环境</button></section>
+          </div>
+        </section>
         <section id="overview-view" class="overview-view" aria-label="工作空间总览">
           <div class="overview-topline"><span class="workspace-label">WORKSPACE</span><span class="local-badge"><span class="status-dot"></span>本地工作空间</span></div>
           <div class="welcome-panel">
@@ -80,6 +100,7 @@
         <section id="browser-view" class="browser-view" aria-label="网页内容" hidden>
           <div id="browser-loading" class="browser-loading" hidden></div>
           <div id="browser-viewport" class="browser-viewport">
+            <img id="navigation-page-frame" class="navigation-page-frame" alt="" aria-hidden="true" hidden />
             <div id="browser-error" class="browser-error" hidden><span class="error-icon" data-icon="globe"></span><h2>暂时无法打开这个页面</h2><p id="browser-error-message"></p><button id="error-reload" class="button button-primary" type="button"><span data-icon="reload"></span>重新加载</button><button id="error-overview" class="text-button" type="button">返回工作空间</button></div>
           </div>
         </section>

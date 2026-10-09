@@ -601,3 +601,73 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Three-level navigation: the rail and account list never share scrolling. */
+:root { --rail-width: 64px; --sidebar-width: 240px; }
+.navigation-loading .app-shell { visibility: hidden; }
+.app-shell { position: relative; grid-template-columns: var(--rail-width) var(--sidebar-width) minmax(0, 1fr); }
+.app-shell.sidebar-collapsed { grid-template-columns: var(--rail-width) 0 minmax(0, 1fr); }
+.global-navigation { grid-column: 1; display: flex; flex-direction: column; min-height: 0; padding: 12px 6px 8px; border-right: 1px solid var(--line); background: var(--sidebar-surface); z-index: 22; }
+.rail-logo { width: 42px; height: 42px; margin: 0 auto 16px; object-fit: contain; flex-shrink: 0; }
+.primary-navigation { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.pinned-navigation { display: flex; flex-direction: column; padding-top: 8px; flex-shrink: 0; }
+.rail-button { width: 100%; min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 7px 2px; border: 0; border-radius: var(--radius-control); color: var(--secondary); background: transparent; font-size: var(--font-small); flex-shrink: 0; }
+.rail-button svg { width: 22px; height: 22px; }
+.rail-button:hover { color: var(--sidebar-action); background: var(--sidebar-hover); }
+.rail-button.active { color: var(--on-brand); background: var(--sidebar-action); }
+.rail-button.active:hover { background: var(--sidebar-action-hover); }
+.rail-layout-button { margin-top: 6px; }
+.sidebar { grid-column: 2; padding: 12px; overflow: hidden; }
+.secondary-heading { display: flex; align-items: center; min-height: 34px; gap: 6px; margin-bottom: 12px; flex-shrink: 0; }
+.secondary-heading h2 { margin: 0; flex: 1; font-size: var(--font-title); font-weight: 650; }
+.environment-sidebar-content { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.sidebar .brand { padding: 0 4px; margin-bottom: 12px; gap: 3px; }
+.sidebar .brand-logo { width: 136px; }
+.sidebar .brand-subtitle { letter-spacing: .5px; }
+.sidebar .overview-button { margin-top: 8px; }
+.sidebar .sidebar-heading { margin: 12px 8px 10px; }
+.sidebar .profile-list { flex: 1 1 0; min-height: 48px; max-height: none; overscroll-behavior: contain; }
+.sidebar .sidebar-empty { flex: 1 1 0; min-height: 48px; }
+.sidebar .sidebar-bottom { flex: 0 1 auto; min-height: 70px; max-height: 112px; margin-top: 8px; padding-top: 10px; overscroll-behavior: contain; }
+.module-sidebar-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.secondary-menu { display: flex; flex-direction: column; gap: 6px; }
+.secondary-menu-button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px; padding: 10px; border: 0; border-radius: var(--radius-control); background: transparent; text-align: left; }
+.secondary-menu-button svg { width: 18px; height: 18px; flex-shrink: 0; }
+.secondary-menu-button > span:first-of-type { flex: 1; }
+.secondary-menu-button:hover:not(:disabled) { background: var(--sidebar-hover); }
+.secondary-menu-button.active { color: var(--sidebar-action); background: var(--sidebar-selected); }
+.secondary-menu-button:disabled { color: var(--muted); cursor: default; }
+.planned-badge { display: inline-block; padding: 2px 6px; color: var(--muted); background: var(--surface-inset); border-radius: 5px; font-size: var(--font-small); white-space: nowrap; }
+.module-sidebar-note { padding: 12px 10px; color: var(--secondary); font-size: var(--font-small); line-height: 1.8; }
+.main-panel { grid-column: 3; position: relative; }
+.sidebar-collapsed .sidebar { grid-column: auto; grid-row: auto; position: absolute; left: var(--rail-width); top: 0; bottom: 0; width: var(--sidebar-width); visibility: hidden; pointer-events: none; }
+.sidebar-collapsed.sidebar-overlay .sidebar { position: absolute; left: var(--rail-width); top: 0; bottom: 0; width: var(--sidebar-width); padding: 12px; border-right: 1px solid var(--line); visibility: visible; pointer-events: auto; z-index: 21; box-shadow: 6px 0 18px #20293814; animation: sidebar-reveal .16s ease-out; }
+.sidebar-overlay-backdrop { position: absolute; inset: 0; z-index: 20; padding: 0; border: 0; background: #20293816; cursor: default; }
+.navigation-page-frame { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.module-view { flex: 1; min-height: 0; padding: 30px; overflow-y: auto; overscroll-behavior: contain; }
+.planned-module { max-width: 600px; margin: 50px auto; }
+.module-symbol { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; margin-bottom: 18px; color: var(--brand); border-radius: 10px; background: var(--brand-light); }
+.module-symbol svg { width: 25px; height: 25px; }
+.planned-module h1, .module-page-heading h1 { font-size: var(--font-heading); margin: 12px 0; }
+.planned-module p, .module-page-heading p { color: var(--secondary); line-height: 1.8; margin: 0 0 24px; }
+.settings-section { max-width: 760px; padding: 22px; margin: 16px 0; border-radius: var(--radius-panel); background: var(--surface); }
+.settings-section h2 { font-size: var(--font-title); margin: 0 0 10px; }
+.settings-section p { color: var(--secondary); }
+.settings-data-path { padding: 12px; background: var(--surface-inset); border-radius: var(--radius-control); overflow-wrap: anywhere; user-select: text; }
+@keyframes sidebar-reveal { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: translateX(0); } }
+@media (max-height: 550px) {
+  .sidebar { overflow: hidden; padding: 8px 12px; }
+  .secondary-heading { margin-bottom: 8px; }
+  .sidebar .brand { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .sidebar .brand-logo { width: 86px; }
+  .sidebar .brand-subtitle { font-size: var(--font-small); letter-spacing: 0; }
+  .sidebar .sidebar-bottom { max-height: 80px; }
+  .sidebar .sidebar-heading { margin-top: 10px; }
+  .rail-logo { margin-bottom: 10px; }
+  .rail-button { min-height: 54px; }
+  .module-view { padding: 20px; }
+  .planned-module { margin-top: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-collapsed.sidebar-overlay .sidebar { animation: none; }
+}

@@ -3,6 +3,8 @@
 const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { UIPreferences } = require('./ui-preferences');
+const navigationModules = require('./navigation-modules.json');
 const { ProfileStore, normalizeUrl, partitionFor } = require('./profile-store');
 const { CookieVault } = require('./cookie-vault');
 const { userAgentForMode } = require('./browser-identity');
@@ -43,6 +45,9 @@ let toastHeight = 58;
 let toastBounds = { x: 264, y: 116, width: 900 };
 let toastFadeTimer;
 let toastHideTimer;
+let uiPreferences;
+let navigationOverlay = false;
+let windowSizeTimer;
 const diagnostics = new LoginDiagnostics();
 let diagnosticGeneration = 0;
 let samplingDiagnostics = false;
@@ -92,6 +97,8 @@ function snapshot() {
   const state = store.getState();
   return {
     profiles: state.profiles,
+    navigationModules,
+    uiPreferences: uiPreferences.get(),
     platformPresets,
     activeId: state.activeId,
     openTabs: state.openIds.map(id => {
@@ -128,9 +135,10 @@ function updateViews() {
     height: Math.max(0, Math.min(bounds.height, height - bounds.y))
   };
   const activeId = store.getState().activeId;
+  const environmentMode = uiPreferences.get().activeModule === 'environment';
   for (const [id, entry] of views) {
     entry.view.setBounds(safeBounds);
-    entry.view.setVisible(id === activeId && !overlayVisible && !entry.error && safeBounds.width > 0 && safeBounds.height > 0);
+    entry.view.setVisible(id === activeId && environmentMode && !navigationOverlay && !overlayVisible && !entry.error && safeBounds.width > 0 && safeBounds.height > 0);
   }
   updateToastView();
 }
@@ -419,6 +427,35 @@ function activePage() {
 }
 
 function registerIPC() {
+  const managerRequest = event => {
+    if (quitting || !mainWindow || event.sender !== mainWindow.webContents ||
+        event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('此页面无权修改界面布局');
+  };
+  ipcMain.handle('browser:ui-preferences', (event, next) => {
+    managerRequest(event);
+    const before = uiPreferences.get().activeModule;
+    const preferences = uiPreferences.update(next);
+    if (preferences.activeModule !== before) updateViews();
+    return preferences;
+  });
+  ipcMain.handle('browser:navigation-overlay', async (event, visible) => {
+    managerRequest(event);
+    if (typeof visible !== 'boolean') throw new Error('无效的临时侧栏状态');
+    let frame = null;
+    const activeId = store.getState().activeId;
+    const view = views.get(activeId)?.view;
+    if (visible && !navigationOverlay && uiPreferences.get().activeModule === 'environment' && view?.getVisible()) {
+      try {
+        // A native webpage covers HTML overlays. Keep its instance and full
+        // viewport, displaying an in-memory frame while the sidebar is over it.
+        // This image never leaves the manager or gets written to disk.
+        frame = (await view.webContents.capturePage()).toDataURL();
+      } catch { /* Navigation can complete while the frame is being captured. */ }
+    }
+    navigationOverlay = visible;
+    updateViews();
+    return { frame };
+  });
   ipcMain.handle('browser:toast', (event, next) => {
     if (quitting || !mainWindow || event.sender !== mainWindow.webContents ||
         event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('此页面无权显示提示');
@@ -604,9 +641,10 @@ async function createWindow() {
   // Work-area sizes are device-independent pixels, so a scaled display must
   // not receive a window or minimum size larger than its available desktop.
   const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const size = uiPreferences.get().windowSize;
   mainWindow = new BrowserWindow({
-    width: Math.min(1440, workArea.width),
-    height: Math.min(940, workArea.height),
+    width: Math.min(size?.width || 1440, workArea.width),
+    height: Math.min(size?.height || 940, workArea.height),
     minWidth: Math.min(900, workArea.width),
     minHeight: Math.min(600, workArea.height),
     title: '栖页 · 账号工作空间',
@@ -627,6 +665,14 @@ async function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
   mainWindow.on('resize', updateViews);
+  mainWindow.on('resize', () => {
+    clearTimeout(windowSizeTimer);
+    windowSizeTimer = setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isMaximized()) return;
+      const { width, height } = mainWindow.getBounds();
+      try { uiPreferences.update({ windowSize: { width, height } }); } catch { /* Keep the live layout on a write failure. */ }
+    }, 180);
+  });
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('close', event => {
     if (!canQuit) { event.preventDefault(); app.quit(); }
@@ -649,6 +695,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     try {
       store = new ProfileStore(app.getPath('userData'));
+      uiPreferences = new UIPreferences(app.getPath('userData'));
       vault = new CookieVault(app.getPath('userData'), safeStorage);
       registerIPC();
       const startup = mutationQueue.then(() => createWindow());
@@ -665,8 +712,21 @@ if (!app.requestSingleInstanceLock()) {
     event.preventDefault();
     if (quitting) return;
     quitting = true;
+    clearTimeout(windowSizeTimer);
     stopDiagnostics('app-exit');
     (async () => {
+      // Checkpoint even the last scroll/search gesture, before delayed renderer
+      // saves stop. It only updates the separate optional UI preference file.
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          const next = await mainWindow.webContents.executeJavaScript('window.getNavigationPreferences?.()');
+          if (next) uiPreferences.update(next);
+          if (!mainWindow.isMaximized() && !mainWindow.isMinimized()) {
+            const { width, height } = mainWindow.getBounds();
+            uiPreferences.update({ windowSize: { width, height } });
+          }
+        }
+      } catch { /* UI state must not prevent browser data from being flushed. */ }
       await mutationQueue;
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));
       const results = await Promise.allSettled([...sessions.keys()].map(id => flushSession(id)));
