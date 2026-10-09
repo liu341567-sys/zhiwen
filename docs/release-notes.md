@@ -8,6 +8,8 @@
 - 临时菜单仅通过右键一级入口或键盘菜单操作主动呼出；窄窗口下固定按钮也可主动显示覆盖，不改变主区宽度。
 - 环境二级标题改为「账号环境管理」。账号列表、平台图标、蓝色选中、拖拽、弹窗、Toast、启动锁定、隔离及已有登录数据继续沿用。
 
-本轮测试与 Windows 安装、发布结果见 [验证记录](https://github.com/liu341567-sys/zhiwen/blob/main/docs/validation.md)。Windows 安装及发布验收待完成，成功后更新下载链接。
+本地通过 73 项单元、语法、23 项隔离、16 项本地兼容性、432 项既有窗口 UI、51 项列表及 45 项导航专项。[Windows 主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37923557990)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37923577466)均通过 73 项单元、语法、23 项隔离、16 项本地兼容性、原生 DPAPI、357 项既有 UI、51 项列表及 45 项导航专项。实际安装后的新原图比例、固定按钮、收起模块切换、正常退出和重启偏好 / 账号数据恢复、图标与平台关联、排序、锁定及卸载均通过。
+
+[v0.1.11](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.11)已公开，发布页与三个附件的匿名直接下载最终 HTTP 200，实际读取校验文件的自身摘要及两行附件摘要与 API 一致。下载 [Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.11/Qiye-Setup-0.1.11-x64.exe)后运行安装程序，或下载 [ZIP 版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.11/Qiye-0.1.11-x64.zip)并完整解压运行 `栖页.exe`。完整验收边界与 SHA256 见 [验证记录](https://github.com/liu341567-sys/zhiwen/blob/main/docs/validation.md)，三档缩放为实际 Electron DPR，不代表 Windows 物理显示器 DPI 切换。
 
 更新前正常退出旧版，已有账号数据继续保留，无需迁移。测试使用本地网页，不验证真实平台登录。
