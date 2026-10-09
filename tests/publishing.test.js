@@ -504,3 +504,169 @@ test('manual review and staged confirmations do not exhaust the failed-task retr
   store.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('missing image cover produces actionable validation before preview and confirmation; successful batch atomically clears all wizard drafts', async (t) => {
+  const dir = temporary(),
+    service = new PublishingService({
+      directory: dir,
+      profiles: () => [{ id: 'a', name: 'a', platformId: 'douyin' }],
+      notify: () => {},
+    });
+  t.mock.method(require('../src/publishing/media'), 'validate', async () => {});
+  service.scheduler.tick = async () => {};
+  try {
+    service.store.putResource(
+      'video',
+      { name: 'clip', path: '/local/clip.mp4', sha256: 'clip' },
+      'v',
+    );
+    const config = {
+      videoIds: ['v'],
+      platformIds: ['douyin'],
+      accountIds: ['a'],
+      title: { values: ['A'] },
+      topics: { values: ['#AI'] },
+      cover: { mode: 'first' },
+      location: { mode: 'none' },
+      schedule: {
+        mode: 'at',
+        at: new Date(Date.now() + 3600000).toISOString(),
+      },
+    };
+    for (const id of [undefined, '', {}])
+      assert.throws(
+        () => service.preview({ ...config, cover: { mode: 'image', id } }),
+        /选择或导入具体封面/,
+      );
+    assert.throws(
+      () => service.store.resource(undefined, 'image'),
+      /有效的素材或封面/,
+    );
+    const p = service.preview(config);
+    service.saveDraft({ input: config, step: 4, previewId: p.previewId });
+    service.store.setSetting('ui', { page: 'video', step: 4, scroll: {} });
+    const invalid = structuredClone(p.rows);
+    invalid[0].cover = { mode: 'image' };
+    await assert.rejects(
+      service.confirm({ ...p, rows: invalid }),
+      /选择或导入具体封面/,
+    );
+    assert.equal(service.store.tasks().length, 0);
+    assert.equal(service.store.drafts().length, 2);
+    const result = await service.confirm({ ...p, name: 'valid' });
+    assert.equal(service.store.tasks()[0].batchId, result.batchId);
+    assert.equal(service.store.drafts().length, 0);
+    assert.equal(service.store.setting('ui').step, 0);
+  } finally {
+    await service.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('record deletion is atomic, keeps files and snapshots, protects active/uncertain tasks, and persists duplicate publication protection', async () => {
+  const dir = temporary(),
+    service = new PublishingService({
+      directory: dir,
+      profiles: () => [{ id: 'a', name: 'a', platformId: 'douyin' }],
+      notify: () => {},
+    });
+  try {
+    const file = path.join(dir, 'original.mp4');
+    fs.writeFileSync(file, 'original');
+    const ids = ['video', 'image', 'title', 'topics', 'location'].map(
+      (kind) =>
+        service.store.putResource(kind, {
+          path: file,
+          value: 'text',
+          name: kind,
+        }).id,
+    );
+    service.store.addBatch('records', [
+      snapshot('v', 'a'),
+      snapshot('v2', 'a', 1),
+    ]);
+    const [first, second] = service.store.tasks();
+    service.store.log(first.id, 'trace');
+    service.store.setTask(second.id, {
+      status: 'unverified',
+      checkpoint: { submitIntent: true },
+    });
+    assert.throws(
+      () => service.removeTasks({ ids: [first.id], confirmed: false }),
+      /确认/,
+    );
+    assert.throws(
+      () =>
+        service.removeTasks({ ids: [first.id, second.id], confirmed: true }),
+      /核实/,
+    );
+    assert.equal(service.store.tasks().length, 2);
+    assert.equal(service.store.logs(first.id).length, 1);
+    service.scheduler.running.set(first.id, {});
+    assert.throws(
+      () => service.removeTasks({ ids: [first.id], confirmed: true }),
+      /先暂停/,
+    );
+    service.scheduler.running.delete(first.id);
+    service.removeResources(ids);
+    assert.ok(fs.existsSync(file));
+    assert.equal(service.store.tasks()[0].video.name, first.video.name);
+    service.store.setTask(second.id, { status: 'success' });
+    assert.equal(
+      service.removeTasks({ ids: [first.id, second.id], confirmed: true })
+        .removed,
+      2,
+    );
+    assert.equal(service.store.tasks().length, 0);
+    assert.equal(service.store.batches().length, 0);
+    assert.equal(
+      service.store.db.prepare('SELECT count(*) AS n FROM logs').get().n,
+      0,
+    );
+    assert.equal(service.store.setting('deletedPublicationKeys')['a:v2'], true);
+    assert.ok(fs.existsSync(file));
+    const reopen = new PublishingStore(service.directory);
+    assert.equal(reopen.setting('deletedPublicationKeys')['a:v2'], true);
+    reopen.close();
+  } finally {
+    await service.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deleting successful records does not silently allow duplicate confirmation; clearing draft does not touch tasks/resources', async (t) => {
+  const dir = temporary(),
+    service = new PublishingService({
+      directory: dir,
+      profiles: () => [{ id: 'a', name: 'a', platformId: 'douyin' }],
+      notify: () => {},
+    });
+  t.mock.method(require('../src/publishing/media'), 'validate', async () => {});
+  service.scheduler.tick = async () => {};
+  try {
+    service.store.putResource('video', { name: 'clip', sha256: 'v' }, 'v');
+    service.store.addBatch('old', [snapshot('v', 'a')]);
+    const task = service.store.tasks()[0];
+    service.store.setTask(task.id, { status: 'success' });
+    service.removeTasks({ ids: [task.id], confirmed: true });
+    const config = {
+      videoIds: ['v'],
+      accountIds: ['a'],
+      platformIds: ['douyin'],
+      title: { values: ['A'] },
+      topics: { values: [] },
+    };
+    const p = service.preview(config);
+    await assert.rejects(service.confirm(p), /相同视频任务/);
+    await service.confirm({ ...p, allowDuplicates: true });
+    service.saveDraft({ input: config, step: 3 });
+    await service.dispatch('draft-clear');
+    assert.equal(service.store.drafts().length, 0);
+    assert.equal(service.store.list('video').length, 1);
+    assert.equal(service.store.tasks().length, 1);
+    assert.throws(() => service.removeResources([{}]), /无效/);
+  } finally {
+    await service.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -69,6 +69,8 @@ class PublishingStore {
       }));
   }
   resource(id, kind) {
+    if (typeof id !== 'string' || !id || typeof kind !== 'string' || !kind)
+      throw new Error('请选择有效的素材或封面资源');
     const r = this.db
       .prepare('SELECT * FROM resources WHERE id=? AND kind=?')
       .get(id, kind);
@@ -84,7 +86,7 @@ class PublishingStore {
     return this.resource(id, kind);
   }
   removeResource(id) {
-    this.db.prepare('DELETE FROM resources WHERE id=?').run(id);
+    return this.db.prepare('DELETE FROM resources WHERE id=?').run(id).changes;
   }
   saveDraft(data, id = 'current') {
     this.db
@@ -149,7 +151,7 @@ class PublishingStore {
     if (!r) throw new Error('任务不存在');
     return this.decode(r);
   }
-  addBatch(name, tasks) {
+  addBatch(name, tasks, { clearDrafts = false } = {}) {
     return this.transaction(() => {
       const id = randomUUID();
       this.db
@@ -171,6 +173,7 @@ class PublishingStore {
             JSON.stringify(t),
             Date.now(),
           );
+      if (clearDrafts) this.clearDrafts();
       return id;
     });
   }
@@ -215,6 +218,37 @@ class PublishingStore {
     return this.db
       .prepare('SELECT * FROM batches ORDER BY created_at DESC')
       .all();
+  }
+  removeTasks(ids) {
+    return this.transaction(() => {
+      const tasks = ids.map((id) => this.task(id));
+      const history = this.setting('deletedPublicationKeys', {});
+      for (const t of tasks) {
+        if (
+          ['running', 'submitted', 'review', 'unverified'].includes(t.status) ||
+          (t.checkpoint.submitIntent && t.status !== 'success')
+        )
+          throw new Error(
+            '执行中任务请先暂停；已提交或结果待核实的任务请先核实结果',
+          );
+        if (t.status === 'success')
+          history[`${t.accountId}:${t.video.sha256}`] = true;
+      }
+      this.setSetting('deletedPublicationKeys', history);
+      for (const id of ids) {
+        this.db.prepare('DELETE FROM logs WHERE task_id=?').run(id);
+        this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
+      }
+      this.db.exec(
+        'DELETE FROM batches WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.batch_id=batches.id)',
+      );
+      return { removed: tasks.length };
+    });
+  }
+  clearDrafts() {
+    this.db.exec('DELETE FROM drafts');
+    const ui = this.setting('ui', { page: 'video', scroll: {} });
+    this.setSetting('ui', { ...ui, step: 0 });
   }
   recover(now = Date.now()) {
     this.transaction(() => {

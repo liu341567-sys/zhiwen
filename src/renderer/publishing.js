@@ -39,14 +39,14 @@
     page = 'video',
     step = 0,
     ready = false,
-    loading = false,
+    refreshJob = null,
     refreshTimer,
     draftTimer,
     preview = null,
     filters = {},
     selected = new Set(),
     scroll = {};
-  let input = {
+  const freshInput = () => ({
     videoIds: [],
     platformIds: ['douyin'],
     accountIds: [],
@@ -63,7 +63,10 @@
       windows: [{ start: '09:00', end: '11:00', quota: 2 }],
     },
     autoSubmit: false,
-  };
+    overrides: {},
+    previewOrder: [],
+  });
+  let input = freshInput();
   const notify = (message, type = 'success') =>
     window.publishingNotify
       ? window.publishingNotify(message, type)
@@ -108,6 +111,7 @@
   function choice(label, options, value, onChange) {
     const l = E('label', 'publish-control', label),
       c = E('select');
+    c.setAttribute('aria-label', label);
     for (const [id, name] of options) {
       const o = E('option', '', name);
       o.value = id;
@@ -226,12 +230,35 @@
     const body = root.querySelector('.publish-body');
     if (body) scroll[page] = body.scrollTop;
   }
-  async function refresh(render = false) {
-    if (loading) return;
-    loading = true;
+  function refresh(render = false) {
+    // A mutation must obtain a fresh snapshot even if an older read is in flight.
+    if (refreshJob) return refreshJob.then(() => refresh(render));
+    refreshJob = readState(render).finally(() => {
+      refreshJob = null;
+    });
+    return refreshJob;
+  }
+  async function readState(render) {
     try {
       const previous = data;
       data = await cmd('state');
+      if (
+        ready &&
+        ['materials', 'library'].includes(page) &&
+        JSON.stringify([
+          previous?.videos,
+          previous?.library,
+          previous?.covers,
+          previous?.locations,
+        ]) !==
+          JSON.stringify([
+            data.videos,
+            data.library,
+            data.covers,
+            data.locations,
+          ])
+      )
+        render = true;
       if (
         ready &&
         ['video', 'create'].includes(page) &&
@@ -285,8 +312,6 @@
           : error.message;
         root.replaceChildren(E('p', 'publish-error', message));
       }
-    } finally {
-      loading = false;
     }
   }
   function go(next) {
@@ -488,11 +513,9 @@
     );
     if (!inWizard) {
       operations.append(
-        B('从素材库移除', () =>
-          ask('移除选中的素材索引？原视频文件不会删除。', async () => {
-            await cmd('resource-remove', [...selection]);
-            await refresh(true);
-          }),
+        B('删除选中记录', () => deleteResources([...selection])),
+        B('删除当前筛选记录', () =>
+          deleteResources(data.videos.filter(matches).map((v) => v.id)),
         ),
         B('设置分组', () =>
           editText('素材分组', '分组名称', '', async (group) => {
@@ -553,6 +576,8 @@
         cell(r, `${(v.bytes / 1048576).toFixed(1)} MB / ${v.format}`);
         const actions = E('div', 'row-actions');
         actions.append(textButton('预览', () => previewVideo(v)));
+        if (!inWizard)
+          actions.append(textButton('删除记录', () => deleteResources([v.id])));
         if (inWizard && selection.has(v.id))
           actions.append(
             textButton('↑', () => moveVideo(v.id, -1)),
@@ -586,6 +611,56 @@
     }
     fill();
   }
+  function resetWizard() {
+    clearTimeout(draftTimer);
+    input = freshInput();
+    preview = null;
+    step = 0;
+    selected.clear();
+    filters = {};
+    scroll.video = scroll.create = 0;
+    saveUI();
+  }
+  function deleteResources(ids) {
+    if (!ids.length) throw new Error('请先选择记录');
+    ask(
+      `删除 ${ids.length} 条本地资源记录？不会删除原始视频或图片文件，也不会改变已确认任务。`,
+      async () => {
+        const result = await cmd('resource-remove', ids);
+        input.videoIds = input.videoIds.filter((id) => !ids.includes(id));
+        if (
+          preview?.rows.some(
+            (row) => ids.includes(row.videoId) || ids.includes(row.cover?.id),
+          )
+        ) {
+          preview = null;
+          step = Math.min(step, 3);
+        }
+        if (ids.includes(input.cover.id)) input.cover = { mode: 'first' };
+        for (const map of [input.covers, input.overrides])
+          for (const [key, value] of Object.entries(map || {}))
+            if (ids.includes(value.id) || ids.includes(value.cover?.id))
+              delete map[key];
+        selected.clear();
+        saveSoon();
+        await refresh(true);
+        notify(`已删除 ${result.removed} 条本地资源记录，原文件保留`);
+      },
+    );
+  }
+  function deleteTasks(ids) {
+    if (!ids.length) throw new Error('请先选择任务');
+    ask(
+      `删除 ${ids.length} 条本地任务、计划、发布记录及日志？未执行任务将不再执行。不会删除平台作品或本地视频。执行中任务请先暂停；已提交或待核实任务请先核实结果。`,
+      async () => {
+        const r = await cmd('task-remove', { ids, confirmed: true });
+        selected.clear();
+        closeDialogs();
+        await refresh(true);
+        notify(`已删除 ${r.removed} 条本地任务记录`);
+      },
+    );
+  }
   function wizard() {
     const steps = E('div', 'publish-steps');
     ['选择短视频', '选择平台', '选择账号', '配置参数', '任务预览'].forEach(
@@ -614,6 +689,19 @@
         await cmd('draft', { input, step, previewId: preview?.previewId });
         notify('发布草稿已保存');
       }),
+      B('清空当前草稿', () =>
+        ask(
+          '清空本次选择、参数和预览，重新开始？已生成任务和素材库会保留。',
+          async () => {
+            clearTimeout(draftTimer);
+            await cmd('draft-clear');
+            resetWizard();
+            await cmd('draft', { input, step, previewId: null });
+            draw();
+            notify('当前草稿已清空');
+          },
+        ),
+      ),
     );
     if (step > 0)
       right.append(
@@ -1052,6 +1140,7 @@
         c.mode,
         (v) => {
           c.mode = v;
+          if (v === 'frame') c.seconds ??= 0;
           onChange(c);
           p.replaceChildren(coverControl(c, onChange));
         },
@@ -1362,15 +1451,7 @@
           name,
           allowDuplicates,
         });
-        for (const row of preview.rows) {
-          delete input.title.locks?.[row.key];
-          delete input.topics.locks?.[row.key];
-        }
-        preview = null;
-        step = 0;
-        input.overrides = {};
-        input.previewOrder = [];
-        input.autoSubmit = false;
+        resetWizard();
         clearTimeout(draftTimer);
         await cmd('draft', { input, step, previewId: null }).catch((error) =>
           notify(`任务已生成，但草稿保存失败：${error.message}`, 'error'),
@@ -1457,6 +1538,8 @@
         B(label, () => runAction([...selected], action), action === 'start'),
       );
     operations.append(
+      B('删除选中记录', () => deleteTasks([...selected])),
+      B('删除当前筛选记录', () => deleteTasks(visible().map((t) => t.id))),
       B('导出记录', async () => {
         const r = await cmd('export', {
           ids: selected.size ? [...selected] : visible().map((t) => t.id),
@@ -1560,7 +1643,10 @@
         );
         cell(row, state);
         const actions = E('div', 'row-actions');
-        actions.append(textButton('详情 / 日志', () => details(t)));
+        actions.append(
+          textButton('详情 / 日志', () => details(t)),
+          textButton('删除记录', () => deleteTasks([t.id])),
+        );
         if (['manual', 'unverified', 'running', 'paused'].includes(t.status))
           actions.append(
             textButton('人工接管', () => runAction([t.id], 'takeover')),
@@ -1648,6 +1734,16 @@
           ),
         ),
       );
+    actions.append(
+      B('删除记录', () => deleteTasks([t.id])),
+      B('删除整个批次', () =>
+        deleteTasks(
+          data.tasks
+            .filter((row) => row.batchId === t.batchId)
+            .map((row) => row.id),
+        ),
+      ),
+    );
     body.push(actions);
     show('任务详情 · ' + t.accountName, body);
   }
@@ -1660,20 +1756,35 @@
         [
           ['title', '标题'],
           ['topics', '话题组'],
+          ['image', '封面图片'],
+          ['location', '常用定位'],
         ],
         kind,
         (v) => {
           filters.kind = v;
+          selected.clear();
           draw();
         },
       ),
       B(
-        '批量新增',
+        kind === 'image' ? '新增封面' : '批量新增',
         () => {
+          if (kind === 'image')
+            return safe(async () => {
+              const r = await cmd('cover');
+              if (!r.cancelled) {
+                await refresh(true);
+                notify('封面已导入');
+              }
+            })();
           let value = '',
             group = '';
           show(
-            kind === 'title' ? '新增标题' : '新增话题组',
+            kind === 'title'
+              ? '新增标题'
+              : kind === 'location'
+                ? '新增常用定位'
+                : '新增话题组',
             [
               field(
                 '每行一条（话题按整组）',
@@ -1698,13 +1809,20 @@
         },
         true,
       ),
-      B('导入 TXT / Excel', async () => {
+      B(kind === 'image' ? '导入封面' : '导入 TXT / Excel', async () => {
+        if (kind === 'image') {
+          const r = await cmd('cover');
+          if (!r.cancelled) await refresh(true);
+          return;
+        }
+        if (kind === 'location') throw new Error('常用定位请使用批量新增');
         const r = await cmd('library-import', { kind });
         if (r.cancelled) return;
         await refresh(true);
         notify(`新增 ${r.added.length} 条，重复 ${r.duplicates.length} 条`);
       }),
     );
+    if (kind === 'location') toolbar.lastElementChild.disabled = true;
     const search = E('input', 'publish-filter');
     search.type = 'search';
     search.placeholder = '搜索内容或分组';
@@ -1713,31 +1831,65 @@
       filters.library = search.value;
       fill();
     });
-    toolbar.append(search);
+    toolbar.append(
+      search,
+      B('全选当前结果', () => {
+        listResources().forEach((r) => selected.add(r.id));
+        fill();
+      }),
+      B('取消选择', () => {
+        selected.clear();
+        fill();
+      }),
+      B('删除选中记录', () => deleteResources([...selected])),
+      B('删除当前筛选记录', () =>
+        deleteResources(listResources().map((r) => r.id)),
+      ),
+    );
     body.append(
       toolbar,
       note(
-        'Excel 读取每个工作表的第一列；TXT 每行一条，话题组作为整行保存。随机匹配在预览时固定，执行时不会再次随机。',
+        kind === 'image'
+          ? '只保存封面图片路径。删除记录不会删除原图片，也不影响已确认任务。'
+          : kind === 'location'
+            ? '常用定位作为文本配置保存。删除记录不改变已确认任务的定位。'
+            : 'Excel 读取每个工作表的第一列；TXT 每行一条，话题组作为整行保存。随机匹配在预览时固定，执行时不会再次随机。',
       ),
     );
-    const { wrap, body: rows } = table(['内容', '分组', '操作']);
+    const { wrap, body: rows } = table(['选择', '内容', '分组', '操作']);
     body.append(wrap);
-    function fill() {
-      rows.replaceChildren();
-      const list = data.library
+    function listResources() {
+      return (
+        kind === 'image'
+          ? data.covers
+          : kind === 'location'
+            ? data.locations
+            : data.library
+      )
         .filter(
           (r) =>
             r.kind === kind &&
-            `${r.value} ${r.group}`.includes(filters.library || ''),
+            `${r.value || r.name} ${r.group || ''}`.includes(
+              filters.library || '',
+            ),
         )
-        .sort((a, b) => a.order - b.order);
+        .sort((a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt));
+    }
+    function fill() {
+      rows.replaceChildren();
+      const list = listResources();
       for (const [i, r] of list.entries()) {
         const row = E('tr');
-        cell(row, E('div', 'publish-caption', r.value));
+        cell(row, selectBox(r.id, selected));
+        cell(row, E('div', 'publish-caption', r.value || r.name));
         cell(row, r.group || '未分组');
         const actions = E('div', 'row-actions');
         actions.append(
-          textButton('编辑', () => {
+          textButton(kind === 'image' ? '查看路径' : '编辑', () => {
+            if (kind === 'image') {
+              show('封面图片', [E('p', 'publish-help', r.path)]);
+              return;
+            }
             let value = r.value,
               group = r.group;
             show(
@@ -1758,14 +1910,9 @@
               },
             );
           }),
-          textButton('删除', () =>
-            ask('删除此文案？已确认任务不受影响。', async () => {
-              await cmd('resource-remove', [r.id]);
-              await refresh(true);
-            }),
-          ),
+          textButton('删除', () => deleteResources([r.id])),
           textButton('↑', async () => {
-            if (!i) return;
+            if (!i || kind === 'image') return;
             const previous = list[i - 1];
             await cmd('resource-edit', { ...r, order: previous.order });
             await cmd('resource-edit', { ...previous, order: r.order });

@@ -330,6 +330,11 @@ async function run(scale) {
     assert.equal(nextDraft.data.step, 0);
     assert.equal(nextDraft.data.previewId, null);
     assert.equal(nextDraft.data.input.autoSubmit, false);
+    assert.deepEqual(nextDraft.data.input.videoIds, []);
+    assert.deepEqual(nextDraft.data.input.accountIds, []);
+    assert.deepEqual(nextDraft.data.input.title.values, []);
+    assert.deepEqual(nextDraft.data.input.topics.values, []);
+    assert.equal(nextDraft.data.input.schedule.mode, 'now');
     assert.deepEqual(nextDraft.data.input.overrides, {});
     check(
       `publishing-${scale}: native CDP file upload and text fill bind exact accounts without auto-submitting`,
@@ -878,6 +883,293 @@ async function run(scale) {
           '第一期测试标题',
         );
       },
+    );
+    shell.setDefaultTimeout(15000);
+    // A new batch must start empty, while the permanent library remains available.
+    await shell.locator('button[data-module="publish"]').click();
+    await shell.locator('[data-publish-page="video"]').click();
+    assert.equal(
+      await shell.locator('.publish-table input:checked').count(),
+      0,
+    );
+    await shell
+      .locator('.publish-table input[type="checkbox"]')
+      .first()
+      .check();
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    for (const box of await shell.locator('.publish-account input').all())
+      await box.check();
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    await shell
+      .locator('.publish-control textarea')
+      .nth(0)
+      .fill('新的计划标题');
+    await shell
+      .getByLabel('封面方式', { exact: true })
+      .selectOption('image')
+      .catch(async (error) => {
+        console.log(
+          JSON.stringify({
+            publishingDebug: await shell
+              .locator('#publishing-module')
+              .innerText(),
+          }),
+        );
+        throw error;
+      });
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    await pause(200);
+    assert.ok(
+      (await shell.locator('.publish-step.current').innerText()).includes(
+        '配置参数',
+      ),
+    );
+    check(
+      `publishing-${scale}: empty image cover stays in configuration and never reaches an SQLite bind`,
+      () => assert.ok(true),
+    );
+    const coverFile = path.join(dir, 'cover.jpg');
+    fs.copyFileSync(video.thumbnail, coverFile);
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [file],
+      });
+    }, coverFile);
+    await shell.getByRole('button', { name: '导入封面', exact: true }).click();
+    await until(
+      () =>
+        shell
+          .getByLabel('已导入封面', { exact: true })
+          .inputValue()
+          .then(Boolean),
+      'import cover selection',
+    );
+    await shell.getByLabel('执行方式', { exact: true }).selectOption('at');
+    const future = await shell.evaluate(() => {
+      const d = new Date(Date.now() + 3600000);
+      return new Date(d - d.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16);
+    });
+    await shell.getByLabel('计划开始执行时间', { exact: true }).fill(future);
+    await shell.getByRole('button', { name: '下一步', exact: true }).click();
+    await shell
+      .getByRole('button', { name: '确认生成并执行', exact: true })
+      .click();
+    let confirm = shell.locator('.publish-dialog[open]');
+    await confirm.getByLabel('批次名称', { exact: true }).fill('清理测试批次');
+    await confirm.getByRole('checkbox').check();
+    await confirm
+      .getByRole('button', { name: '确认生成并执行', exact: true })
+      .click();
+    await until(
+      () => command('state').then((state) => state.tasks.length === 4),
+      'second planned batch',
+    );
+    const afterBatch = await command('state');
+    const blank = afterBatch.drafts.find((d) => d.id === 'current').data;
+    assert.deepEqual(blank.input.videoIds, []);
+    assert.deepEqual(blank.input.accountIds, []);
+    assert.deepEqual(blank.input.title.values, []);
+    assert.equal(blank.input.cover.mode, 'first');
+    assert.equal(blank.input.schedule.mode, 'now');
+    assert.equal(blank.previewId, null);
+    assert.equal(
+      afterBatch.tasks.filter((t) => t.title === '新的计划标题').length,
+      2,
+    );
+    check(
+      `publishing-${scale}: valid local image batch confirms and resets every wizard field without changing snapshots`,
+      () => assert.ok(true),
+    );
+    await shell.locator('[data-publish-page="video"]').click();
+    await shell
+      .locator('.publish-table input[type="checkbox"]')
+      .first()
+      .check();
+    await shell.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await shell
+      .getByRole('button', { name: '清空当前草稿', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '关闭', exact: true })
+      .click();
+    assert.equal(
+      await shell.locator('.publish-table input:checked').count(),
+      1,
+    );
+    await shell
+      .getByRole('button', { name: '清空当前草稿', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await until(
+      () =>
+        shell
+          .locator('.publish-table input:checked')
+          .count()
+          .then((n) => n === 0),
+      'clear draft',
+    );
+    assert.equal((await command('state')).tasks.length, 4);
+    check(
+      `publishing-${scale}: cancel preserves draft and explicit clear resets only the unsubmitted wizard`,
+      () => assert.ok(true),
+    );
+    await shell.locator('[data-publish-page="plan"]').click();
+    await shell
+      .getByPlaceholder('视频、账号、标题或批次搜索')
+      .fill('清理测试批次');
+    await shell
+      .locator('.publish-table tbody tr')
+      .first()
+      .getByRole('button', { name: '删除记录', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await until(
+      () => command('state').then((state) => state.tasks.length === 3),
+      'delete planned record',
+    );
+    await shell.locator('[data-publish-page="tasks"]').click();
+    await shell
+      .getByPlaceholder('视频、账号、标题或批次搜索')
+      .fill('清理测试批次');
+    await shell
+      .getByRole('button', { name: '全选当前结果', exact: true })
+      .click();
+    await shell
+      .getByRole('button', { name: '删除选中记录', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '关闭', exact: true })
+      .click();
+    assert.equal((await command('state')).tasks.length, 3);
+    await shell
+      .getByRole('button', { name: '删除选中记录', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await until(
+      () => command('state').then((state) => state.tasks.length === 2),
+      'delete selected task record',
+    ).catch(async (error) => {
+      console.log(
+        JSON.stringify({
+          deleteDebug: await shell.locator('#publishing-module').innerText(),
+          dialogs: await shell.locator('.publish-dialog').allTextContents(),
+          state: (await command('state')).tasks.map((t) => ({
+            id: t.id,
+            status: t.status,
+            title: t.title,
+          })),
+        }),
+      );
+      throw error;
+    });
+    assert.equal((await command('state')).batches.length, 1);
+    assert.ok(fs.existsSync(source));
+    assert.ok(fs.existsSync(coverFile));
+    await shell.locator('[data-publish-page="history"]').click();
+    await shell
+      .locator('.publish-table tbody tr')
+      .first()
+      .getByRole('button', { name: '删除记录', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open] .form-error:not([hidden])')
+      .waitFor();
+    assert.equal((await command('state')).tasks.length, 2);
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '关闭', exact: true })
+      .click();
+    check(
+      `publishing-${scale}: plan/task deletion supports confirmation and preserves unresolved submissions and original files`,
+      () => assert.ok(true),
+    );
+    for (const kind of ['title', 'topics', 'location'])
+      await command('resource-add', { kind, lines: ['清理测试资源'] });
+    await shell.locator('[data-publish-page="library"]').click();
+    for (const kind of ['title', 'topics', 'image', 'location']) {
+      await shell.getByLabel('资源类型', { exact: true }).selectOption(kind);
+      await until(
+        () =>
+          shell
+            .locator('.publish-table tbody tr')
+            .count()
+            .then((n) => n > 0),
+        'render library ' + kind,
+      );
+      await shell
+        .getByRole('button', { name: '全选当前结果', exact: true })
+        .click();
+      await shell
+        .getByRole('button', { name: '删除选中记录', exact: true })
+        .click();
+      await shell
+        .locator('.publish-dialog[open]')
+        .getByRole('button', { name: '确认', exact: true })
+        .click();
+      await until(
+        () =>
+          command('state').then((state) =>
+            kind === 'image'
+              ? !state.covers.length
+              : kind === 'location'
+                ? !state.locations.length
+                : !state.library.some((r) => r.kind === kind),
+          ),
+        'delete library ' + kind,
+      );
+    }
+    assert.ok(fs.existsSync(coverFile));
+    check(
+      `publishing-${scale}: title, topic, cover and location records expose and execute bulk deletion without deleting image files`,
+      () => assert.ok(true),
+    );
+    await shell.locator('[data-publish-page="materials"]').click();
+    await shell
+      .getByRole('button', { name: '删除当前筛选记录', exact: true })
+      .click();
+    await shell
+      .locator('.publish-dialog[open]')
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await until(
+      () => command('state').then((state) => !state.videos.length),
+      'delete material indices',
+    );
+    assert.ok(fs.existsSync(source));
+    assert.equal((await command('state')).tasks.length, 2);
+    await app.close();
+    app = null;
+    shell = await launch();
+    const cleaned = await command('state');
+    assert.equal(cleaned.videos.length, 0);
+    assert.equal(cleaned.covers.length, 0);
+    assert.equal(cleaned.locations.length, 0);
+    assert.equal(cleaned.library.length, 0);
+    assert.equal(cleaned.tasks.length, 2);
+    assert.equal(cleaned.batches.length, 1);
+    assert.equal(cleaned.tasks[0].title, '第一期测试标题');
+    check(
+      `publishing-${scale}: deleted local records stay deleted after restart while account-bound task snapshots remain intact`,
+      () => assert.ok(true),
     );
   } finally {
     if (app) await app.close().catch(() => {});

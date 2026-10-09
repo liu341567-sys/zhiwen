@@ -244,10 +244,52 @@ class PublishingService {
     this.changed();
   }
   removeResources(ids) {
-    if (!Array.isArray(ids) || ids.length > 5000)
+    if (
+      !Array.isArray(ids) ||
+      !ids.length ||
+      ids.length > 5000 ||
+      ids.some((id) => typeof id !== 'string' || !id)
+    )
       throw new Error('无效的资源选择');
-    for (const id of ids) this.store.removeResource(id);
+    const removed = this.store.transaction(() => {
+      let count = 0;
+      for (const id of new Set(ids)) count += this.store.removeResource(id);
+      return count;
+    });
     this.changed();
+    return { removed };
+  }
+  removeTasks({ ids, confirmed }) {
+    if (confirmed !== true) throw new Error('请确认删除本地任务及日志');
+    if (
+      !Array.isArray(ids) ||
+      !ids.length ||
+      ids.length > 10000 ||
+      ids.some((id) => typeof id !== 'string' || !id)
+    )
+      throw new Error('请先选择有效任务');
+    if (ids.some((id) => this.scheduler.running.has(id)))
+      throw new Error('执行中任务请先暂停，再删除记录');
+    const result = this.store.removeTasks([...new Set(ids)]);
+    this.changed();
+    return result;
+  }
+  validateCover(cover) {
+    if (!['first', 'frame', 'image'].includes(cover?.mode))
+      throw new Error('无效封面模式');
+    if (cover.mode === 'image') {
+      if (typeof cover.id !== 'string' || !cover.id)
+        throw new Error(
+          '已选择本地图片封面，请选择或导入具体封面图片；也可以改用平台默认首帧',
+        );
+      this.store.resource(cover.id, 'image');
+    }
+    if (
+      cover.mode === 'frame' &&
+      (!Number.isFinite(Number(cover.seconds ?? 0)) ||
+        Number(cover.seconds ?? 0) < 0)
+    )
+      throw new Error('指定封面帧时间必须为非负数');
   }
   validateInput(input) {
     if (
@@ -296,6 +338,9 @@ class PublishingService {
       this.store.list('video'),
       this.accounts(),
     );
+    rows
+      .filter((row) => !row.cancelled)
+      .forEach((row) => this.validateCover(row.cover));
     const previewId = randomUUID();
     this.store.saveDraft(
       { input, rows, createdAt: Date.now() },
@@ -318,6 +363,10 @@ class PublishingService {
     const existing = this.store
       .tasks()
       .filter((t) => !['cancelled', 'failed'].includes(t.status));
+    const deletedPublications = this.store.setting(
+      'deletedPublicationKeys',
+      {},
+    );
     const keys = new Set(),
       validated = new Set(),
       final = [];
@@ -351,13 +400,16 @@ class PublishingService {
       if (!t.title && !t.cancelled) throw new Error('任务标题不能为空');
       if (!Number.isFinite(t.plannedAt) || t.plannedAt < Date.now() - 300000)
         throw new Error('计划时间已过，请重新配置');
-      if (!['first', 'frame', 'image'].includes(t.cover?.mode))
-        throw new Error('无效封面模式');
+      this.validateCover(t.cover);
       if (t.cover.mode === 'frame')
         t.cover = {
           mode: 'image',
           ...this.store.putResource('image', {
-            path: await media.frame(video, Number(t.cover.seconds), this.cache),
+            path: await media.frame(
+              video,
+              Number(t.cover.seconds ?? 0),
+              this.cache,
+            ),
             name: `${video.name}指定帧封面`,
           }),
         };
@@ -375,11 +427,12 @@ class PublishingService {
       if (
         !t.cancelled &&
         !allowDuplicates &&
-        existing.some(
-          (old) =>
-            old.accountId === t.accountId &&
-            old.video.sha256 === t.video.sha256,
-        )
+        (deletedPublications[`${t.accountId}:${t.video.sha256}`] ||
+          existing.some(
+            (old) =>
+              old.accountId === t.accountId &&
+              old.video.sha256 === t.video.sha256,
+          ))
       )
         throw new Error(
           `检测到同账号已有相同视频任务：${account.name}。请核实后勾选允许重复`,
@@ -388,8 +441,9 @@ class PublishingService {
     }
     if (final.every((t) => t.cancelled))
       throw new Error('至少保留一条发布任务');
-    const id = this.store.addBatch(text(name || '视频发布批次', 100), final);
-    this.store.removeDraft(`preview:${previewId}`);
+    const id = this.store.addBatch(text(name || '视频发布批次', 100), final, {
+      clearDrafts: true,
+    });
     this.changed();
     await this.scheduler.tick();
     return { batchId: id };
@@ -498,6 +552,12 @@ class PublishingService {
         return this.editResource(input);
       case 'resource-remove':
         return this.removeResources(input);
+      case 'task-remove':
+        return this.removeTasks(input);
+      case 'draft-clear':
+        this.store.transaction(() => this.store.clearDrafts());
+        this.changed();
+        return { cleared: true };
       case 'bind':
         return this.bindAccount(input.id, input.platformId);
       case 'preview':

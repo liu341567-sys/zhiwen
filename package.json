@@ -1,7 +1,7 @@
 {
   "name": "qiye-browser",
   "productName": "栖页",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "持久化独立账号浏览器与本地智能内容发布中心。",
   "main": "src/main.js",
   "license": "UNLICENSED",
