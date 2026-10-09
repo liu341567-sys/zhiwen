@@ -10,6 +10,12 @@
 
 本轮保留品牌图标、字体、蓝色选中块和既有页面布局，无需数据迁移。更新前请正常退出旧版并备份整个 `%APPDATA%\栖页` 数据目录，已有账号环境继续沿用该目录。
 
-本轮本地已通过 69 项单元、语法、23 项浏览器隔离、16 项本地登录兼容性及 306 项实际窗口 UI 检查；三档实际 DPR 各 102 项、9 个布局、无跳过。Linux 加密跨退出恢复分支仍跳过。Windows 验证、安装包及公开下载尚未完成；当前可用的下载仍为 [v0.1.6](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.6)。完成检查后将在此补充本轮结果与下载链接。历史成绩不作为本轮验证结果。
+本轮本地通过 69 项单元、语法、23 项浏览器隔离、16 项本地登录兼容性及 306 项实际窗口 UI 检查；三档实际 DPR 各 102 项、9 个布局、无跳过。Linux 加密跨退出恢复分支仍跳过。
+
+[Windows 主分支验证](https://github.com/liu341567-sys/zhiwen/actions/runs/37872475905)已通过同轮 69 项单元、语法、23 项隔离、16 项本地登录兼容性、原生 DPAPI 及 273 项实际窗口检查；三档 DPR 分别为 102 / 91 / 80 项、6 个布局、无跳过。实际安装后的平台图标、关联及排序恢复、启动配置锁定、程序运行、账号测试数据恢复与卸载也通过。缩放为 Electron 实际 DPR，未切换 Windows 物理显示器 DPI。
+
+[发布工作流](https://github.com/liu341567-sys/zhiwen/actions/runs/37872875786)再次完成同套 Windows 检查和安装验收，构建与发布均成功。0.1.7 已公开，发布页与三个附件的直接下载最终 HTTP 200，实际读取的校验文件自身摘要及两行资产摘要均与 API 一致。
+
+下载[安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.7/Qiye-Setup-0.1.7-x64.exe)后运行安装程序；也可下载 [ZIP 版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.7/Qiye-0.1.7-x64.zip)，完整解压后运行目录中的 `栖页.exe`，保留同目录其他文件。[SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.7/SHA256SUMS.txt)提供两份文件的校验值。
 
 当前打包配置没有代码签名证书。环境共享当前电脑和网络出口，不提供代理或指纹伪装。Cookie 加密与 Windows 用户绑定，跨电脑迁移可能需要重新登录；真实平台登录仍需 Windows 实机复测。

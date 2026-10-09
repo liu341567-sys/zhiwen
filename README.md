@@ -4,14 +4,12 @@
 
 ## Windows 下载
 
-- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.6/Qiye-Setup-0.1.6-x64.exe)：下载后运行安装程序。
-- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.6/Qiye-0.1.6-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.7/Qiye-Setup-0.1.7-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.7/Qiye-0.1.7-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
 
-[v0.1.6 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.6)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版增加九个平台的创作者中心预设与平台图标，支持同平台多个独立环境及自定义网址。已有环境的会话与恢复规则继续沿用，改名保留平台关联。更新前正常退出旧版并备份数据目录，已有环境继续保留。
+[v0.1.7 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.7)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版新增侧栏拖拽排序、新建弹窗防误触及已建环境启动配置锁定，保留九平台图标、蓝色选中块和账号隔离。启动网址只在新建时设置，编辑仍可修改名称、备注和颜色；地址栏导航与最近页面恢复保持正常。更新前正常退出旧版并备份数据目录，已有环境继续保留，无需迁移。
 
-[0.1.6 Windows 发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37755416238)已通过，包括 59 项单元、23 项隔离、16 项本地登录兼容性、原生 DPAPI 恢复及 201 项实际窗口检查；实际安装后的九平台图标、平台关联恢复、程序启动与退出、账号数据恢复及卸载也已验证。发布页与三个附件的下载和校验文件已核实。设备缩放为 Electron 实际 DPR，未切换 Windows 设置面板的物理显示器 DPI。真实平台登录仍需实机复测，知乎 `10001` 的原因尚未确认。[视觉规范](docs/visual-system.md)记录当前界面与交互规则。
-
-当前源码正在迭代 0.1.7，新增侧栏拖拽排序、新建弹窗防误触及已建环境的启动配置锁定。上方下载与验证结果仍对应已经发布的 0.1.6；0.1.7 的检查和发布状态见 [验证记录](docs/validation.md)。
+[Windows 主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37872475905)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37872875786)均通过，包括 69 项单元、语法、23 项隔离、16 项本地登录兼容性、原生 DPAPI 恢复及 273 项实际窗口检查；实际安装后的九平台图标、关联与排序恢复、启动配置锁定、程序运行、账号数据恢复及卸载也已验证。发布页与三个附件的直接下载和校验文件已核实。设备缩放为 Electron 实际 DPR，未切换 Windows 设置面板的物理显示器 DPI。真实平台登录仍需实机复测，知乎 `10001` 的原因尚未确认。完整结果与历史记录见 [验证记录](docs/validation.md)，[视觉规范](docs/visual-system.md)记录当前界面与交互规则。
 
 ## 使用方式
 
