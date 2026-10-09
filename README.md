@@ -73,6 +73,7 @@ npm test
 npm run check
 npm run test:integration
 npm run test:ui
+npm run test:publishing
 npm run dist:win
 ```
 
@@ -80,9 +81,10 @@ npm run dist:win
 - `npm run check`：JavaScript 语法检查。
 - `npm run test:integration`：实际启动 Electron，使用本地测试网页验证浏览器会话隔离、持久化、删除清理、浏览器标识与登录存储兼容性。测试显式启用 Chromium 沙箱，清理测试工具注入的行为开关，并直接断言主框架的实际沙箱与上下文隔离状态。测试使用临时目录，不需要真实平台账号。
 - `npm run test:ui`：在真实 Electron 窗口中以 100%、125%、150% 的设备缩放检查品牌图片、标签关闭区域、长名称、弹窗、小工作区及原生网页视图位置。实际尺寸与检查数量按显示器工作区记录。
-- `npm run dist:win`：生成当前源码版本的 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.1.8-x64.exe`。
+- `npm run test:publishing`：真实 Electron 与本地模拟发布页验证素材元数据、原环境上传填写、授权提交、锁定预览与草稿恢复、验证码转人工及提交不明确时禁止重复执行。不会发布真实内容。
+- `npm run dist:win`：生成当前源码版本的 Windows x64 NSIS 安装程序，默认输出到 `dist/Qiye-Setup-0.2.0-x64.exe`。
 
-也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.1.8-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
+也可执行 `npm run dist:win:zip`，生成 `dist/Qiye-0.2.0-x64.zip`。将整个压缩包解压到一个目录，运行其中的 `栖页.exe`；必须保留同目录的运行库和资源文件，不能只复制 exe。应用数据仍单独保存到用户数据目录，更新程序时不会使用安装目录中的空白数据替换账号环境。Linux 交叉构建 NSIS 安装程序需要 Wine，ZIP 构建不需要。
 
 仓库提供 [Windows 构建工作流](.github/workflows/windows.yml)，可在 GitHub Actions 中手动运行，下载上传的安装包。工作流执行上述检查和打包，在临时运行器实际安装、验证 PE 图标与快捷方式、启动及重启程序，完成后卸载；不自动发布 Release。当前打包配置没有代码签名证书，安装包未签名。
 
@@ -102,5 +104,7 @@ npm start
 若系统安全存储不可用，应用提示会话 Cookie 和 sessionStorage 无法跨退出恢复，不会退回明文保存；同一次程序运行中关闭标签页再打开仍可恢复。此时有过期日期的持久化 Cookie 和其他持久化网站存储仍由 Chromium 管理。
 
 备份前正常退出应用，再复制整个数据目录；只复制 `profiles.json` 无法保存登录环境。恢复前先备份现有目录，并保持应用关闭。部分 Cookie 会使用系统加密，迁移到其他电脑或 Windows 用户后可能需要重新登录；备份也不能延长平台登录有效期。请妥善保护包含登录会话的数据目录。
+
+内容发布中心另存 `publishing/publishing.sqlite`、素材索引、草稿、任务快照和执行日志，原视频仍保留在原路径。发布页的“备份数据”生成一致性 SQLite 备份，不包含视频文件或浏览器登录数据；完整备份仍需正常退出后复制整个数据目录及实际使用的视频文件。
 
 技术结构与隔离边界见 [架构说明](docs/architecture.md)。
