@@ -6,7 +6,17 @@
 
 Linux 91 项单元、语法检查及 60 项原生发布窗口检查全部通过（实际 DPR 1 / 1.25 / 1.5）。新增检查覆盖缺少图片、选择有效图片生成指定时间批次、所有字段恢复默认、清空草稿的取消 / 确认、计划 / 任务的单条 / 批量删除、未核实结果拒绝删除、四类文案 / 封面 / 定位资源删除以及清理后跨重启保留快照。单元另核对批量删除回滚、独占任务拒删、日志 / 空批次清理、去重标记持久化与删除记录后仍需明确允许重复。
 
-Windows 构建、安装和发布验证正在执行，尚未据此宣称安装包通过或提供新下载。原有账号清单、会话隔离、启动网址锁定、导航及品牌资源未修改，依赖锁仅变更根版本字段。此迭代不改变抖音执行适配器；真实平台仍需用户已登录 Windows 环境复测。
+[Windows 主分支检查（37960998628）](https://github.com/liu341567-sys/zhiwen/actions/runs/37960998628)和[发布检查（37961001374）](https://github.com/liu341567-sys/zhiwen/actions/runs/37961001374)对应 `c6094e01d6cccf16cee4d520b05d53126856b570` / `v0.2.5`，全部通过：91 项单元与语法、23 项隔离、16 项兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、60 项发布专项。真实 NSIS 安装 / 启动 / 正常退出 / 重启 / 卸载、原图标与账号恢复、安装后的媒体工具 / 元数据 / 缩略图 / SQLite 检查通过。DPR 为 Electron 实际 1 / 1.25 / 1.5，没有切换物理显示器 DPI。
+
+原有账号清单、会话隔离、启动网址锁定、导航及品牌资源未修改，依赖锁仅变更根版本字段。此迭代不改变抖音执行适配器；真实平台仍需用户已登录 Windows 环境复测。
+
+发布于 2026-10-10 00:50:22（北京时间）。发布页与三个附件匿名 HTTP 200；安装包和 ZIP 均完整下载，字节数、SHA256 与 GitHub 摘要及校验文件一致。ZIP 的原品牌资源、媒体工具、许可齐全，无用户账号清单。证据位于 `.cache/release-0.2.5/ci-verification.json`、`verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.2.5-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.5/Qiye-0.2.5-x64.zip) | 217810724 | `541fafbd5cacc43230cc79baccba433dd8816427d834f93feec84f04f7801e2f` |
+| [Qiye-Setup-0.2.5-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.5/Qiye-Setup-0.2.5-x64.exe) | 160685373 | `823cdf1dafdb05c9ce254dbcfbd49f1beca6190b182fe35aa59353493d6bdb0d` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.5/SHA256SUMS.txt) | 178 | `f64f3c2e2e35e66e1639081c41058ab471978a481d9952cebc0e1aab875e1fff` |
 
 # 0.2.4 连续发布与上传就绪判断修复
 
