@@ -5,7 +5,7 @@ const path = require('node:path');
 const modules = require('./navigation-modules.json');
 const moduleIds = new Set(modules.map(module => module.id));
 const defaults = () => ({ version: 1, activeModule: 'environment', sidebarCollapsed: false,
-  environmentSearch: '', environmentScroll: 0, panelScroll: {}, menuScroll: {}, railScroll: 0, windowSize: null });
+  environmentSearch: '', environmentScroll: 0, panelScroll: {}, menuScroll: {}, railScroll: 0, windowSize: null, windowMaximized: false });
 
 // UI preferences deliberately live outside profiles.json and browser Sessions.
 class UIPreferences {
@@ -30,9 +30,10 @@ class UIPreferences {
       if (!moduleIds.has(input.activeModule)) throw new Error('无效的导航模块');
       next.activeModule = input.activeModule;
     }
-    if (Object.hasOwn(input, 'sidebarCollapsed')) {
-      if (typeof input.sidebarCollapsed !== 'boolean') throw new Error('无效的侧栏状态');
-      next.sidebarCollapsed = input.sidebarCollapsed;
+    for (const key of ['sidebarCollapsed', 'windowMaximized']) {
+      if (!Object.hasOwn(input, key)) continue;
+      if (typeof input[key] !== 'boolean') throw new Error('无效的界面状态');
+      next[key] = input[key];
     }
     if (Object.hasOwn(input, 'environmentSearch')) {
       if (typeof input.environmentSearch !== 'string' || input.environmentSearch.length > 560) throw new Error('无效的搜索条件');

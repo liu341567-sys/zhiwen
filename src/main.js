@@ -668,12 +668,15 @@ async function createWindow() {
   mainWindow.on('resize', () => {
     clearTimeout(windowSizeTimer);
     windowSizeTimer = setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isMaximized()) return;
-      const { width, height } = mainWindow.getBounds();
-      try { uiPreferences.update({ windowSize: { width, height } }); } catch { /* Keep the live layout on a write failure. */ }
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+      const { width, height } = mainWindow.getNormalBounds();
+      try { uiPreferences.update({ windowSize: { width, height }, windowMaximized: mainWindow.isMaximized() }); } catch { /* Keep the live layout on a write failure. */ }
     }, 180);
   });
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    if (uiPreferences.get().windowMaximized) mainWindow.maximize();
+    mainWindow.show();
+  });
   mainWindow.on('close', event => {
     if (!canQuit) { event.preventDefault(); app.quit(); }
   });
@@ -721,9 +724,9 @@ if (!app.requestSingleInstanceLock()) {
         if (mainWindow && !mainWindow.isDestroyed()) {
           const next = await mainWindow.webContents.executeJavaScript('window.getNavigationPreferences?.()');
           if (next) uiPreferences.update(next);
-          if (!mainWindow.isMaximized() && !mainWindow.isMinimized()) {
-            const { width, height } = mainWindow.getBounds();
-            uiPreferences.update({ windowSize: { width, height } });
+          if (!mainWindow.isMinimized()) {
+            const { width, height } = mainWindow.getNormalBounds();
+            uiPreferences.update({ windowSize: { width, height }, windowMaximized: mainWindow.isMaximized() });
           }
         }
       } catch { /* UI state must not prevent browser data from being flushed. */ }

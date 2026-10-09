@@ -136,10 +136,16 @@ async function run(scale, origin) {
     const saved = JSON.parse(fs.readFileSync(path.join(directory, 'ui-preferences.json'), 'utf8'));
     assert.equal(saved.sidebarCollapsed, true); assert.equal(saved.activeModule, 'publish'); assert.equal(saved.environmentSearch, '导航账号');
     assert.ok(Math.abs(saved.environmentScroll - savedScroll) <= 1);
-    const savedWindow = await app.evaluate(({ BrowserWindow }) => { const { width, height } = BrowserWindow.getAllWindows()[0].getBounds(); return { width, height }; });
-    assert.deepEqual(saved.windowSize, savedWindow);
+    const savedWindowState = await app.evaluate(({ BrowserWindow }) => {
+      const main = BrowserWindow.getAllWindows()[0], { width, height } = main.getBounds(), normal = main.getNormalBounds();
+      return { visible: { width, height }, normal: { width: normal.width, height: normal.height }, maximized: main.isMaximized() };
+    });
+    assert.deepEqual(saved.windowSize, savedWindowState.normal);
+    assert.equal(saved.windowMaximized, savedWindowState.maximized);
+    const savedWindow = savedWindowState.visible;
     await app.close(); app = null;
     shell = await launch();
+    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized()), savedWindowState.maximized);
     const restoredWindow = await app.evaluate(({ BrowserWindow }) => { const { width, height } = BrowserWindow.getAllWindows()[0].getBounds(); return { width, height }; });
     assert.ok(Math.abs(restoredWindow.width - savedWindow.width) <= 2 && Math.abs(restoredWindow.height - savedWindow.height) <= 2, 'Window size is restored within native device-pixel rounding');
     assert.equal(await shell.locator('#planned-title').textContent(), '内容发布中心');
@@ -161,7 +167,7 @@ async function run(scale, origin) {
     check(`navigation-${scale}: immediate exit after a final scroll checkpoints the current UI without preserving a temporary cover`, () => assert.ok(true));
     await shell.locator('#sidebar-overlay-close').click();
     await shell.locator('#sidebar-expand').click();
-    await app.evaluate(({ BrowserWindow }) => { const main = BrowserWindow.getAllWindows()[0]; main.setMinimumSize(0, 0); main.setContentSize(600, 480); });
+    await app.evaluate(({ BrowserWindow }) => { const main = BrowserWindow.getAllWindows()[0]; main.unmaximize(); main.setMinimumSize(0, 0); main.setContentSize(600, 480); });
     await until(() => shell.locator('.app-shell').getAttribute('class').then(c => c.includes('sidebar-collapsed')), 'narrow adaptation');
     assert.equal(await shell.evaluate(() => innerWidth), 600);
     assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'ui-preferences.json'), 'utf8')).sidebarCollapsed, false);
