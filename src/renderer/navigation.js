@@ -42,12 +42,21 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
     if (menus.has(item.id)) return menus.get(item.id);
     const container = document.createElement('div');
     container.className = 'secondary-menu';
+    let group;
     for (const entry of item.items) {
+      if (entry.group && entry.group !== group) { group=entry.group; const heading=document.createElement('h3');heading.className='publish-menu-group';heading.textContent=group;container.append(heading); }
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'secondary-menu-button';
       const label = document.createElement('span'); label.textContent = entry.label;
       button.append(icon(entry.icon), label);
-      if (entry.route && $(entry.route)) {
+      if (entry.publishing) {
+        button.dataset.publishPage=entry.id;
+        if(entry.planned){const badge=document.createElement('span');badge.className='planned-badge';badge.textContent='规划中';button.append(badge);}
+        button.addEventListener('click',async()=>{
+          if(overlay)await closeOverlay();
+          window.dispatchEvent(new CustomEvent('publishing:page',{detail:entry.id}));
+        });
+      } else if (entry.route && $(entry.route)) {
         button.dataset.route = entry.route;
         button.addEventListener('click', async () => {
           for (const sibling of container.children) sibling.classList.toggle('active', sibling === button);
@@ -102,6 +111,8 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       if ($('module-sidebar-content').firstElementChild !== next) $('module-sidebar-content').replaceChildren(next);
       $('planned-module').hidden = item.mode !== 'planned';
       $('settings-module').hidden = item.mode !== 'settings';
+      $('publishing-module').hidden = item.mode !== 'publishing';
+      if(item.mode === 'publishing')window.dispatchEvent(new Event('publishing:visible'));
       if (item.mode === 'planned') {
         $('planned-title').textContent = item.label;
         $('planned-description').textContent = item.description;
@@ -184,6 +195,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
     };
   }
 
+  window.addEventListener('publishing:selected',event=>{for(const b of document.querySelectorAll('[data-publish-page]')){b.classList.toggle('active',b.dataset.publishPage===event.detail);b.setAttribute('aria-current',b.dataset.publishPage===event.detail?'page':'false');}});
   $('sidebar-toggle').addEventListener('click', guarded(toggle));
   $('sidebar-overlay-close').addEventListener('click', guarded(closeOverlay));
   $('sidebar-overlay-backdrop').addEventListener('click', guarded(closeOverlay));
@@ -240,6 +252,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       initialized = true; render(); document.body.classList.remove('navigation-loading');
     },
     module: () => activeModule,
+    select,
     preferences() {
       collect();
       if (!preferences) return null;

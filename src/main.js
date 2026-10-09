@@ -10,6 +10,8 @@ const { CookieVault } = require('./cookie-vault');
 const { userAgentForMode } = require('./browser-identity');
 const { LoginDiagnostics, PAGE_OBSERVATION_SCRIPT } = require('./login-diagnostics');
 const platformPresets = require('./platform-presets.json');
+const { PublishingService } = require('./publishing/service');
+const { installDesktop } = require('./publishing/desktop');
 
 app.setName('栖页');
 if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
@@ -29,6 +31,8 @@ const restores = new Map();
 const blockedVaults = new Set();
 const documentStates = new Map();
 const pendingDocumentRestores = new Map();
+let publisher;
+let publishingError;
 let store;
 let vault;
 let mainWindow;
@@ -96,6 +100,8 @@ async function sampleDiagnosticsPage() {
 function snapshot() {
   const state = store.getState();
   return {
+    publishingError,
+    publishingLeases: publisher ? [...publisher.scheduler.accounts] : [],
     profiles: state.profiles,
     navigationModules,
     uiPreferences: uiPreferences.get(),
@@ -138,7 +144,7 @@ function updateViews() {
   const environmentMode = uiPreferences.get().activeModule === 'environment';
   for (const [id, entry] of views) {
     entry.view.setBounds(safeBounds);
-    entry.view.setVisible(id === activeId && environmentMode && !navigationOverlay && !overlayVisible && !entry.error && safeBounds.width > 0 && safeBounds.height > 0);
+    entry.view.setVisible(id === activeId && environmentMode && !navigationOverlay && !overlayVisible && !entry.error && !publisher?.scheduler.leased(id) && safeBounds.width > 0 && safeBounds.height > 0);
   }
   updateToastView();
 }
@@ -394,7 +400,7 @@ async function createView(id) {
   // Restore each origin only once for this newly opened main tab. Subsequent
   // documents use Chromium's live storage, including any website removals.
   pendingDocumentRestores.set(id, { ...(documentStates.get(id) ?? {}) });
-  wc.loadURL(profile.lastUrl).catch(error => {
+  entry.loading = wc.loadURL(profile.lastUrl).catch(error => {
     if (!views.has(id) || wc.isDestroyed() || error.code === 'ERR_ABORTED') return;
     entry.error = `页面加载失败：${error.message}`;
     notify();
@@ -420,10 +426,63 @@ async function closeView(id) {
 
 function activePage() {
   const activeId = store.getState().activeId;
+  assertNotLeased(activeId);
   const entry = views.get(activeId);
   if (!entry || entry.view.webContents.isDestroyed()) throw new Error('请先打开一个环境');
   if (blockedVaults.has(activeId)) throw new Error('此环境的会话数据暂时无法解密，请使用原系统用户重新启动应用');
   return entry;
+}
+
+function assertNotLeased(id) {
+  if (publisher?.scheduler.leased(id)) throw new Error('此环境正在执行发布任务，请先在任务中心暂停或人工接管。');
+}
+
+function publishingChanged() {
+  if (quitting || !mainWindow || mainWindow.isDestroyed()) return;
+  updateViews(); emitState(); mainWindow.webContents.send('publishing:changed');
+}
+function publishingToast(message, type) {
+  clearTimeout(toastFadeTimer); clearTimeout(toastHideTimer);
+  toastMessage = { message: String(message).slice(0,1000), type: ['success','error'].includes(type)?type:'info', sequence: ++toastSequence, leaving: false };
+  sendToast(); const sequence = toastSequence;
+  toastFadeTimer = setTimeout(() => { if (toastMessage?.sequence === sequence) { toastMessage.leaving = true; sendToast(); } },2500);
+  toastHideTimer = setTimeout(() => { if (toastMessage?.sequence === sequence) { toastMessage = null; updateToastView(); } },2700);
+}
+
+// Serialize only account mutations. Network loading stays outside the global
+// queue so a slow account never prevents switching or using another account.
+async function publishingView(id, signal) {
+  const pending = mutationQueue.then(async () => {
+    if (signal?.aborted) throw new Error('任务已暂停');
+    if (blockedVaults.has(id)) throw new Error('原环境会话无法解密，请先修复账号环境');
+    const previous = store.getState().activeId;
+    store.open(id);
+    store.activate(previous);
+    return createView(id);
+  });
+  mutationQueue = pending.catch(() => {});
+  const entry = await pending;
+  if (entry.loading) {
+    let timer, abort;
+    try {
+      await Promise.race([
+        entry.loading,
+        new Promise((_resolve, reject) => {
+          abort = () => reject(new Error('任务已暂停'));
+          signal?.addEventListener('abort', abort, { once: true });
+          timer = setTimeout(() => reject(new Error('原环境页面加载超时，请人工检查后继续')), 60000);
+          if (signal?.aborted) abort();
+        })
+      ]);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    }
+  }
+  if (entry.error) throw new Error(entry.error);
+  updateViews();
+  emitState();
+  return entry.view.webContents;
 }
 
 function registerIPC() {
@@ -550,11 +609,14 @@ function registerIPC() {
   handle('move', (id, beforeId) => { store.move(id, beforeId); });
   handle('open', async id => { store.open(id); await createView(id); });
   handle('close', async id => {
+    assertNotLeased(id);
     store.get(id);
     await closeView(id);
     store.close(id);
   });
   handle('delete', async id => {
+    assertNotLeased(id);
+    if (publisher?.store.tasks().some(t => t.accountId === id && ['pending','paused','manual','unverified','submitted','review'].includes(t.status))) throw new Error('此环境仍有关联发布任务，请先取消未提交任务并核实已提交结果。');
     store.get(id);
     await closeView(id);
     const ownSession = getSession(id);
@@ -708,6 +770,19 @@ if (!app.requestSingleInstanceLock()) {
       const startup = mutationQueue.then(() => createWindow());
       mutationQueue = startup.catch(() => {});
       await startup;
+      try {
+        publisher = new PublishingService({ directory: app.getPath('userData'), profiles: () => store.getState().profiles.map(p => ({...p, running: views.has(p.id)})),
+          getView: publishingView,
+          takeover: async id => {
+            const pending = mutationQueue.then(async () => { store.open(id); await createView(id); uiPreferences.update({activeModule:'environment'}); updateViews(); emitState(); mainWindow.webContents.send('publishing:takeover',id); });
+            mutationQueue = pending.catch(() => {}); await pending;
+          }, notify: publishingToast, changed: publishingChanged });
+        installDesktop({window:mainWindow,service:publisher,assertManager:event => {
+          if (quitting || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('此页面无权访问发布数据');
+        }});
+        await publisher.scheduler.start(); publishingChanged();
+      } catch (error) { publishingError = `内容发布中心不可用：${error.message}。账号环境功能可继续使用，原数据未被覆盖。`; emitState(); publishingToast(publishingError,'error'); }
+
     } catch (error) {
       dialog.showErrorBox('无法读取账号环境', `${error.message}\n数据位置：${app.getPath('userData')}\n请先备份原目录，再检查 profiles.json；原有数据未被覆盖。`);
       canQuit = true;
@@ -731,6 +806,7 @@ if (!app.requestSingleInstanceLock()) {
           saveWindowLayout();
         }
       } catch { /* UI state must not prevent browser data from being flushed. */ }
+      if (publisher) await publisher.shutdown();
       await mutationQueue;
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));
       const results = await Promise.allSettled([...sessions.keys()].map(id => flushSession(id)));

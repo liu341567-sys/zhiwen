@@ -48,6 +48,9 @@ jobs:
       - name: Test UI at 100%, 125% and 150% display scale
         shell: pwsh
         run: ./.github/scripts/test-ui.ps1
+      - name: Test local publishing and native browser automation
+        shell: pwsh
+        run: ./.github/scripts/test-publishing.ps1
       - name: Upload UI screenshots and measurements
         if: always()
         uses: actions/upload-artifact@v4

@@ -375,8 +375,21 @@ async function main() {
       return { x: r.x, width: r.width };
     });
     await shell.locator('button[data-module="publish"]').click();
-    await shell.locator('#planned-module').waitFor({ state: 'visible' });
-    assert.equal(await shell.locator('.secondary-menu-button:disabled').count(), 5);
+    await shell.locator('#publishing-module').waitFor({ state: 'visible' });
+    assert.equal(await shell.locator('[data-publish-page]').count(), 9);
+    assert.equal(await shell.locator('.publish-menu-group').count(), 3);
+    const ffmpeg = path.join(path.dirname(executable), 'resources', 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
+    const ffprobe = path.join(path.dirname(executable), 'resources', 'media', 'ffprobe.exe');
+    assert.ok(fs.existsSync(ffmpeg) && fs.existsSync(ffprobe), 'Installed native media tools must be present');
+    const localVideo = path.join(outputDirectory, 'installed-video.mp4');
+    const generated = spawnSync(ffmpeg, ['-nostdin','-v','error','-f','lavfi','-i','color=c=blue:s=320x240:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p','-y',localVideo], {windowsHide:true});
+    assert.equal(generated.status, 0, `Installed FFmpeg must run: ${generated.stderr}`);
+    const imported = await shell.evaluate(file => publishingAPI.command('import',[file]),localVideo);
+    assert.equal(imported.added.length, 1);
+    const publishing = await shell.evaluate(() => publishingAPI.command('state'));
+    assert.equal(publishing.videos[0].width,320); assert.equal(publishing.videos[0].duration,1);
+    assert.equal(publishing.videos[0].path,localVideo); assert.ok(publishing.videos[0].thumbnailData.startsWith('data:image/jpeg;base64,'));
+
     assert.equal((await shell.evaluate(() => browserAPI.getState())).activeId, id);
     await shell.locator('button[data-module="environment"]').click();
     await shell.locator('#sidebar-toggle').click();
@@ -389,7 +402,7 @@ async function main() {
     assert.equal(collapsedNavigationLayout.width - initialNavigationLayout.width, 240);
     assert.deepEqual(await shell.locator('#sidebar-toggle').boundingBox(), fixedToggle);
     await shell.locator('button[data-module="publish"]').click();
-    await shell.locator('#planned-module').waitFor({ state: 'visible' });
+    await shell.locator('#publishing-module').waitFor({ state: 'visible' });
     assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     await shell.locator('button[data-module="environment"]').click();
     assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
@@ -476,7 +489,7 @@ async function main() {
     assert.equal(restored.uiPreferences.sidebarCollapsed, true);
     assert.equal(await instance.shell.locator('#secondary-sidebar').isVisible(), false);
     await instance.shell.locator('button[data-module="publish"]').click();
-    await instance.shell.locator('#planned-module').waitFor({ state: 'visible' });
+    await instance.shell.locator('#publishing-module').waitFor({ state: 'visible' });
     assert.equal(await instance.shell.locator('#secondary-sidebar').isVisible(), false);
     await instance.shell.locator('button[data-module="environment"]').click();
     assert.equal(await instance.shell.locator('#secondary-sidebar').isVisible(), false);
@@ -506,7 +519,7 @@ async function main() {
       localPlatformImageCount: platformImages.length, platformAssociationAndIconRestored: true,
       profileOrderRestored: true, launchConfigurationLocked: true,
       fixedCreationHeaderAndFooter: true, creationLayout,
-      threeLevelNavigationAndTemporaryCover: true, plannedPublishingNavigationOnly: true,
+      threeLevelNavigationAndTemporaryCover: true, groupedPublishingNavigation: true, installedFFmpegAndFFprobe: true, installedPublishingDatabaseAndVideoMetadata: true,
       fixedSingleCollapseControl: true, collapsedModuleSwitchAndRestart: true, originalVerticalLogo: true,
       stableSidebarRowsAndImages: true, floatingToastWithoutSidebarLayoutChanges: true,
     }, null, 2));

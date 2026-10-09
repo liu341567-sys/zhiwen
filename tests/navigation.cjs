@@ -85,12 +85,13 @@ async function run(scale, origin) {
     });
     const scroll = await shell.locator('#profile-list').evaluate(n => n.scrollTop);
     await select('publish');
-    await shell.locator('#planned-module').waitFor({ state: 'visible' });
-    assert.equal(await shell.locator('.secondary-menu-button:disabled').count(), 5);
+    await shell.locator('#publishing-module').waitFor({ state: 'visible' });
+    assert.equal(await shell.locator('[data-publish-page]').count(), 9);
+    assert.equal(await shell.locator('.publish-menu-group').count(), 3);
     assert.equal((await state()).activeId, ids[30]);
     const otherNative = await identity();
     assert.equal(otherNative[0].wc, baseNative[0].wc); assert.deepEqual(otherNative[0].bounds, baseNative[0].bounds);
-    check(`navigation-${scale}: publishing contains only planned menus without closing or resizing the running account`, () => assert.equal(otherNative[0].visible, false));
+    check(`navigation-${scale}: publishing uses grouped functional menus without closing or resizing the running account`, () => assert.equal(otherNative[0].visible, false));
     await select('data'); await select('ai'); await select('settings');
     await shell.locator('#settings-module').waitFor({ state: 'visible' });
     assert.ok((await shell.locator('#settings-data-path').textContent()).includes(directory));
@@ -202,7 +203,7 @@ async function run(scale, origin) {
     assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized()), savedWindowState.maximized);
     const restoredWindow = await app.evaluate(({ BrowserWindow }) => { const { width, height } = BrowserWindow.getAllWindows()[0].getBounds(); return { width, height }; });
     assert.ok(Math.abs(restoredWindow.width - savedWindow.width) <= 2 && Math.abs(restoredWindow.height - savedWindow.height) <= 2, 'Window size is restored within native device-pixel rounding');
-    assert.equal(await shell.locator('#planned-title').textContent(), '内容发布中心');
+    assert.equal(await shell.locator('#secondary-title').textContent(), '内容发布中心');
     assert.ok((await shell.locator('.app-shell').getAttribute('class')).includes('sidebar-collapsed'));
     assert.ok(!(await shell.locator('.app-shell').getAttribute('class')).includes('sidebar-overlay'));
     await select('environment');

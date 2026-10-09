@@ -129,7 +129,7 @@
   function findProfile(id) { return state.profiles.find((profile) => profile.id === id); }
   function isOpen(id) { return state.openTabs.some((tab) => tab.id === id); }
   function activeTab() { return state.openTabs.find((tab) => tab.id === state.activeId); }
-  function dialogIsOpen() { return dialogIds.some((id) => $(id).open) || modalOpening; }
+  function dialogIsOpen() { return !!document.querySelector('dialog[open]') || modalOpening; }
   function initials(name) { return Array.from(String(name || '环境').trim())[0] || '环'; }
   function findPlatform(id) { return Array.isArray(state.platformPresets) ? state.platformPresets.find((preset) => preset.id === id) : undefined; }
 
@@ -555,18 +555,20 @@
     const tab = activeTab();
     const environment = navigation.module() === 'environment';
     const browsing = environment && Boolean(tab);
+    const leased = state.publishingLeases?.includes(state.activeId);
+    $('publishing-lease').hidden = !leased;
     $('module-view').hidden = environment;
     document.querySelector('.tab-bar').hidden = !environment;
     document.querySelector('.navigation-toolbar').hidden = !environment;
     $('overview-view').hidden = !environment || browsing;
     $('browser-view').hidden = !browsing;
-    $('back-button').disabled = !tab || !tab.canGoBack;
-    $('forward-button').disabled = !tab || !tab.canGoForward;
-    $('reload-button').disabled = !tab;
+    $('back-button').disabled = leased || !tab || !tab.canGoBack;
+    $('forward-button').disabled = leased || !tab || !tab.canGoForward;
+    $('reload-button').disabled = leased || !tab;
     $('active-settings').disabled = !tab;
     $('login-diagnostics-button').disabled = !tab;
     $('settings-edit-environment').disabled = !tab;
-    $('address-input').disabled = !tab;
+    $('address-input').disabled = leased || !tab;
     $('address-environment').hidden = !tab;
     if (previousActiveId !== state.activeId || document.activeElement !== $('address-input')) {
       $('address-input').value = tab ? (tab.url || findProfile(tab.id)?.lastUrl || findProfile(tab.id)?.startUrl || '') : '';
@@ -980,6 +982,9 @@
     api?.positionToast(toastBounds()).catch(() => {});
   });
   new ResizeObserver(scheduleBounds).observe($('browser-viewport'));
+  $('lease-takeover').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('publishing:takeover-request',{detail:state.activeId})));
+  window.publishingNavigateEnvironment = ()=>navigation.select('environment',true);
+  window.publishingNotify = notify;
   api?.onState(applyState);
   render();
   action('getState');

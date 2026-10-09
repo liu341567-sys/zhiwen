@@ -1,22 +1,27 @@
 {
   "name": "qiye-browser",
   "productName": "栖页",
-  "version": "0.1.11",
-  "description": "每个账号，独立栖居。支持持久化独立会话的账号管理浏览器。",
+  "version": "0.2.0",
+  "description": "持久化独立账号浏览器与本地智能内容发布中心。",
   "main": "src/main.js",
   "license": "UNLICENSED",
   "private": true,
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "setup:electron": "install-electron",
     "start": "electron .",
     "test": "node --test tests/*.test.js",
     "test:integration": "node tests/isolation.cjs && node tests/login-compatibility.cjs",
     "test:ui": "node tests/ui-layout.cjs && node tests/sidebar-stability.cjs && node tests/navigation.cjs",
-    "check": "node --check src/main.js && node --check src/ui-preferences.js && node --check src/renderer/navigation.js && node --check src/preload.js && node --check src/toast-preload.js && node --check src/renderer/toast.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/browser-identity.js && node --check src/login-diagnostics.js && node --check src/renderer/app.js",
+    "check": "node --check src/main.js && node --check src/ui-preferences.js && node --check src/renderer/navigation.js && node --check src/preload.js && node --check src/toast-preload.js && node --check src/renderer/toast.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/browser-identity.js && node --check src/login-diagnostics.js && node --check src/renderer/app.js && node --check src/renderer/publishing.js && node --check src/publishing/service.js && node --check src/publishing/scheduler.js && node --check src/publishing/store.js && node --check src/publishing/media.js && node --check src/publishing/desktop.js && node --check src/publishing/adapters/page.js && node --check src/publishing/adapters/douyin.js && node --check scripts/setup-media.cjs",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:win:zip": "electron-builder --win zip --x64",
-    "pack:win": "electron-builder --win --x64 --dir"
+    "pack:win": "electron-builder --win --x64 --dir",
+    "setup:media": "node scripts/setup-media.cjs",
+    "postinstall": "node scripts/setup-media.cjs",
+    "test:publishing": "node tests/publishing-ui.cjs"
   },
   "devDependencies": {
     "electron": "44.6.0",
@@ -26,14 +31,35 @@
   "build": {
     "appId": "com.qiye.browser",
     "productName": "栖页",
-    "directories": { "output": "dist" },
-    "files": ["src/**/*", "package.json"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
     "extraResources": [
-      { "from": "src/assets/qiye.ico", "to": "brand-icons/qiye.ico" },
-      { "from": "src/assets/qiye.png", "to": "brand-icons/qiye.png" }
+      {
+        "from": "src/assets/qiye.ico",
+        "to": "brand-icons/qiye.ico"
+      },
+      {
+        "from": "src/assets/qiye.png",
+        "to": "brand-icons/qiye.png"
+      },
+      {
+        "from": ".cache/media/win32-x64/ffprobe.exe",
+        "to": "media/ffprobe.exe"
+      },
+      {
+        "from": "docs/media-notices",
+        "to": "media/licenses"
+      }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "artifactName": "Qiye-${version}-${arch}.${ext}",
       "icon": "src/assets/qiye.ico",
       "signExecutable": false
@@ -46,6 +72,13 @@
       "shortcutName": "栖页",
       "installerIcon": "src/assets/qiye.ico",
       "uninstallerIcon": "src/assets/qiye.ico"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/ffmpeg.exe"
+    ]
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "ffmpeg-static": "5.3.0"
   }
 }

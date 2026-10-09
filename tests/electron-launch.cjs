@@ -49,4 +49,5 @@ session.fromPartition = (...args) => {
   return ownSession;
 };
 
+if(process.env.QIYE_PUBLISH_FIXTURE==='1')require('./publishing-fixture.cjs');
 require('../src/main.js');

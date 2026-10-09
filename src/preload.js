@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('browserAPI', {
   getState: () => ipcRenderer.invoke('browser:state'),
@@ -35,4 +35,11 @@ contextBridge.exposeInMainWorld('browserAPI', {
     ipcRenderer.on('browser:state-changed', listener);
     return () => ipcRenderer.removeListener('browser:state-changed', listener);
   }
+});
+
+contextBridge.exposeInMainWorld('publishingAPI', {
+  command: (command,input) => ipcRenderer.invoke('publishing:command',command,input),
+  paths: files => Array.from(files).map(file => webUtils.getPathForFile(file)).filter(Boolean),
+  onChanged: callback => { const fn=()=>callback(); ipcRenderer.on('publishing:changed',fn); return ()=>ipcRenderer.removeListener('publishing:changed',fn); },
+  onTakeover: callback => { const fn=(_event,id)=>callback(id); ipcRenderer.on('publishing:takeover',fn); return ()=>ipcRenderer.removeListener('publishing:takeover',fn); }
 });
