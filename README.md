@@ -4,16 +4,12 @@
 
 ## Windows 下载
 
-- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.8/Qiye-Setup-0.1.8-x64.exe)：下载后运行安装程序。
-- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.8/Qiye-0.1.8-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+- [下载安装版（约 107 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.9/Qiye-Setup-0.1.9-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（约 147 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.9/Qiye-0.1.9-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
 
-[v0.1.8 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.8)提供发布说明和 SHA256 校验文件。这是未签名的试用版；使用已打包的版本无需安装 Node.js。该版将环境弹窗改为固定顶部标题与关闭按钮、中间表单独立滚动、固定底部蓝色主操作，保留原字号、九平台图标、蓝色选中块和账号隔离。侧栏拖拽、防误触及启动配置锁定继续保留；编辑仍可修改名称、备注和颜色。更新前正常退出旧版并备份数据目录，已有环境继续保留，无需迁移。
+[v0.1.9 发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.9)提供发布说明和 SHA256 校验文件。该版复用侧栏列表项与图标，增删反馈改为顶部悬浮 Toast，删除后保留列表当前操作位置。品牌样式、平台图标、拖拽、固定头尾弹窗、启动配置锁定及账号隔离保持。更新前正常退出旧版并备份数据目录，已有环境继续保留，无需迁移。使用已打包的版本无需安装 Node.js。
 
-[Windows 主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37877651801)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37877668206)均通过，包括 69 项单元、语法、23 项隔离、16 项本地登录兼容性、原生 DPAPI 恢复及 357 项实际窗口检查；实际安装后的固定创建头尾、九平台图标、关联与排序恢复、启动配置锁定、程序运行、账号数据恢复及卸载也已验证。发布页与三个附件的直接下载和校验文件已核实。设备缩放为 Electron 实际 DPR，未切换 Windows 设置面板的物理显示器 DPI。真实平台登录仍需实机复测，知乎 `10001` 的原因尚未确认。完整结果与历史记录见 [验证记录](docs/validation.md)，[视觉规范](docs/visual-system.md)记录当前界面与交互规则。
-
-## 0.1.9 更新进度
-
-本轮优化「我的环境」稳定性：按环境 ID 复用列表与图标节点，增删提示改为顶部悬浮 Toast，删除后保留列表当前操作位置。现有样式、平台图标、拖拽、弹窗及账号数据保持。本地检查已通过，Windows 安装及发布检查待完成；上方下载仍为已核实的 0.1.8，完成发布验收后更新链接。
+[Windows 主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37882435076)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37882445214)均通过，包括 69 项单元、语法、23 项隔离、16 项本地兼容性、原生 DPAPI、357 项既有窗口 UI 及 51 项新增 50 环境专项。实际安装后的图标 / 列表复用、悬浮提示、平台关联与排序、启动配置锁定、固定弹窗头尾、运行、重启恢复及卸载均已验证。发布页、三个附件的匿名直接下载与校验文件已核实。缩放为 Electron 实际 DPR，未切换 Windows 物理显示器 DPI。真实平台登录仍需实机复测，知乎 `10001` 的原因尚未确认。完整结果及历史见 [验证记录](docs/validation.md)，[视觉规范](docs/visual-system.md)记录当前交互规则。
 
 ## 使用方式
 

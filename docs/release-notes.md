@@ -8,8 +8,10 @@
 
 品牌蓝色选中块、图标、字体、侧栏拖拽及边缘自动滚动、固定头尾创建弹窗、防误触和启动配置锁定保持。账号唯一标识、Cookie、缓存与网站存储隔离不变；排序仍自动保存，无需数据迁移。
 
-本地通过 69 项单元、语法、23 项隔离、16 项本地兼容性、432 项既有真实窗口 UI 检查。新增 50 环境专项覆盖三档实际 DPR 的图标节点复用、改名、过滤、提示层级及到期、连续删除和排序；Windows 和发布验收尚待本轮工作流完成，完整状态见 [验证记录](https://github.com/liu341567-sys/zhiwen/blob/main/docs/validation.md)。
+本地通过 69 项单元、语法、23 项隔离、16 项本地兼容性、432 项既有真实窗口 UI 及 51 项新增 50 环境专项。[Windows 主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37882435076)和[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/37882445214)均通过 69 项单元、语法、23 项隔离、16 项本地兼容性、原生 DPAPI、357 项既有 UI 与 51 项新增专项；实际安装后的图标 / 列表复用、悬浮提示、固定弹窗、排序与锁定、正常运行 / 退出、重启数据恢复及卸载通过。新增专项在实际 DPR 1 / 1.25 / 1.5 各 17 项，覆盖快速切换、过滤 / 改名、提示层级 / 到期、连续删除、排序及错误反馈；缩放不代表切换 Windows 物理显示器 DPI。
 
-更新前正常退出旧版并备份整个 `%APPDATA%\栖页` 数据目录。原账号环境沿用该目录，无需迁移。安装包及 ZIP 仅在同轮 Windows 检查、实际 NSIS 安装、运行、原生 DPAPI 恢复、图标与交互验收通过后发布。
+[v0.1.9](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.1.9)已公开，发布页与三个附件匿名直接下载最终均为 HTTP 200，实际读取的校验文件自身摘要及两行附件摘要与 API 一致。下载 [安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.9/Qiye-Setup-0.1.9-x64.exe)后运行安装程序；或下载 [ZIP 版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.9/Qiye-0.1.9-x64.zip)，完整解压后运行 `栖页.exe`。[SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.1.9/SHA256SUMS.txt)提供附件校验值。完整记录见 [验证记录](https://github.com/liu341567-sys/zhiwen/blob/main/docs/validation.md)。
+
+更新前正常退出旧版并备份整个 `%APPDATA%\栖页` 数据目录。原账号环境沿用该目录，无需迁移。安装包及 ZIP 已通过同轮 Windows 检查及实际 NSIS 安装验收。
 
 当前打包没有代码签名证书。环境共享当前电脑与网络出口；真实平台登录仍需 Windows 实机复测，本轮不承诺修复平台服务端登录限制。
