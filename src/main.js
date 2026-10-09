@@ -35,6 +35,14 @@ let overlayVisible = false;
 let quitting = false;
 let canQuit = false;
 let mutationQueue = Promise.resolve();
+let toastView;
+let toastReady = false;
+let toastMessage = null;
+let toastSequence = 0;
+let toastHeight = 58;
+let toastBounds = { x: 264, y: 116, width: 900 };
+let toastFadeTimer;
+let toastHideTimer;
 const diagnostics = new LoginDiagnostics();
 let diagnosticGeneration = 0;
 let samplingDiagnostics = false;
@@ -124,6 +132,50 @@ function updateViews() {
     entry.view.setBounds(safeBounds);
     entry.view.setVisible(id === activeId && !overlayVisible && !entry.error && safeBounds.width > 0 && safeBounds.height > 0);
   }
+  updateToastView();
+}
+
+function updateToastView() {
+  if (!toastView || !mainWindow || mainWindow.isDestroyed()) return;
+  const [width, height] = mainWindow.getContentSize();
+  const left = Math.min(toastBounds.x, width);
+  const available = Math.max(0, width - left);
+  const toastWidth = Math.min(416, Math.max(0, available - 16));
+  const y = toastBounds.y + 8;
+  toastView.setBounds({ x: Math.round(left + (available - toastWidth) / 2), y, width: Math.round(toastWidth), height: toastHeight });
+  // A native website view sits above DOM overlays. This separate local,
+  // sandboxed UI view floats above it without resizing or hiding the account.
+  if (mainWindow.contentView.children.at(-1) !== toastView) mainWindow.contentView.addChildView(toastView);
+  toastView.setVisible(Boolean(toastReady && toastMessage && toastWidth >= 120 && y + toastHeight <= height));
+}
+
+function sendToast() {
+  if (toastReady && toastMessage && !toastView.webContents.isDestroyed()) toastView.webContents.send('browser:toast-changed', toastMessage);
+  updateToastView();
+}
+
+function createToastView() {
+  toastView = new WebContentsView({ webPreferences: {
+    preload: path.join(__dirname, 'toast-preload.js'), nodeIntegration: false,
+    contextIsolation: true, sandbox: true, webSecurity: true, navigateOnDragDrop: false
+  } });
+  toastView.setBackgroundColor('#00000000');
+  toastView.setVisible(false);
+  mainWindow.contentView.addChildView(toastView);
+  toastView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  toastView.webContents.on('will-navigate', event => event.preventDefault());
+  toastView.webContents.loadFile(path.join(__dirname, 'renderer', 'toast.html')).then(() => {
+    toastReady = true;
+    sendToast();
+  }).catch(() => { toastReady = false; });
+  mainWindow.once('closed', () => {
+    clearTimeout(toastFadeTimer);
+    clearTimeout(toastHideTimer);
+    if (!toastView.webContents.isDestroyed()) toastView.webContents.close();
+    toastView = null;
+    toastReady = false;
+    toastMessage = null;
+  });
 }
 
 function allowedNavigation(url) {
@@ -367,6 +419,40 @@ function activePage() {
 }
 
 function registerIPC() {
+  ipcMain.handle('browser:toast', (event, next) => {
+    if (quitting || !mainWindow || event.sender !== mainWindow.webContents ||
+        event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('此页面无权显示提示');
+    if (!next || typeof next !== 'object') throw new Error('无效的提示');
+    if (next.bounds) {
+      if (!['x', 'y', 'width'].every(key => Number.isFinite(next.bounds[key]) && next.bounds[key] >= 0 && next.bounds[key] < 50000)) throw new Error('无效的提示位置');
+      toastBounds = Object.fromEntries(['x', 'y', 'width'].map(key => [key, Math.round(next.bounds[key])]));
+    }
+    if (Object.hasOwn(next, 'message')) {
+      if (typeof next.message !== 'string' || !next.message.trim() || next.message.length > 1000 || !['success', 'error', 'info'].includes(next.type)) throw new Error('无效的提示内容');
+      clearTimeout(toastFadeTimer);
+      clearTimeout(toastHideTimer);
+      toastMessage = { message: next.message, type: next.type, sequence: ++toastSequence, leaving: false };
+      sendToast();
+      const sequence = toastSequence;
+      toastFadeTimer = setTimeout(() => {
+        if (toastMessage?.sequence !== sequence) return;
+        toastMessage.leaving = true;
+        sendToast();
+      }, 2500);
+      toastHideTimer = setTimeout(() => {
+        if (toastMessage?.sequence !== sequence) return;
+        toastMessage = null;
+        updateToastView();
+      }, 2700);
+    } else updateToastView();
+    return true;
+  });
+  ipcMain.on('browser:toast-size', (event, size) => {
+    if (!toastView || event.sender !== toastView.webContents || event.senderFrame !== toastView.webContents.mainFrame ||
+        !toastMessage || size?.sequence !== toastMessage.sequence || !Number.isFinite(size.height) || size.height < 30 || size.height > 144) return;
+    toastHeight = Math.ceil(size.height);
+    updateToastView();
+  });
   // A website can restore only its own origin in its own Session. These IPC
   // channels are private to the sandboxed preload, never exposed through DOM.
   const documentContext = event => {
@@ -546,6 +632,7 @@ async function createWindow() {
     if (!canQuit) { event.preventDefault(); app.quit(); }
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  createToastView();
   const state = store.getState();
   for (const id of state.openIds) await createView(id);
   updateViews();

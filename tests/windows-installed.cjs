@@ -359,6 +359,27 @@ async function main() {
       sessionStorage.setItem('installedAccount', 'native-preview');
     });
     const creationLayout = await assertInstalledCreationLayout(shell, accountPage, outputDirectory);
+    await shell.evaluate(() => {
+      window.__installedStableRows = [...document.querySelectorAll('.profile-row')].map(row => ({ id: row.dataset.profileId,
+        row, avatar: row.querySelector('.profile-icon'), image: row.querySelector('img') }));
+      const list = document.getElementById('profile-list');
+      window.__installedToastLayout = { height: list.clientHeight, top: list.getBoundingClientRect().top,
+        bottom: document.querySelector('.sidebar-bottom').getBoundingClientRect().top };
+      return window.browserAPI.showToast({ message: '独立环境创建成功', type: 'success', bounds: {
+        x: document.querySelector('.sidebar').getBoundingClientRect().right,
+        y: document.querySelector('.navigation-toolbar').getBoundingClientRect().bottom, width: innerWidth } });
+    });
+    const toastPage = instance.browser.contexts().flatMap(context => context.pages()).find(page => page.url().endsWith('/renderer/toast.html'));
+    assert.ok(toastPage, 'The installed package must include the local notification surface');
+    await toastPage.waitForFunction(() => document.getElementById('toast-message').textContent === '独立环境创建成功');
+    assert.deepEqual(await toastPage.evaluate(() => ({ node: typeof require, manager: typeof browserAPI,
+      methods: Object.keys(toastAPI).sort() })), { node: 'undefined', manager: 'undefined', methods: ['onMessage', 'resized'] });
+    assert.equal(await shell.evaluate(() => {
+      const list = document.getElementById('profile-list'), old = window.__installedToastLayout;
+      return list.clientHeight === old.height && list.getBoundingClientRect().top === old.top &&
+        document.querySelector('.sidebar-bottom').getBoundingClientRect().top === old.bottom;
+    }), true, 'Installed toast cannot occupy sidebar layout space');
+
     const edited = await shell.evaluate(id => window.browserAPI.updateProfile(id, { name: '安装检查 · 已编辑', notes: 'Saved local note' }), id);
     assert.equal(edited.profiles.find(profile => profile.id === id).name, '安装检查 · 已编辑');
     assert.equal(edited.profiles.find(profile => profile.id === id).notes, 'Saved local note');
@@ -376,6 +397,11 @@ async function main() {
     await shell.evaluate(id => window.browserAPI.openProfile(id), id);
     accountPage = await pageFor(instance, fixtureUrl);
     assertAccount(await accountState(accountPage));
+    assert.equal(await shell.evaluate(() => window.__installedStableRows.every(old => {
+      const row = [...document.querySelectorAll('.profile-row')].find(row => row.dataset.profileId === old.id);
+      return row === old.row && row.querySelector('.profile-icon') === old.avatar && row.querySelector('img') === old.image;
+    })), true, 'Editing, sorting, closing and reopening must preserve installed sidebar rows and images');
+
     await accountPage.evaluate(url => { window.open(url, '_blank'); }, fixtureUrl.replace('/account', '/popup'));
     const popup = await pageFor(instance, fixtureUrl.replace('/account', '/popup'));
     const popupIdentity = await popup.evaluate(() => ({ cookie: document.cookie, node: typeof require, manager: typeof browserAPI }));
@@ -421,8 +447,9 @@ async function main() {
       localPlatformImageCount: platformImages.length, platformAssociationAndIconRestored: true,
       profileOrderRestored: true, launchConfigurationLocked: true,
       fixedCreationHeaderAndFooter: true, creationLayout,
+      stableSidebarRowsAndImages: true, floatingToastWithoutSidebarLayoutChanges: true,
     }, null, 2));
-    console.log('Installed Windows native launch, original brand ratio, fixed creation header/footer, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
+    console.log('Installed Windows native launch, original brand ratio, fixed creation header/footer, stable sidebar icons and floating toast, account persistence, popup session inheritance and normal WM_CLOSE shutdown passed.');
   } finally {
     await cleanupFailedInstance(instance);
     server.closeAllConnections();

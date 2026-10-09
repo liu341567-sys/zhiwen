@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>操作提示</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./toast.js" defer></script>
+  </head>
+  <body class="toast-page">
+    <div id="toast" class="toast-card" role="status" aria-live="polite" aria-atomic="true" hidden><span id="toast-status" class="toast-status" aria-hidden="true"></span><span id="toast-message"></span></div>
+  </body>
+</html>

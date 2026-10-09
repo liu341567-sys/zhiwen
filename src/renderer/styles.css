@@ -216,7 +216,7 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .search-field input::placeholder { color: var(--muted); }
 .search-field:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-halo); background: var(--surface); }
 .search-field input:focus-visible { outline: 0; }
-.profile-list { flex: 1 1 120px; min-height: 64px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
+.profile-list { flex: 1 1 120px; min-height: 64px; overflow-y: auto; overflow-x: hidden; overflow-anchor: none; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 .profile-row { display: flex; position: relative; align-items: center; gap: 2px; margin-bottom: 5px; padding: 3px; border: 1px solid transparent; border-radius: var(--radius-control); user-select: none; }
 .profile-row:hover { background: var(--sidebar-hover); }
 .profile-row.active { background: var(--sidebar-selected); border-color: var(--sidebar-selected-border); box-shadow: none; }
@@ -371,11 +371,15 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 .browser-error .text-button { margin-top: 12px; }
 
 /* Feedback is visually distinct without lowering text contrast. */
-.toast-stack { margin-bottom: 12px; }
-.toast-stack:empty { display: none; }
-.toast { margin-top: 7px; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--success); background: var(--surface-inset); box-shadow: inset 2px 0 0 var(--success); font-size: var(--font-small); line-height: 1.7; overflow-wrap: anywhere; }
-.toast.error, .form-error { color: var(--danger); background: var(--surface-inset); border-color: var(--line); box-shadow: inset 2px 0 0 var(--danger); }
-.toast.info { color: var(--brand-hover); background: var(--surface-inset); border-color: var(--line); box-shadow: inset 2px 0 0 var(--brand); }
+.toast-page { background: transparent; }
+.toast-card { display: flex; align-items: flex-start; gap: 9px; margin: 8px; padding: 10px 13px; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--text); background: var(--surface); box-shadow: 0 3px 10px var(--shadow-modal); font-size: var(--font-body); line-height: 1.5; overflow-wrap: anywhere; animation: toast-enter .16s ease-out; }
+.toast-card.is-leaving { opacity: 0; transition: opacity .18s ease; }
+.toast-status { flex-shrink: 0; color: var(--success); font-weight: 600; }
+.toast-card.error .toast-status { color: var(--danger); }
+.toast-card.info .toast-status { color: var(--brand); }
+#toast-message { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+@keyframes toast-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+.form-error { color: var(--danger); background: var(--surface-inset); border-color: var(--line); box-shadow: inset 2px 0 0 var(--danger); }
 .persistent-warning { margin-bottom: 12px; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--warning); background: var(--surface-inset); box-shadow: inset 2px 0 0 var(--warning); font-size: var(--font-small); line-height: 1.7; overflow-wrap: anywhere; }
 
 /* Dialogs scroll within the usable viewport, including low-height desktops. */

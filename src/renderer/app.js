@@ -43,7 +43,9 @@
   let focusKeyBeforeModal = null;
   let boundsFrame = 0;
   let lastBounds = '';
-  let toastSequence = 0;
+  const profileRows = new Map();
+  let previousProfileQuery = null;
+  let cardsFingerprint = null;
   let platformChoicesBuilt = false;
   let selectedPlatformId = null;
   let customUrlDraft = '';
@@ -221,12 +223,69 @@
     catch (error) { notify(error.message || '操作未能完成，请重试。', 'error'); }
   }
 
+  function toastBounds() {
+    const toolbar = document.querySelector('.navigation-toolbar').getBoundingClientRect();
+    const sidebar = document.querySelector('.sidebar').getBoundingClientRect();
+    return { x: Math.round(sidebar.right), y: Math.round(toolbar.bottom), width: Math.round(innerWidth - sidebar.right) };
+  }
+
   function notify(message, type = 'success') {
-    const toast = element('div', `toast ${type}`, message);
-    toast.dataset.toastId = String(++toastSequence);
-    $('toast-stack').append(toast);
-    while ($('toast-stack').children.length > 2) $('toast-stack').firstElementChild.remove();
-    window.setTimeout(() => toast.remove(), type === 'error' ? 11000 : 5500);
+    api?.showToast({ message: String(message).slice(0, 1000), type, bounds: toastBounds() }).catch(() => {});
+  }
+
+  function updateProfileRow(entry, profile) {
+    entry.row.classList.toggle('active', state.activeId === profile.id);
+    const title = profile.notes ? `${profile.name}\n${profile.notes}` : profile.name;
+    if (entry.open.title !== title) entry.open.title = title;
+    entry.open.setAttribute('aria-label', `打开环境：${profile.name}`);
+    entry.edit.setAttribute('aria-label', `编辑环境：${profile.name}`);
+    if (entry.name.textContent !== profile.name) entry.name.textContent = profile.name;
+    const opened = isOpen(profile.id);
+    entry.dot.classList.toggle('closed', !opened);
+    const statusText = opened ? '已打开' : '已保存';
+    if (entry.statusText.nodeValue !== statusText) entry.statusText.nodeValue = statusText;
+    const platform = findPlatform(profile.platformId);
+    const avatarKey = platform ? `${platform.id}:${platform.iconResource}` : '';
+    if (entry.avatarKey !== avatarKey) {
+      const next = avatar(profile);
+      entry.avatar.replaceWith(next);
+      entry.avatar = next;
+      entry.avatarKey = avatarKey;
+    }
+    entry.avatar.dataset.color = colorName(profile.color);
+    const initial = [...entry.avatar.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
+    if (initial && initial.nodeValue !== initials(profile.name)) initial.nodeValue = initials(profile.name);
+  }
+
+  function profileRow(profile) {
+    let entry = profileRows.get(profile.id);
+    if (!entry) {
+      const row = element('div', 'profile-row');
+      row.dataset.profileId = profile.id;
+      const open = button('profile-open', '', () => action('openProfile', profile.id));
+      open.dataset.focusKey = `open:${profile.id}`;
+      const label = element('span', 'profile-row-text');
+      const name = element('span', 'profile-name');
+      const meta = element('span', 'profile-meta');
+      const dot = element('span', 'status-dot');
+      const statusText = document.createTextNode('');
+      meta.append(dot, statusText);
+      label.append(name, meta);
+      const image = avatar(profile);
+      open.append(image, label);
+      const edit = button('icon-button profile-edit', '', () => {
+        const current = findProfile(profile.id);
+        if (current) openProfileDialog(current);
+      }, 'pencil');
+      edit.title = '编辑环境';
+      edit.dataset.focusKey = `edit:${profile.id}`;
+      row.append(open, edit);
+      const platform = findPlatform(profile.platformId);
+      entry = { row, open, edit, name, dot, statusText, avatar: image, avatarKey: platform ? `${platform.id}:${platform.iconResource}` : '' };
+      profileRows.set(profile.id, entry);
+    }
+    updateProfileRow(entry, profile);
+    return entry.row;
   }
 
   function renderProfiles() {
@@ -236,36 +295,40 @@
     $('overview-count').textContent = String(state.profiles.length);
     $('sidebar-overview').classList.toggle('active', !state.activeId);
     $('sidebar-overview').setAttribute('aria-current', state.activeId ? 'false' : 'page');
-    const rows = profileDrag ? null : filtered.map((profile) => {
-      const row = element('div', `profile-row${state.activeId === profile.id ? ' active' : ''}`);
-      row.dataset.profileId = profile.id;
-      const open = button('profile-open', '', () => action('openProfile', profile.id));
-      open.setAttribute('aria-label', `打开环境：${profile.name}`);
-      open.title = profile.notes ? `${profile.name}\n${profile.notes}` : profile.name;
-      open.dataset.focusKey = `open:${profile.id}`;
-      const label = element('span', 'profile-row-text');
-      label.append(element('span', 'profile-name', profile.name), status(profile));
-      open.append(avatar(profile), label);
-      const edit = button('icon-button profile-edit', '', () => openProfileDialog(profile), 'pencil');
-      edit.title = '编辑环境';
-      edit.setAttribute('aria-label', `编辑环境：${profile.name}`);
-      edit.dataset.focusKey = `edit:${profile.id}`;
-      row.append(open, edit);
-      return row;
-    });
-    // Keep the pressed/captured button and insertion markers stable while
-    // pages publish updates, including a click still below the drag threshold.
-    if (rows) {
+    // A captured gesture keeps its existing nodes and insertion markers until
+    // release. Normal updates reconcile by UUID without remounting icons.
+    if (!profileDrag) {
       profileRowsDeferred = false;
-      $('profile-list').replaceChildren(...rows);
-      $('profile-list').hidden = !rows.length;
-      $('sidebar-empty').hidden = Boolean(rows.length);
+      const list = $('profile-list');
+      const sidebar = document.querySelector('.sidebar');
+      const savedScroll = query === previousProfileQuery ? list.scrollTop : 0;
+      const savedSidebarScroll = sidebar.scrollTop;
+      const ids = new Set(state.profiles.map(profile => profile.id));
+      const visible = new Set(filtered.map(profile => profile.id));
+      for (const [id, entry] of profileRows) {
+        if (!ids.has(id)) { entry.row.remove(); profileRows.delete(id); }
+      }
+      for (const row of [...list.children]) if (!visible.has(row.dataset.profileId)) row.remove();
+      let position = list.firstElementChild;
+      for (const profile of filtered) {
+        const row = profileRow(profile);
+        if (row !== position) list.insertBefore(row, position);
+        position = row.nextElementSibling;
+      }
+      list.hidden = !filtered.length;
+      $('sidebar-empty').hidden = Boolean(filtered.length);
+      list.scrollTop = Math.min(savedScroll, Math.max(0, list.scrollHeight - list.clientHeight));
+      sidebar.scrollTop = Math.min(savedSidebarScroll, Math.max(0, sidebar.scrollHeight - sidebar.clientHeight));
+      previousProfileQuery = query;
     } else {
       profileRowsDeferred = true;
       for (const row of $('profile-list').children) row.classList.toggle('active', row.dataset.profileId === state.activeId);
     }
     $('sidebar-empty').replaceChildren(document.createTextNode(state.profiles.length ? '没有找到匹配的环境' : '还没有保存的环境'), element('br'), element('span', '', state.profiles.length ? '试试其他名称或备注' : '从新建第一个环境开始'));
     const creationOrder = [...state.profiles].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id));
+    const fingerprint = JSON.stringify(creationOrder.map(profile => [profile.id, profile.name, profile.notes, profile.color, profile.createdAt, profile.platformId, isOpen(profile.id)]));
+    if (fingerprint !== cardsFingerprint) {
+    cardsFingerprint = fingerprint;
     $('profile-cards').replaceChildren(...creationOrder.map((profile) => {
       const card = element('article', 'profile-card');
       const top = element('div', 'card-top');
@@ -287,6 +350,7 @@
       card.append(top, title, element('p', 'card-note', profile.notes || '暂无备注，可在编辑中记录账号用途。'), footer);
       return card;
     }));
+    }
     $('overview-empty').hidden = Boolean(state.profiles.length);
     $('profile-cards').hidden = !state.profiles.length;
   }
@@ -784,11 +848,12 @@
       const wasEditing = Boolean(editId);
       setDialogBusy(false);
       await closeDialog($('profile-dialog'), false);
-      notify(wasEditing ? '环境信息已保存。' : '独立环境已创建，可以登录新的账号。');
+      notify(wasEditing ? '环境信息已保存。' : '独立环境创建成功');
     } catch (error) {
       $('profile-form-error').textContent = error.message || '保存失败，请重试。';
       $('profile-form-error').hidden = false;
       setDialogBusy(false);
+      notify(error.message || '保存失败，请重试。', 'error');
       if (invalidField) {
         profileErrorField = invalidField;
         invalidField.setAttribute('aria-invalid', 'true');
@@ -806,12 +871,13 @@
       await call('deleteProfile', deleteId);
       setDialogBusy(false);
       await closeDialog($('delete-dialog'), false);
-      notify('环境及其浏览数据已删除。');
+      notify('独立环境已删除');
       deleteId = null;
     } catch (error) {
       $('delete-error').textContent = error.message || '删除失败，请重试。';
       $('delete-error').hidden = false;
       setDialogBusy(false);
+      notify(error.message || '删除失败，请重试。', 'error');
     }
   });
 
@@ -880,7 +946,10 @@
     handleShortcut(key);
   });
   api?.onShortcut?.(handleShortcut);
-  window.addEventListener('resize', scheduleBounds);
+  window.addEventListener('resize', () => {
+    scheduleBounds();
+    api?.positionToast(toastBounds()).catch(() => {});
+  });
   new ResizeObserver(scheduleBounds).observe($('browser-viewport'));
   api?.onState(applyState);
   render();

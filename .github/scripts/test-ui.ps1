@@ -6,7 +6,7 @@ $logPath = Join-Path $logDirectory 'windows-ui.log'
 $testExitCode = $LASTEXITCODE
 if ($testExitCode -eq 0) {
   $summaries = (Get-Content -LiteralPath $logPath | Where-Object {
-    $_ -match '^\{"scaleSummary":|^\d+ real-window UI checks passed'
+    $_ -match '^\{"scaleSummary":|^\{"sidebarSummary":|^\d+ real-window UI checks passed|^\d+ sidebar stability checks passed'
   }) -join "`n"
   if ($env:GITHUB_STEP_SUMMARY) {
     @('### Windows UI scaling', '', '```text', $summaries, '```') |
