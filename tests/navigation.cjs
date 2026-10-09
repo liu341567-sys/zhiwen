@@ -135,7 +135,12 @@ async function run(scale, origin) {
     });
     await preview('environment');
     await until(() => shell.locator('.app-shell').getAttribute('class').then(c => c.includes('sidebar-overlay')), 'explicit temporary cover');
-    await pause(200);
+    // Wall-clock delay is not proof that Chromium's compositor completed the
+    // reveal on a busy Windows runner. Retain exact geometry assertions after
+    // the actual local animation finishes.
+    await shell.locator('#secondary-sidebar').evaluate(async node => {
+      await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {})));
+    });
     assert.deepEqual((await layout()).main, collapsed.main);
     assert.equal((await layout()).sidebar.x, 64);
     const coverNative = await identity();
