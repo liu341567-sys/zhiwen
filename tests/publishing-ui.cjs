@@ -591,7 +591,7 @@ async function run(scale) {
         .fromId(id)
         .loadURL('https://creator.douyin.com/creator-micro/home');
     }, bWcId);
-    const runEntry = async (html, handlers, name) => {
+    const runEntry = async (html, handlers, name, options = {}) => {
       await setScenario(html);
       await app.evaluate(
         async ({ webContents }, { id, handlers }) => {
@@ -608,12 +608,16 @@ async function run(scale) {
         { id: bWcId, handlers },
       );
       const result = await app.evaluate(
-        async (_electron, task) => globalThis.__publishingFixture(task),
+        async (_electron, { task, options }) =>
+          globalThis.__publishingFixture(task, options),
         {
-          ...tasks.find((t) => t.accountId === b.id),
-          id: name,
-          checkpoint: {},
-          autoSubmit: false,
+          options,
+          task: {
+            ...tasks.find((t) => t.accountId === b.id),
+            id: name,
+            checkpoint: {},
+            autoSubmit: false,
+          },
         },
       );
       assert.equal(result.result.status, 'manual');
@@ -673,6 +677,41 @@ async function run(scale) {
     }
     check(
       `publishing-${scale}: reported home-page Works Publish entry opens the upload form in the original environment`,
+      () => assert.ok(true),
+    );
+    for (const captureMode of ['pending', 'rejected', 'empty']) {
+      await app.evaluate(
+        async ({ webContents }, id) =>
+          webContents
+            .fromId(id)
+            .loadURL('https://creator.douyin.com/creator-micro/content/manage'),
+        bWcId,
+      );
+      const fallback = await runEntry(
+        '<aside><button id="work-publish" style="width:152px;height:40px"><span><div><span>作品发布</span></div></span></button></aside>',
+        "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;window.openVideoForm();}",
+        `surface-${captureMode}-fixture`,
+        { captureMode, timeoutMs: 15000 },
+      );
+      assert.equal(fallback.result.captureCalls, 1);
+      assert.equal(fallback.actions.clicks, 1);
+      assert.equal(
+        fallback.actions.events.filter((e) => e.type === 'click' && e.trusted)
+          .length,
+        1,
+      );
+      assert.ok(
+        fallback.result.logs.some((log) => log.includes('鼠标事件已发送')),
+      );
+      if (captureMode !== 'empty')
+        assert.ok(
+          fallback.result.logs.some((log) =>
+            log.includes('后台画面准备未完成'),
+          ),
+        );
+    }
+    check(
+      `publishing-${scale}: a stalled, failed or empty hidden capture cannot block a unique Works Publish control; trusted click uploads and fills without submitting`,
       () => assert.ok(true),
     );
     const menuEntry = await runEntry(

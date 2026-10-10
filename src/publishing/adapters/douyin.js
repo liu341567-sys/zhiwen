@@ -534,7 +534,7 @@ async function execute(task, context, { getView, validate, accountStatus }) {
   await validate(task.video);
   context.log('视频路径、可读性和内容摘要检查通过');
   const wc = await getView(task.accountId),
-    page = new Page(wc, context.signal);
+    page = new Page(wc, context.signal, context.log);
   const manual = (reason) => ({ status: 'manual', reason });
   try {
     await page.connect();

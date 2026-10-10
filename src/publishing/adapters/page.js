@@ -1,10 +1,11 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
 class Page {
-  constructor(wc, signal) {
+  constructor(wc, signal, log = () => {}) {
     this.wc = wc;
     this.signal = signal;
     this.attached = false;
+    this.log = log;
   }
   check() {
     if (this.signal.aborted) throw new Error('任务已暂停');
@@ -146,28 +147,37 @@ class Page {
         y = r.y + r.height / 2;
       return e.contains(document.elementFromPoint(x, y)) ? { x, y } : null;
     };
+    this.log('控件点击：检查唯一目标与实时遮挡');
     let point = await this.evaluate(locate, target);
     if (point) {
       // A newly navigated hidden native view may have DOM layout but no
       // compositor surface yet. Flush a tiny frame before trusted input; keep
       // the view hidden and discard the image without saving page contents.
-      const frame = await this.awaitOperation(
-        this.wc.capturePage(
-          { x: 0, y: 0, width: 1, height: 1 },
-          { stayHidden: true, stayAwake: true },
-        ),
-      );
-      if (frame.isEmpty()) point = null;
-      else {
-        await this.command('Input.dispatchMouseEvent', {
-          type: 'mouseMoved',
-          ...point,
-          button: 'none',
-        });
-        // Hover may reveal a menu or move a control. Hit-test it again rather
-        // than clicking a stale location or a different element.
-        point = await this.evaluate(locate, target);
+      // capturePage can remain unresolved on Windows hidden views, even when
+      // DOM geometry and native input are usable. It is a rendering hint, not
+      // evidence that a control is unavailable. Never gate clicking on it.
+      this.log('控件点击：短时准备后台画面');
+      try {
+        await this.awaitOperation(
+          this.wc.capturePage(
+            { x: 0, y: 0, width: 1, height: 1 },
+            { stayHidden: true, stayAwake: true },
+          ),
+          500,
+        );
+      } catch (error) {
+        this.check();
+        this.log('后台画面准备未完成，继续依据实时控件状态操作');
       }
+      this.log('控件点击：发送真实悬停并重新检查目标');
+      await this.command('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        ...point,
+        button: 'none',
+      });
+      // Hover may reveal a menu or move a control. Hit-test it again rather
+      // than clicking a stale location or a different element.
+      point = await this.evaluate(locate, target);
     }
     if (!point)
       throw Object.assign(
@@ -176,18 +186,21 @@ class Page {
         ),
         { manual: true },
       );
+    this.log('控件点击：发送真实鼠标按下');
     await this.command('Input.dispatchMouseEvent', {
       type: 'mousePressed',
       ...point,
       button: 'left',
       clickCount: 1,
     });
+    this.log('控件点击：发送真实鼠标松开');
     await this.command('Input.dispatchMouseEvent', {
       type: 'mouseReleased',
       ...point,
       button: 'left',
       clickCount: 1,
     });
+    this.log('控件点击：鼠标事件已发送，后续核验页面变化');
   }
   async focusEditor(selector, replace) {
     const focused = await this.evaluate(

@@ -286,3 +286,36 @@ test('failed pre-submit attempts must not silently delay a new account task', as
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('click diagnostics identify fixed preparation/input stages without retaining arbitrary log content', () =>
+  withQueue(async ({ store, scheduler, now }) => {
+    store.addBatch('trace', [task('v', 'a', now)]);
+    const t = store.tasks()[0],
+      d = new Diagnostics({ store, scheduler });
+    try {
+      await d.start(t.id);
+      for (const m of [
+        '控件点击：短时准备后台画面',
+        '后台画面准备未完成，继续依据实时控件状态操作',
+        '控件点击：发送真实鼠标按下',
+        '网页操作超时，请人工检查',
+        'secret account /private?token=secret',
+      ])
+        d.event(t.id, m, 'error');
+      const report = d.report(t.id);
+      assert.deepEqual(
+        report.events.map((e) => e.stage),
+        [
+          'surface-hint',
+          'surface-unavailable',
+          'mouse-press',
+          'operation-timeout',
+          undefined,
+        ],
+      );
+      assert.equal(report.events[0].phase, 'control-click');
+      assert.ok(!JSON.stringify(report).includes('secret'));
+    } finally {
+      d.close();
+    }
+  }));

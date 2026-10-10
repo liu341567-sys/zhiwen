@@ -317,25 +317,38 @@ class Diagnostics {
           ? 'challenge'
           : /^视频路径/.test(message)
             ? 'file-check'
-            : /发布入口/.test(message)
-              ? 'entry-check'
-              : /^已点击平台/.test(message)
-                ? 'entry-click'
-                : /上传状态|等待.*上传/.test(message)
-                  ? 'upload-wait'
-                  : /视频已交给/.test(message)
-                    ? 'upload-start'
-                    : /上传完成/.test(message)
-                      ? 'upload-ready'
-                      : /标题|话题|填写/.test(message)
-                        ? 'caption'
-                        : /提交|发布结果/.test(message)
-                          ? 'submission'
-                          : 'other';
+            : /^控件点击：|^后台画面准备/.test(message)
+              ? 'control-click'
+              : /发布入口/.test(message)
+                ? 'entry-check'
+                : /^已点击平台/.test(message)
+                  ? 'entry-click'
+                  : /上传状态|等待.*上传/.test(message)
+                    ? 'upload-wait'
+                    : /视频已交给/.test(message)
+                      ? 'upload-start'
+                      : /上传完成/.test(message)
+                        ? 'upload-ready'
+                        : /标题|话题|填写/.test(message)
+                          ? 'caption'
+                          : /提交|发布结果/.test(message)
+                            ? 'submission'
+                            : 'other';
+    const stage = new Map([
+      ['控件点击：检查唯一目标与实时遮挡', 'target-check'],
+      ['控件点击：短时准备后台画面', 'surface-hint'],
+      ['后台画面准备未完成，继续依据实时控件状态操作', 'surface-unavailable'],
+      ['控件点击：发送真实悬停并重新检查目标', 'hover-check'],
+      ['控件点击：发送真实鼠标按下', 'mouse-press'],
+      ['控件点击：发送真实鼠标松开', 'mouse-release'],
+      ['控件点击：鼠标事件已发送，后续核验页面变化', 'input-sent'],
+      ['网页操作超时，请人工检查', 'operation-timeout'],
+    ]).get(message);
     report.events.push({
       time: Date.now(),
       phase,
       level: ['error', 'warning'].includes(level) ? level : 'info',
+      ...(stage ? { stage } : {}),
     });
     report.events = report.events.slice(-300);
     this.save(id, report);

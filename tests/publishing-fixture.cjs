@@ -39,6 +39,16 @@ globalThis.__publishingFixture = async (task, options = {}) => {
     ? setTimeout(() => controller.abort(), options.timeoutMs)
     : null;
   let result;
+  const originalCapture = view.webContents.capturePage;
+  let captureCalls = 0;
+  if (options.captureMode)
+    view.webContents.capturePage = () => {
+      captureCalls++;
+      if (options.captureMode === 'pending') return new Promise(() => {});
+      if (options.captureMode === 'rejected')
+        return Promise.reject(new Error('fixture surface unavailable'));
+      return Promise.resolve({ isEmpty: () => true });
+    };
   try {
     result = await execute(
       task,
@@ -61,6 +71,7 @@ globalThis.__publishingFixture = async (task, options = {}) => {
     result = { status: 'paused', reason: error.message };
   } finally {
     clearTimeout(timeout);
+    view.webContents.capturePage = originalCapture;
   }
   return {
     result,
@@ -73,6 +84,7 @@ globalThis.__publishingFixture = async (task, options = {}) => {
     bounds: view.getBounds(),
     identity,
     activeMetrics: activeMetrics.get(view.webContents.id),
+    captureCalls,
   };
 };
 
