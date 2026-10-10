@@ -8,7 +8,17 @@
 
 本地已复现旧实现：画面采集一直不返回时，约 5 秒超时且零鼠标事件；修复后该场景可重新核对控件并发送原生鼠标事件。104 项单元、语法及 87 项实际 Electron 窗口发布检查通过（DPR 1 / 1.25 / 1.5）。新增三种画面异常用例在每档重新导航后均验证作品发布恰好一次、上传填写完成、图文与最终提交均为零。受遮挡目标和暂停期间禁止点击。测试使用本地模拟页面；用户真实 Windows 抖音复测仍必要。
 
-Windows 安装包与公开下载验证完成后补充证据。更新前正常退出旧版，沿用本地账号和任务数据；已经提交或结果待核实的旧任务不要直接重复发布。
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38020351696)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38020360258)均通过，对应 `e5472ae3751c647240c990caa69622b098087c37` / `v0.2.10`：104 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、87 项发布专项。实际 NSIS 安装、启动、正常退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。缩放为 Electron 实际 DPR 1 / 1.25 / 1.5，不代表切换物理显示器 DPI。真实抖音仍需用户更新后复测。
+
+发布于 2026-10-10 11:34:00（北京时间）。发布页及三个附件匿名 HTTP 200；安装包与 ZIP 完整下载、大小与 SHA256 对照 GitHub 摘要及校验文件一致。已核对发布 ASAR 的版本和运行时代码与构建提交一致（Windows CRLF），原品牌资产、媒体工具、许可齐全，不含用户账号清单。证据位于 `.cache/release-0.2.10/ci-verification.json`、`verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.2.10-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.10/Qiye-0.2.10-x64.zip) | 217819405 | `7006fedfb60797e95f88f8abe230f3c631e4f5ac1df8d20ce5422e0390cf9aca` |
+| [Qiye-Setup-0.2.10-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.10/Qiye-Setup-0.2.10-x64.exe) | 160692575 | `8344c04079891501a45ff5064ce60ee34cd31d8762466153da5136987f55759b` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.10/SHA256SUMS.txt) | 180 | `75ced1f2561f0ced5321bf8f4950b89edc460c30a0bd7e3cc3b85b59b3500c4a` |
+
+更新前正常退出旧版，沿用本地账号和任务数据；已经提交或结果待核实的旧任务不要直接重复发布。
 
 # 栖页 0.2.9 · 发布调度、后台视口与本地诊断
 
