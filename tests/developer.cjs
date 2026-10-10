@@ -113,9 +113,11 @@ async function run(scale, origin) {
     });
     const identity = await account.evaluate(() => window.keepIdentity);
     await shell.evaluate((id) => browserAPI.openProfile(id), b.id);
-    await pause(300);
-    const peers = app.windows().filter((p) => p.url() === origin + '/start');
-    const other = peers.find((p) => p !== account);
+    let other;
+    await until(() => {
+      other = app.windows().find(p => p !== account && p.url() === origin + '/start');
+      return other;
+    }, 'account B loaded');
     await other.waitForFunction(() => window.ready);
     await other.evaluate(() => {
       document.cookie = 'account=B;Path=/';
