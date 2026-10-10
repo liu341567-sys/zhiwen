@@ -9,6 +9,16 @@
 
 真实抖音页面仍需用户实机验证，测试夹具不代表平台发布验收。
 
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38042383367)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38042914967)均通过，对应 `40f60fc04f236ff06a5289d302b61330d9f4f0b6` / `v0.3.1`：121 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、87 项发布专项及 51 项开发者工具原生窗口分组检查。简单排查在 DPR 1 / 1.25 / 1.5 下实际验证任务入口、原环境录制、人工接管、集中预览、确认后 ZIP 导出、固定底部及新问题重置。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试使用本地网页夹具，真实抖音账号仍需用户实机验收。
+
+发布于 2026-10-10 18:03:58（北京时间）。发布页及三个附件匿名访问成功；安装包和 ZIP 完整下载，大小与 SHA256 均对照 GitHub 摘要及校验文件验证通过。包内运行时代码与验证提交一致（Windows CRLF），品牌资产、媒体工具和许可齐全，不含用户账号清单。证据保存在 `.cache/release-0.3.1/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.1-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.1/Qiye-0.3.1-x64.zip) | 217855047 | `50dd1c81c307cbf9dc2567749886aa1469f1a98fe239e20d0370821fb03a3872` |
+| [Qiye-Setup-0.3.1-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.1/Qiye-Setup-0.3.1-x64.exe) | 160720546 | `c937a7646bac10125ad2f5261030904c19a28f8d3e94caefb2f3f8776c63f3db` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.1/SHA256SUMS.txt) | 178 | `b564dd9100233e235e7b9d2de4acaaee45534cbc292cbb54acec576644a7101b` |
+
 # 栖页 0.3.0 · 开发者工具中心
 
 新增独立开发者工具窗口，直接连接已打开的原账号环境，支持真实 DOM 与交互控件分析、CSS / XPath 验证、开放 Shadow DOM、可视化元素选取、人工操作录制、结构差异与历史定位器核对、发布步骤和错误监控，以及本地 JSON / Markdown / HTML / ZIP 调试资料导出。
