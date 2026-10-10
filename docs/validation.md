@@ -1,3 +1,17 @@
+# 0.3.0 开发者工具中心验证
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38035974688)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38036483686)均通过，对应 `eaa16ccb3867022060c9927b63667a4ff4a835da` / `v0.3.0`：115 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、87 项发布专项及 39 项开发者工具原生窗口分组检查。开发者工具在 DPR 1 / 1.25 / 1.5 下验证分析、检查器、录制、脱敏、截图、导出、历史对比及关闭后的原环境保留；这些是本地网页夹具，不代表真实抖音账号验收。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。
+
+发布于 2026-10-10 16:13:26（北京时间）。发布页和三个附件匿名访问成功，两个二进制完整下载，并对照 GitHub 摘要与 SHA256 校验文件验证大小和摘要。发布 ASAR 与验证提交的运行时代码一致（Windows CRLF），品牌资源、媒体工具和许可齐全，不包含用户账号清单。证据保存在 `.cache/release-0.3.0/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.0-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.0/Qiye-0.3.0-x64.zip) | 217848948 | `c23f6064014144c4786e897f5fc69c33d84397cd716332d659787db34b1940c0` |
+| [Qiye-Setup-0.3.0-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.0/Qiye-Setup-0.3.0-x64.exe) | 160715513 | `3c596fa85430c9a711ce4edd68cbdd4f1aacef62f01312b7c8bd2b662fa0f9fe` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.0/SHA256SUMS.txt) | 178 | `de9634cdbce1cc88b2a1cfa3e84db6666bfde54234af4b196b72a26a8d0e50bd` |
+
+截图关闭与页面跳转并发、富文本内部不可编辑节点、私有框架消息来源、异常退出恢复、资料修改后重新审阅、未审阅截图导出阻止、ZIP 文件完整性和可选监控失败不影响发布，均有针对性测试。主框架为隔离上下文；子框架为无权限采样，快速跳转事件可能丢失。真实已登录页面和实际人工发布录制待用户实机验收。
+
 # 0.2.10 后台画面等待与诊断复核
 
 用户诊断有效，记录时长约 205 秒、26 个快照、18 个执行事件及 4 个手动阶段标记；导出时仍在记录（endedAt 为 null）不影响解析。10:45:41 入口检查后 10:45:46 超时，页面仍为作品管理，未记录自动点击；10:46:35 用户可信点击「作品发布」，进入上传页。后续上传及文案填写完成；人工确认提示为正常未授权状态，用户授权后任务最终为 submitted，不能据此声称已正式上线。

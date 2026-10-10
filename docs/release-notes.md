@@ -11,6 +11,16 @@
 
 测试使用真实 Electron 与本地网页夹具；用户已登录的抖音创作者页面及真实发布流程仍需实机验证。尚不提供自动回放、自动生成脚本、闭合 Shadow DOM 读取或平台验证绕过。
 
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38035974688)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38036483686)均通过，对应 `eaa16ccb3867022060c9927b63667a4ff4a835da` / `v0.3.0`：115 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、87 项发布专项及 39 项开发者工具原生窗口分组检查。开发者工具在 DPR 1 / 1.25 / 1.5 下验证分析、检查器、录制、脱敏、截图、导出、历史对比及关闭后的原环境保留；这些是本地网页夹具，不代表真实抖音账号验收。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。
+
+发布于 2026-10-10 16:13:26（北京时间）。发布页和三个附件匿名访问成功，两个二进制完整下载，并对照 GitHub 摘要与 SHA256 校验文件验证大小和摘要。发布 ASAR 与验证提交的运行时代码一致（Windows CRLF），品牌资源、媒体工具和许可齐全，不包含用户账号清单。证据保存在 `.cache/release-0.3.0/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.0-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.0/Qiye-0.3.0-x64.zip) | 217848948 | `c23f6064014144c4786e897f5fc69c33d84397cd716332d659787db34b1940c0` |
+| [Qiye-Setup-0.3.0-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.0/Qiye-Setup-0.3.0-x64.exe) | 160715513 | `3c596fa85430c9a711ce4edd68cbdd4f1aacef62f01312b7c8bd2b662fa0f9fe` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.0/SHA256SUMS.txt) | 178 | `de9634cdbce1cc88b2a1cfa3e84db6666bfde54234af4b196b72a26a8d0e50bd` |
+
 # 栖页 0.2.10 · 后台发布入口点击等待修复
 
 依据用户 0.2.9 本地诊断与任务日志：在作品管理页识别到唯一、可见且可用的「作品发布」，真实页面和原生视口均为 1616 × 903；入口检查后约 5 秒报「网页操作超时」。用户手动点击后，原环境可正常进入上传页、上传视频、填写标题与空格话题，经用户单任务授权后收到页面提交成功反馈。
