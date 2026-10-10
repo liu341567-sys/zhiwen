@@ -50,4 +50,10 @@ session.fromPartition = (...args) => {
 };
 
 if(process.env.QIYE_PUBLISH_FIXTURE==='1')require('./publishing-fixture.cjs');
+if (process.env.QIYE_DEVELOPER_FIXTURE === '1') {
+  const { DeveloperService } = require('../src/developer/service');
+  const attach = DeveloperService.prototype.attach;
+  DeveloperService.prototype.attach = function (...args) { globalThis.__qiyeTestDeveloper = this; return attach.apply(this, args); };
+  globalThis.__qiyeTestPage = require('../src/publishing/adapters/page').Page;
+}
 require('../src/main.js');

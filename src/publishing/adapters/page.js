@@ -1,21 +1,26 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
 class Page {
-  constructor(wc, signal, log = () => {}) {
+  constructor(wc, signal, log = () => {}, trace = () => {}) {
     this.wc = wc;
     this.signal = signal;
     this.attached = false;
     this.log = log;
+    // Observability must never change the outcome of an original page action.
+    this.trace = event => { try { Promise.resolve(trace(event)).catch(() => {}); } catch {} };
   }
   check() {
     if (this.signal.aborted) throw new Error('任务已暂停');
     if (this.wc.isDestroyed()) throw new Error('环境网页已关闭');
   }
-  async awaitOperation(operation, timeout = 5000) {
+  async awaitOperation(operation, timeout = 5000, details = {}) {
     this.check();
+    const start = Date.now();
+    const data = { operation: details.operation || 'page-operation', locator: this.currentTarget || null, ...details };
+    this.trace({ ...data, phase: 'begin', startedAt: start });
     let timer, abort;
     try {
-      return await Promise.race([
+      const result = await Promise.race([
         operation,
         new Promise((_resolve, reject) => {
           abort = () => reject(new Error('任务已暂停'));
@@ -31,13 +36,18 @@ class Page {
           );
         }),
       ]);
+      this.trace({ ...data, phase: 'end', startedAt: start, durationMs: Date.now() - start });
+      return result;
+    } catch (error) {
+      this.trace({ ...data, phase: details.optional ? 'warning' : 'error', startedAt: start, durationMs: Date.now() - start, reason: error.message });
+      throw error;
     } finally {
       clearTimeout(timer);
       this.signal.removeEventListener('abort', abort);
     }
   }
   async navigate(url) {
-    return this.awaitOperation(this.wc.loadURL(url), 60000);
+    return this.awaitOperation(this.wc.loadURL(url), 60000, {operation:'navigation', url});
   }
   async evaluate(fn, arg) {
     this.check();
@@ -46,6 +56,7 @@ class Page {
         { code: `(${fn.toString()})(${JSON.stringify(arg ?? null)})` },
       ]),
       5000,
+      { operation: 'page-analysis' },
     );
   }
   async connect() {
@@ -95,7 +106,7 @@ class Page {
   }
   async command(method, args) {
     this.check();
-    return this.awaitOperation(this.wc.debugger.sendCommand(method, args));
+    return this.awaitOperation(this.wc.debugger.sendCommand(method, args), 5000, { operation: method });
   }
   async wait(predicate, arg, timeout = 120000, options = {}) {
     const end = Date.now() + timeout;
@@ -125,6 +136,7 @@ class Page {
     });
   }
   async click(target) {
+    this.currentTarget = { selector: target.selector, text: target.text || null };
     const locate = ({ selector, text }) => {
       const visible = (e) => {
         const r = e.getBoundingClientRect();
@@ -164,6 +176,7 @@ class Page {
             { stayHidden: true, stayAwake: true },
           ),
           500,
+          { operation: 'surface-hint', optional: true },
         );
       } catch (error) {
         this.check();
@@ -203,6 +216,7 @@ class Page {
     this.log('控件点击：鼠标事件已发送，后续核验页面变化');
   }
   async focusEditor(selector, replace) {
+    this.currentTarget = { selector };
     const focused = await this.evaluate(
       ({ selector, replace }) => {
         const nodes = [...document.querySelectorAll(selector)].filter((e) => {
@@ -283,6 +297,7 @@ class Page {
     });
   }
   async upload(selector, file) {
+    this.currentTarget = { selector };
     const marker = `qiye-${randomUUID()}`;
     const tagged = await this.evaluate(
       ({ selector, marker }) => {

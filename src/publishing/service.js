@@ -23,6 +23,7 @@ class PublishingService {
     inspectView,
     notify,
     changed = () => {},
+    onDeveloperTrace = () => {},
   }) {
     this.directory = path.join(directory, 'publishing');
     this.cache = path.join(this.directory, 'cache');
@@ -53,7 +54,9 @@ class PublishingService {
         const adapter = this.adapters.get(task.platformId);
         if (!adapter) throw new Error('当前平台没有执行适配器');
         changed();
-        const result = await adapter.execute(task, context, {
+        const result = await adapter.execute(task, { ...context,
+          trace: event => { try { Promise.resolve(onDeveloperTrace(task.accountId, { taskId: task.id, ...event })).catch(() => {}); } catch {} }
+        }, {
           getView: (id) => getView(id, context.signal),
           validate: media.validate,
           accountStatus: (id, status) =>
@@ -73,8 +76,11 @@ class PublishingService {
       inspectView,
       changed,
     });
-    this.scheduler.trace = (id, message, level) =>
+    this.scheduler.trace = (id, message, level) => {
       this.diagnostics.event(id, message, level);
+      const task = this.store.task(id);
+      try { Promise.resolve(onDeveloperTrace(task.accountId, { taskId: id, operation: 'task-log', phase: level === 'error' ? 'error' : 'log', message })).catch(() => {}); } catch {}
+    };
   }
   accounts() {
     const bindings = this.store.setting('accountBindings', {});

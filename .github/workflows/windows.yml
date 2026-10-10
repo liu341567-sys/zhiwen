@@ -28,6 +28,9 @@ jobs:
         run: npm test
       - name: Check JavaScript syntax
         run: npm run check
+      - name: Test developer tools, recording, privacy and local exports
+        shell: pwsh
+        run: ./.github/scripts/test-developer.ps1
       - name: Test actual Chromium session isolation
         run: npm run test:integration
       - name: Test UI at 100%, 125% and 150% display scale

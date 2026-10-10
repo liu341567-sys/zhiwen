@@ -986,6 +986,7 @@
     api?.positionToast(toastBounds()).catch(() => {});
   });
   new ResizeObserver(scheduleBounds).observe($('browser-viewport'));
+  $('developer-open').addEventListener('click',()=>api.openDeveloperTools().catch(error=>notify(error.message,'error')));
   $('lease-takeover').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('publishing:takeover-request',{detail:state.activeId})));
   window.publishingNavigateEnvironment = ()=>navigation.select('environment',true);
   window.publishingNotify = notify;

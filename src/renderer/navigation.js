@@ -50,7 +50,8 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       button.type = 'button'; button.className = 'secondary-menu-button';
       const label = document.createElement('span'); label.textContent = entry.label;
       button.append(icon(entry.icon), label);
-      if (entry.publishing) {
+      if (entry.developer) {button.addEventListener('click',()=>api.openDeveloperTools().catch(error=>notify(error.message,'error')));}
+      else if (entry.publishing) {
         button.dataset.publishPage=entry.id;
         if(entry.planned){const badge=document.createElement('span');badge.className='planned-badge';badge.textContent='规划中';button.append(badge);}
         button.addEventListener('click',async()=>{
@@ -115,6 +116,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       $('planned-module').hidden = item.mode !== 'planned';
       $('settings-module').hidden = item.mode !== 'settings';
       $('publishing-module').hidden = item.mode !== 'publishing';
+      $('developer-module').hidden = item.mode !== 'developer';
       if(item.mode === 'publishing')window.dispatchEvent(new Event('publishing:visible'));
       if (item.mode === 'planned') {
         $('planned-title').textContent = item.label;

@@ -12,6 +12,8 @@ const { LoginDiagnostics, PAGE_OBSERVATION_SCRIPT } = require('./login-diagnosti
 const platformPresets = require('./platform-presets.json');
 const { PublishingService } = require('./publishing/service');
 const { installDesktop } = require('./publishing/desktop');
+const { DeveloperService } = require('./developer/service');
+const { installDeveloperDesktop } = require('./developer/desktop');
 
 app.setName('栖页');
 if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
@@ -32,6 +34,7 @@ const blockedVaults = new Set();
 const documentStates = new Map();
 const pendingDocumentRestores = new Map();
 let publisher;
+let developer;
 let publishingError;
 let store;
 let vault;
@@ -270,6 +273,7 @@ function getSession(id) {
   // Chromium default certificates, sandbox and web security remain enabled.
   const allowedPermissions = new Set(['fullscreen', 'clipboard-sanitized-write']);
   const grantedPermissions = new Set();
+  ownSession.registerPreloadScript({ type: 'frame', filePath: path.join(__dirname, 'developer/page-preload.js') });
   ownSession.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
     let origin;
     try { origin = new URL(requestingOrigin).origin; } catch { return false; }
@@ -374,10 +378,13 @@ async function createView(id) {
   wc.on('did-stop-loading', notify);
   wc.on('page-title-updated', notify);
   wc.on('did-navigate', (_event, url) => {
+    try { developer?.navigation(id, url); } catch (error) { publishingToast(`网页录制未能保存：${error.message}`, 'error'); }
     if (allowedNavigation(url)) store.touchUrl(id, url);
     notify();
   });
+  wc.on('dom-ready', () => developer?.documentReady(id));
   wc.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+    if (isMainFrame) { try { developer?.navigation(id, url); } catch (error) { publishingToast(`网页录制未能保存：${error.message}`, 'error'); } }
     if (isMainFrame && allowedNavigation(url)) store.touchUrl(id, url);
     notify();
   });
@@ -786,6 +793,7 @@ if (!app.requestSingleInstanceLock()) {
         publisher = new PublishingService({ directory: app.getPath('userData'), profiles: () => store.getState().profiles.map(p => ({...p, running: views.has(p.id)})),
           getView: publishingView,
           inspectView: id => views.get(id)?.view.webContents || null,
+          onDeveloperTrace: (id, event) => developer?.trace(id, event).catch(() => {}),
           takeover: async id => {
             const pending = mutationQueue.then(async () => { store.open(id); await createView(id); uiPreferences.update({activeModule:'environment'}); updateViews(); emitState(); mainWindow.webContents.send('publishing:takeover',id); });
             mutationQueue = pending.catch(() => {}); await pending;
@@ -795,6 +803,23 @@ if (!app.requestSingleInstanceLock()) {
         }});
         await publisher.scheduler.start(); publishingChanged();
       } catch (error) { publishingError = `内容发布中心不可用：${error.message}。账号环境功能可继续使用，原数据未被覆盖。`; emitState(); publishingToast(publishingError,'error'); }
+      try {
+        developer = new DeveloperService({ directory: app.getPath('userData'),
+          profiles: () => store.getState().profiles,
+          inspectView: id => views.get(id)?.view.webContents || null,
+          isLeased: id => publisher?.scheduler.leased(id) || false,
+          technical: { applicationVersion: app.getVersion(), electron: process.versions.electron, chromium: process.versions.chrome, platform: process.platform, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+          reveal: async id => {
+            if (!views.has(id)) throw new Error('请先在账号环境管理中打开原环境');
+            if (publisher?.scheduler.leased(id)) throw new Error('请先在脚本调试中暂停任务，再操作原网页');
+            store.activate(id); uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
+            mainWindow.webContents.send('publishing:takeover', id); mainWindow.show(); mainWindow.focus();
+          }
+        });
+        installDeveloperDesktop({ service: developer, manager: mainWindow, icon: applicationIcon, publisher: () => publisher });
+      } catch (error) {
+        publishingToast(`开发者工具暂不可用：${error.message}；账号环境功能可以继续使用。`, 'error');
+      }
 
     } catch (error) {
       dialog.showErrorBox('无法读取账号环境', `${error.message}\n数据位置：${app.getPath('userData')}\n请先备份原目录，再检查 profiles.json；原有数据未被覆盖。`);
@@ -819,6 +844,7 @@ if (!app.requestSingleInstanceLock()) {
           saveWindowLayout();
         }
       } catch { /* UI state must not prevent browser data from being flushed. */ }
+      if (developer) { try { await developer.close(); } catch { /* Optional debug data must not prevent account data from being flushed. */ } }
       if (publisher) await publisher.shutdown();
       await mutationQueue;
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));

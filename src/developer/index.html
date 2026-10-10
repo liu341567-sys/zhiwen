@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'"
+    />
+    <title>栖页开发者工具中心</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./ui.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>开发者工具中心</h1>
+        <p id="page-info">连接原环境，保留原登录状态</p>
+      </div>
+      <div class="connection">
+        <select id="environment" aria-label="已打开的独立环境"></select
+        ><button id="attach" class="primary">连接环境</button
+        ><button id="reveal">在原窗口操作</button>
+      </div>
+    </header>
+    <div class="toolbar">
+      <span id="record-status" class="badge">未连接</span
+      ><button id="start" class="primary">开始录制</button
+      ><button id="pause">暂停</button><button id="resume">继续</button
+      ><button id="stop">结束录制</button><button id="new">新建录制</button
+      ><button id="refresh">刷新分析</button
+      ><label><input type="checkbox" id="live" />实时监听</label>
+    </div>
+    <div class="layout">
+      <nav id="navigation">
+        <button data-page="structure" class="active">网页结构</button
+        ><button data-page="inspect">元素检查</button
+        ><button data-page="record">操作录制</button
+        ><button data-page="changes">页面变化</button
+        ><button data-page="scripts">脚本调试</button
+        ><button data-page="reports">调试报告</button>
+        <p>工具不重建浏览器环境。录制和资料仅在本地保存。</p>
+      </nav>
+      <main>
+        <div id="actions"></div>
+        <div id="workspace"></div>
+      </main>
+      <aside id="details">
+        <div class="detail-heading">
+          <strong>详情与定位</strong><button id="detail-toggle">收起</button>
+        </div>
+        <div id="detail-body">
+          <p>选择元素、步骤或错误，查看定位和前后状态。</p>
+        </div>
+      </aside>
+    </div>
+    <div id="toast" role="status" hidden></div>
+    <dialog id="confirmation">
+      <h2>确认删除</h2>
+      <p id="confirmation-text"></p>
+      <div class="dialog-actions">
+        <button id="confirmation-cancel">取消</button
+        ><button id="confirmation-ok" class="danger">确认删除</button>
+      </div>
+    </dialog>
+  </body>
+</html>

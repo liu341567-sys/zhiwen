@@ -120,6 +120,21 @@
     ]
   },
   {
+    "id": "developer",
+    "label": "开发者工具中心",
+    "shortName": "开发",
+    "icon": "sliders",
+    "mode": "developer",
+    "items": [
+      {
+        "id": "developer-center",
+        "label": "打开工具中心",
+        "icon": "sliders",
+        "developer": true
+      }
+    ]
+  },
+  {
     "id": "settings",
     "label": "系统设置",
     "shortName": "设置",

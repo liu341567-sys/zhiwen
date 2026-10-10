@@ -68,3 +68,11 @@ Electron 默认会把应用名写入 User-Agent 产品字段。0.1.1 将中文�
 0.1.2 的 Playwright 启动显式设置 `chromiumSandbox: true`。测试专用入口删除 Playwright 默认注入的存储、密码库、mock keychain、弹窗等行为开关；私有预加载脚本报告真实 `process.sandboxed`、`process.contextIsolated` 和 `process.isMainFrame`，主进程进行断言。这些探针与入口仅用于测试，不进入应用包。早期版本的 Playwright 默认参数会改变这些行为，因此历史测试通过不能作为生产沙箱已验证的证据。
 
 这些测试不登录抖音，也不模拟平台的扫码、验证码或登录有效期。Windows 工作流负责原生环境下执行测试并生成安装包；发布前仍需人工检查真实平台及安装程序。修复验证与历史发布检查分别记录在 [验证记录](validation.md)。
+
+## 开发者工具中心（0.3.0）
+
+`src/developer` 分为页面采样、私有框架通信、报告服务、SQLite 存储、离线导出和工具 UI。工具只通过主进程已存在的环境 ID 获取原 WebContents；工具窗口的 IPC 有窗口和主框架校验，网页没有 contextBridge。Electron WebFrameMain 不支持隔离世界执行，主框架由会话预加载脚本中的 `webFrame` 执行私有隔离采样，子框架保持 Node / IPC 关闭，使用无权限页面采样并标注来源。没有新增账号或登录数据库。
+
+报告 SQLite 位于独立的 `developer-tools` 目录，WAL 与 FULL 同步；异常退出不恢复网页监听。截图遮盖、采集和释放互斥，关闭工具等待采集结束，超时或遮盖失败不保存原图。报告导出需要当前版本预览与逐张截图确认，HTML 转义且使用离线 CSP；ZIP 使用本地 UTF-8 / CRC32 格式，没有线上服务。页面数据视为不可信的调试证据，不用来运行命令或自动提交。
+
+发布 Page 和 Scheduler 发出有环境 / 任务关联的步骤事件；工具只记录目标、阶段与耗时，不记录 CDP 输入参数或网页返回值。可观测接口故障不能改变原发布操作结果。实时采样、步骤及图像有容量上限。范围与操作说明见 [开发者工具指南](developer-tools.md)。

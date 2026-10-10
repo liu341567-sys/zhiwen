@@ -1,7 +1,7 @@
 {
   "name": "qiye-browser",
   "productName": "栖页",
-  "version": "0.2.10",
+  "version": "0.3.0",
   "description": "持久化独立账号浏览器与本地智能内容发布中心。",
   "main": "src/main.js",
   "license": "UNLICENSED",
@@ -15,13 +15,14 @@
     "test": "node --test tests/*.test.js",
     "test:integration": "node tests/isolation.cjs && node tests/login-compatibility.cjs",
     "test:ui": "node tests/ui-layout.cjs && node tests/sidebar-stability.cjs && node tests/navigation.cjs",
-    "check": "node --check src/main.js && node --check src/ui-preferences.js && node --check src/renderer/navigation.js && node --check src/preload.js && node --check src/toast-preload.js && node --check src/renderer/toast.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/browser-identity.js && node --check src/login-diagnostics.js && node --check src/renderer/app.js && node --check src/renderer/publishing.js && node --check src/publishing/diagnostics.js && node --check src/publishing/service.js && node --check src/publishing/scheduler.js && node --check src/publishing/store.js && node --check src/publishing/media.js && node --check src/publishing/desktop.js && node --check src/publishing/adapters/page.js && node --check src/publishing/adapters/douyin.js && node --check scripts/setup-media.cjs",
+    "check": "node --check src/main.js && node --check src/ui-preferences.js && node --check src/renderer/navigation.js && node --check src/preload.js && node --check src/toast-preload.js && node --check src/renderer/toast.js && node --check src/remote-preload.js && node --check src/profile-store.js && node --check src/cookie-vault.js && node --check src/browser-identity.js && node --check src/login-diagnostics.js && node --check src/renderer/app.js && node --check src/renderer/publishing.js && node --check src/publishing/diagnostics.js && node --check src/publishing/service.js && node --check src/publishing/scheduler.js && node --check src/publishing/store.js && node --check src/publishing/media.js && node --check src/publishing/desktop.js && node --check src/publishing/adapters/page.js && node --check src/publishing/adapters/douyin.js && node --check scripts/setup-media.cjs && node --check src/developer/data.js && node --check src/developer/desktop.js && node --check src/developer/page.js && node --check src/developer/page-preload.js && node --check src/developer/preload.js && node --check src/developer/report.js && node --check src/developer/service.js && node --check src/developer/ui.js",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:win:zip": "electron-builder --win zip --x64",
     "pack:win": "electron-builder --win --x64 --dir",
     "setup:media": "node scripts/setup-media.cjs",
     "postinstall": "node scripts/setup-media.cjs",
-    "test:publishing": "node tests/publishing-ui.cjs"
+    "test:publishing": "node tests/publishing-ui.cjs",
+    "test:developer": "node tests/developer.cjs"
   },
   "devDependencies": {
     "electron": "44.6.0",
