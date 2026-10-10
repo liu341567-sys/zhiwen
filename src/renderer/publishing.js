@@ -1632,13 +1632,16 @@
           E(
             'div',
             'muted',
-            t.checkpoint.submitIntent
-              ? '已到提交边界'
-              : t.checkpoint.filled
-                ? '已填写'
-                : t.checkpoint.uploaded
-                  ? '已上传'
-                  : '等待检查',
+            t.status === 'pending' && t.queue
+              ? t.queue.message +
+                  (t.queue.retryAt ? ' · ' + date(t.queue.retryAt) : '')
+              : t.checkpoint.submitIntent
+                ? '已到提交边界'
+                : t.checkpoint.filled
+                  ? '已填写'
+                  : t.checkpoint.uploaded
+                    ? '已上传'
+                    : '等待检查',
           ),
         );
         cell(row, state);
@@ -1671,9 +1674,19 @@
     notify('任务状态已更新');
   }
   async function details(t) {
+    const current = await cmd('state');
+    t = current.tasks.find((row) => row.id === t.id);
+    if (!t) throw new Error('任务记录已经删除');
     const logs = await cmd('logs', t.id),
       body = [
-        note(`${statuses[t.status]} · ${t.result?.reason || '等待执行'} `),
+        note(
+          `${statuses[t.status]} · ${t.queue?.message || t.result?.reason || '等待执行'}${t.queue?.retryAt ? ' · 可执行时间：' + date(t.queue.retryAt) : ''}`,
+        ),
+        E(
+          'p',
+          'publish-help',
+          `调度器：${current.scheduler.timerActive ? '运行中' : '未运行'} · 当前执行 ${current.scheduler.running}/${current.scheduler.concurrency} · 最近检查：${current.scheduler.lastTickAt ? date(current.scheduler.lastTickAt) : '尚未检查'}${current.scheduler.lastError ? ' · ' + current.scheduler.lastError : ''}`,
+        ),
         E(
           'p',
           'publish-help',
@@ -1745,6 +1758,78 @@
       ),
     );
     body.push(actions);
+    const diagnostic = E('section', 'publish-diagnostic'),
+      summary = E('p', 'publish-help'),
+      controls = E('div', 'publish-actions');
+    diagnostic.append(
+      E('h3', '', '本地运行诊断'),
+      E(
+        'p',
+        'publish-help',
+        '记录调度原因、视口尺寸、页面控件结构及点击/输入/话题空格事件，每2秒检查一次，最多10分钟。不会保存输入内容、Cookie、账号名称或截图，也不会自动上传。可在记录时人工接管并操作页面，再导出报告。',
+      ),
+      summary,
+      controls,
+    );
+    async function updateDiagnostic() {
+      const state = await cmd('diagnostic-state', t.id),
+        report = state.report,
+        last = report?.frames.at(-1);
+      summary.textContent = `${state.active ? '正在记录' : report ? '记录已停止' : '尚无记录'}${report ? ' · ' + report.frames.length + ' 个状态快照 · 最近采样：' + date(report.lastSampleAt || report.startedAt) : ''}${last ? '\n页面：' + (last.page.page || '未打开 / 暂不可读取') + ' · 视口：' + (last.page.viewport ? last.page.viewport.width + ' × ' + last.page.viewport.height : '不可用') + ' · 控件：' + (last.page.controlCount ?? 0) : ''}`;
+      controls.replaceChildren(
+        B(
+          state.active ? '停止本地诊断' : '开始本地诊断',
+          async () => {
+            await cmd(
+              state.active ? 'diagnostic-stop' : 'diagnostic-start',
+              t.id,
+            );
+            await updateDiagnostic();
+          },
+          !state.active,
+        ),
+        B('刷新诊断', updateDiagnostic),
+        B('导出诊断报告', async () => {
+          const result = await cmd('diagnostic-export', t.id);
+          if (result.saved) notify('诊断报告已保存');
+        }),
+        B('删除诊断', () =>
+          ask(
+            '只删除此任务的本地诊断记录，保留任务、日志和视频文件。',
+            async () => {
+              await cmd('diagnostic-clear', t.id);
+              await updateDiagnostic();
+            },
+          ),
+        ),
+      );
+    }
+    let marker = 'unexpected-state';
+    const marks = E('div', 'publish-toolbar');
+    marks.append(
+      choice(
+        '标记当前页面阶段',
+        [
+          ['entered-page', '已进入发布页'],
+          ['uploaded-video', '视频已可预览'],
+          ['edited-caption', '标题已填写'],
+          ['committed-topics', '话题已用空格确认'],
+          ['ready-to-submit', '可以发布'],
+          ['unexpected-state', '页面出现异常'],
+        ],
+        marker,
+        (value) => {
+          marker = value;
+        },
+      ),
+      B('保存阶段标记', async () => {
+        await cmd('diagnostic-mark', { id: t.id, step: marker });
+        notify('诊断阶段已标记');
+      }),
+    );
+    diagnostic.append(marks);
+    body.push(diagnostic);
+    await updateDiagnostic();
     show('任务详情 · ' + t.accountName, body);
   }
   function library(body) {

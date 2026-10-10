@@ -1,5 +1,5 @@
 'use strict';
-const { dialog, ipcMain, protocol, net } = require('electron');
+const { app, dialog, ipcMain, protocol, net } = require('electron');
 const fs = require('node:fs'),
   path = require('node:path'),
   { pathToFileURL } = require('node:url');
@@ -40,6 +40,36 @@ function installDesktop({ window, service, assertManager }) {
   ipcMain.handle('publishing:command', async (event, command, input) => {
     assertManager(event);
     if (typeof command !== 'string') throw new Error('发布操作无效');
+    if (command === 'diagnostic-export') {
+      const { report } = service.diagnostics.state(input);
+      if (!report) throw new Error('请先记录本地诊断');
+      const result = await dialog.showSaveDialog(window, {
+        title: '导出本地发布诊断',
+        defaultPath: 'Qiye-Publishing-Diagnostic.json',
+        filters: [{ name: '发布诊断 JSON', extensions: ['json'] }],
+      });
+      if (result.canceled) return { cancelled: true };
+      await fs.promises.writeFile(
+        result.filePath,
+        JSON.stringify(
+          {
+            application: {
+              version: app.getVersion(),
+              electron: process.versions.electron,
+              chromium: process.versions.chrome,
+              platform: process.platform,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            },
+            exportedAt: Date.now(),
+            report: service.diagnostics.state(input).report,
+          },
+          null,
+          2,
+        ),
+        { mode: 0o600 },
+      );
+      return { saved: true };
+    }
     if (
       command === 'files' ||
       command === 'folder' ||

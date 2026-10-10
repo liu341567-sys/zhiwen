@@ -608,6 +608,10 @@
       const rect = $('browser-viewport').getBoundingClientRect();
       const browsing = Boolean(activeTab());
       const bounds = { x: Math.round(rect.x), y: Math.round(rect.y), width: browsing ? Math.round(rect.width) : 0, height: browsing ? Math.round(rect.height) : 0 };
+      if (!browsing) {
+        const available = $('overview-view').getBoundingClientRect();
+        bounds.backing = { x: Math.round(available.x), y: Math.round(available.y), width: Math.round(available.width), height: Math.round(available.height) };
+      }
       const key = JSON.stringify(bounds);
       if (key === lastBounds) return;
       lastBounds = key;

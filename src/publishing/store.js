@@ -235,9 +235,20 @@ class PublishingStore {
           history[`${t.accountId}:${t.video.sha256}`] = true;
       }
       this.setSetting('deletedPublicationKeys', history);
-      for (const id of ids) {
+      for (const removed of tasks) {
+        const id = removed.id;
         this.db.prepare('DELETE FROM logs WHERE task_id=?').run(id);
         this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
+        this.db
+          .prepare('DELETE FROM settings WHERE key=?')
+          .run(`diagnostic:${id}`);
+        const last = this.setting(`lastRun:${removed.accountId}`);
+        if (
+          last?.taskId === id &&
+          !removed.checkpoint.submitIntent &&
+          removed.status !== 'success'
+        )
+          this.setSetting(`lastRun:${removed.accountId}`, null);
       }
       this.db.exec(
         'DELETE FROM batches WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.batch_id=batches.id)',

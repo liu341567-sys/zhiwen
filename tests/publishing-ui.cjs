@@ -50,9 +50,8 @@ async function run(scale) {
     const store = new ProfileStore(dir),
       a = store.create({ name: '抖音账号 A', platformId: 'douyin' }),
       b = store.create({ name: '抖音账号 B', platformId: 'douyin' });
-    store.open(a.id);
-    store.open(b.id);
-    store.activate(a.id);
+    // Cold account environments: begin in the overview and publish directly.
+    // No account viewport has ever been opened by the user.
     const launch = async () => {
       app = await _electron.launch({
         chromiumSandbox: true,
@@ -109,6 +108,16 @@ async function run(scale) {
         name,
         value,
       });
+    const unopened = await app.evaluate(
+      ({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].contentView.children.filter(
+          (v) => v.webContents?.profileId,
+        ).length,
+    );
+    check(
+      `publishing-${scale}: cold publishing starts without any previously opened account viewport`,
+      () => assert.equal(unopened, 0),
+    );
     await shell.locator('button[data-module="publish"]').click();
     await shell.locator('.publish-steps').waitFor();
     const imported = await command('import', [source]);
@@ -359,6 +368,112 @@ async function run(scale) {
       BrowserWindow.getAllWindows()[0]
         .contentView.children.filter((v) => v.webContents?.profileId)
         .map((v) => ({ id: v.webContents.profileId, wc: v.webContents.id })),
+    );
+    const nativeGeometry = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]
+        .contentView.children.filter((v) => v.webContents?.profileId)
+        .map((v) => ({ bounds: v.getBounds(), visible: v.getVisible() })),
+    );
+    check(
+      `publishing-${scale}: cold background accounts have nonzero native bounds and stay hidden in publishing`,
+      () => {
+        assert.ok(
+          nativeGeometry.every(
+            (v) => v.bounds.width > 0 && v.bounds.height > 0 && !v.visible,
+          ),
+        );
+      },
+    );
+    await shell
+      .getByRole('button', { name: '详情 / 日志', exact: true })
+      .first()
+      .click();
+    let detail = shell.locator('.publish-dialog[open]');
+    await detail
+      .getByRole('button', { name: '开始本地诊断', exact: true })
+      .click();
+    await detail
+      .getByRole('button', { name: '停止本地诊断', exact: true })
+      .waitFor();
+    const diagnosticTask = tasks[0];
+    await app.evaluate(({ BrowserWindow }, id) => {
+      const wc = BrowserWindow.getAllWindows()[0].contentView.children.find(
+        (v) => v.webContents?.profileId === id,
+      ).webContents;
+      return wc.executeJavaScript(
+        `(()=>{const editor=document.querySelector('textarea');editor.value='PRIVATE_RECORDING_VALUE';editor.click();editor.dispatchEvent(new Event('input',{bubbles:true}));editor.dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true}));const password=document.createElement('input');password.type='password';password.value='PRIVATE_PASSWORD';document.body.append(password);password.dispatchEvent(new Event('input',{bubbles:true}));history.replaceState(null,'','?token=PRIVATE_URL_TOKEN');document.cookie='PRIVATE_COOKIE=PRIVATE_COOKIE_VALUE';})()`,
+      );
+    }, diagnosticTask.accountId);
+    await until(async () => {
+      const d = await command('diagnostic-state', diagnosticTask.id);
+      return d.report.frames.some((f) =>
+        f.page.actions?.some((a) => a.type === 'topic-space'),
+      );
+    }, 'passive diagnostic action sampling');
+    await detail.getByRole('button', { name: '刷新诊断', exact: true }).click();
+    const diagnosticPath = path.join(dir, 'publishing-diagnostic.json');
+    await app.evaluate(({ dialog }, destination) => {
+      globalThis.__originalDiagnosticSave = dialog.showSaveDialog;
+      dialog.showSaveDialog = async () => ({
+        canceled: false,
+        filePath: destination,
+      });
+    }, diagnosticPath);
+    try {
+      await detail
+        .getByRole('button', { name: '导出诊断报告', exact: true })
+        .click();
+      await until(() => fs.existsSync(diagnosticPath), 'diagnostic file');
+    } finally {
+      await app.evaluate(({ dialog }) => {
+        dialog.showSaveDialog = globalThis.__originalDiagnosticSave;
+        delete globalThis.__originalDiagnosticSave;
+      });
+    }
+    await detail
+      .getByRole('button', { name: '停止本地诊断', exact: true })
+      .click();
+    const diagnosticReport = JSON.parse(
+      fs.readFileSync(diagnosticPath, 'utf8'),
+    );
+    check(
+      `publishing-${scale}: local recorder exports structural controls, topic-space events and real native bounds without credentials or inputs`,
+      () => {
+        const text = JSON.stringify(diagnosticReport);
+        for (const forbidden of [
+          'PRIVATE_RECORDING_VALUE',
+          'PRIVATE_PASSWORD',
+          'PRIVATE_URL_TOKEN',
+          'PRIVATE_COOKIE_VALUE',
+          diagnosticTask.title,
+          diagnosticTask.video.path,
+          diagnosticTask.accountName,
+        ])
+          assert.ok(!text.includes(forbidden), forbidden);
+        assert.ok(
+          diagnosticReport.report.frames.some((f) =>
+            f.page.controls?.some((c) => c.tag === 'textarea'),
+          ),
+        );
+        assert.ok(
+          diagnosticReport.report.frames.every(
+            (f) => !f.page.nativeBounds || f.page.nativeBounds.width > 0,
+          ),
+        );
+        assert.equal(
+          diagnosticReport.application.electron,
+          require('electron/package.json').version,
+        );
+      },
+    );
+    await detail.getByRole('button', { name: '关闭', exact: true }).click();
+    assert.deepEqual(
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]
+          .contentView.children.filter((v) => v.webContents?.profileId)
+          .map((v) => ({ id: v.webContents.profileId, wc: v.webContents.id })),
+      ),
+      viewIdentity,
     );
     await command('tasks', { ids: [tasks[0].id], action: 'takeover' });
     await until(

@@ -37,6 +37,7 @@ let store;
 let vault;
 let mainWindow;
 let bounds = { x: 276, y: 128, width: 900, height: 640 };
+let backingBounds = bounds;
 let overlayVisible = false;
 let quitting = false;
 let canQuit = false;
@@ -142,8 +143,15 @@ function updateViews() {
   };
   const activeId = store.getState().activeId;
   const environmentMode = uiPreferences.get().activeModule === 'environment';
+  // Visibility and document geometry are separate. A hidden account still needs
+  // a real native viewport for upload controls and trusted input events.
+  const renderBounds = safeBounds.width > 0 && safeBounds.height > 0 ? safeBounds : {
+    x: Math.min(backingBounds.x, width), y: Math.min(backingBounds.y, height),
+    width: Math.max(0, Math.min(backingBounds.width, width - backingBounds.x)),
+    height: Math.max(0, Math.min(backingBounds.height, height - backingBounds.y))
+  };
   for (const [id, entry] of views) {
-    entry.view.setBounds(safeBounds);
+    entry.view.setBounds(renderBounds);
     entry.view.setVisible(id === activeId && environmentMode && !navigationOverlay && !overlayVisible && !entry.error && !publisher?.scheduler.leased(id) && safeBounds.width > 0 && safeBounds.height > 0);
   }
   updateToastView();
@@ -655,6 +663,10 @@ function registerIPC() {
       throw new Error('无效的页面尺寸');
     }
     bounds = Object.fromEntries(['x', 'y', 'width', 'height'].map(key => [key, Math.round(next[key])]));
+    if (bounds.width > 0 && bounds.height > 0) backingBounds = bounds;
+    else if (next.backing && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(next.backing[key]) && next.backing[key] >= 0 && next.backing[key] < 50000) && next.backing.width > 0 && next.backing.height > 0) {
+      backingBounds = Object.fromEntries(['x', 'y', 'width', 'height'].map(key => [key, Math.round(next.backing[key])]));
+    }
     return true;
   });
   handle('overlay', visible => {
@@ -773,6 +785,7 @@ if (!app.requestSingleInstanceLock()) {
       try {
         publisher = new PublishingService({ directory: app.getPath('userData'), profiles: () => store.getState().profiles.map(p => ({...p, running: views.has(p.id)})),
           getView: publishingView,
+          inspectView: id => views.get(id)?.view.webContents || null,
           takeover: async id => {
             const pending = mutationQueue.then(async () => { store.open(id); await createView(id); uiPreferences.update({activeModule:'environment'}); updateViews(); emitState(); mainWindow.webContents.send('publishing:takeover',id); });
             mutationQueue = pending.catch(() => {}); await pending;

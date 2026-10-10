@@ -20,6 +20,7 @@ class PublishingService {
     profiles,
     getView,
     takeover,
+    inspectView,
     notify,
     changed = () => {},
   }) {
@@ -65,6 +66,15 @@ class PublishingService {
         return result;
       },
     });
+    const { Diagnostics } = require('./diagnostics');
+    this.diagnostics = new Diagnostics({
+      store: this.store,
+      scheduler: this.scheduler,
+      inspectView,
+      changed,
+    });
+    this.scheduler.trace = (id, message, level) =>
+      this.diagnostics.event(id, message, level);
   }
   accounts() {
     const bindings = this.store.setting('accountBindings', {});
@@ -96,6 +106,7 @@ class PublishingService {
         mediaUrl: `qiye-media://local/video/${v.id}`,
       };
     });
+    const tasks = this.store.tasks();
     return {
       videos: thumbnails,
       library: this.store.list('title').concat(this.store.list('topics')),
@@ -107,7 +118,13 @@ class PublishingService {
           `preview:${this.store.draft('current')?.data.previewId || ''}`,
         ),
       ].filter(Boolean),
-      tasks: this.store.tasks(),
+      tasks: tasks.map((t) => ({
+        ...t,
+        queue:
+          t.status === 'pending' ? this.scheduler.waitInfo(t, tasks) : null,
+        diagnosticActive: this.diagnostics.active.has(t.id),
+      })),
+      scheduler: this.scheduler.runtime(),
       batches: this.store.batches(),
       accounts: this.accounts(),
       concurrency: this.scheduler.concurrency,
@@ -271,6 +288,8 @@ class PublishingService {
     if (ids.some((id) => this.scheduler.running.has(id)))
       throw new Error('执行中任务请先暂停，再删除记录');
     const result = this.store.removeTasks([...new Set(ids)]);
+    for (const id of new Set(ids))
+      if (this.diagnostics.active.has(id)) this.diagnostics.stop(id);
     this.changed();
     return result;
   }
@@ -500,6 +519,12 @@ class PublishingService {
             },
           });
           this.store.log(id, `用户核实发布成功：${reason}`);
+          if (!task.checkpoint.submitIntent)
+            this.store.setSetting(`lastRun:${task.accountId}`, {
+              taskId: id,
+              at: Date.now(),
+              kind: 'submitted',
+            });
         } else if (action === 'not-submitted') {
           if (task.status !== 'unverified' || !confirmed || !text(reason))
             throw new Error('必须核实未提交并填写说明，才允许再次执行');
@@ -513,6 +538,8 @@ class PublishingService {
             `用户核实未提交，允许再次执行：${reason}`,
             'warning',
           );
+          if (this.store.setting(`lastRun:${task.accountId}`)?.taskId === id)
+            this.store.setSetting(`lastRun:${task.accountId}`, null);
         } else throw new Error('不支持的任务操作');
       }
     } finally {
@@ -542,6 +569,18 @@ class PublishingService {
   }
   async dispatch(command, input) {
     switch (command) {
+      case 'diagnostic-state':
+        return this.diagnostics.state(input);
+      case 'diagnostic-start':
+        return this.diagnostics.start(input);
+      case 'diagnostic-stop':
+        return this.diagnostics.stop(input);
+      case 'diagnostic-mark':
+        this.diagnostics.mark(input.id, input.step);
+        return this.diagnostics.state(input.id);
+      case 'diagnostic-clear':
+        this.diagnostics.clear(input);
+        return { cleared: true };
       case 'state':
         return this.snapshot();
       case 'import':
@@ -579,6 +618,7 @@ class PublishingService {
     }
   }
   async shutdown() {
+    this.diagnostics.close();
     await this.scheduler.shutdown();
     this.store.close();
   }
