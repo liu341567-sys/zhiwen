@@ -109,13 +109,19 @@ function installDeveloperDesktop({
     });
     await window.loadFile(path.join(__dirname, 'index.html'));
   };
-  ipcMain.handle('developer:open', async (event) => {
+  ipcMain.handle('developer:open', async (event, options = {}) => {
     if (
       event.sender !== manager.webContents ||
       event.senderFrame !== manager.webContents.mainFrame
     )
       throw new Error('无权打开开发者工具');
+    if (options?.taskId) {
+      service.assistant.task(options.taskId);
+      service.assistant.preferredTask = options.taskId;
+      service.assistant.mode = 'assistant';
+    }
     await open();
+    notify();
     return true;
   });
   ipcMain.on('developer:page-event', (event, payload) => {

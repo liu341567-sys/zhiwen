@@ -347,3 +347,82 @@ test('navigation or mutation during capture discards image bytes before encoding
   assert.equal(service.report.screenshots.length, 0);
   assert.ok(service.report.warnings.some((w) => w.includes('未保存图像')));
 });
+
+function assistantFixture(t) {
+  const { dir } = fixture(t), account = randomUUID(), other = randomUUID(), taskId = randomUUID();
+  let task = { id: taskId, accountId: account, accountName: '测试账号', video: { name: '测试视频' },
+    platformId: 'douyin', status: 'paused', plannedAt: Date.now(), checkpoint: {} };
+  let calls = [], prepared = [], logs = [{ time: Date.now(), level: 'warning', message: '入口超时 token=private C:\\Users\\Alice\\video.mp4' }];
+  const frame = {}, wc = { isDestroyed: () => false, mainFrame: { framesInSubtree: [frame] } };
+  const publisher = {
+    store: { tasks: () => task ? [task] : [], task: (id) => { if (!task || id !== taskId) throw new Error('不存在'); return task; }, logs: () => logs },
+    scheduler: { waitInfo: () => ({ message: '等待计划时间', retryAt: Date.now() + 1000 }) },
+    action: async (input) => { calls.push(input); if (input.action === 'start') task = { ...task, status: 'pending' }; if (input.action === 'takeover') task = { ...task, status: 'paused' }; },
+  };
+  const service = new DeveloperService({ directory: dir, profiles: () => [{ id: account }, { id: other }],
+    inspectView: (id) => [account, other].includes(id) ? wc : null, reveal: async (id) => calls.push({ reveal: id }),
+    publisher: () => publisher, prepareView: async (id) => prepared.push(id),
+    executeFrame: async () => ({ url: 'https://example.com/', title: '作品发布', readyState: 'complete', nodes: [], events: [] }) });
+  t.after(() => service.close());
+  return { service, account, other, taskId, calls, prepared, setTask: (patch) => task = patch ? { ...task, ...patch } : null };
+}
+test('guided recording binds the original account, captures historical redacted logs and uses existing task execution without granting submission', async (t) => {
+  const f = assistantFixture(t);
+  await f.service.command('assistant-start', { taskId: f.taskId, run: true, issue: '进不了发布页' });
+  assert.equal(f.service.active, f.account);
+  assert.deepEqual(f.prepared, [f.account]);
+  assert.deepEqual(f.calls, [{ ids: [f.taskId], action: 'start' }]);
+  assert.equal(f.service.report.options.screenshots, false);
+  const json = JSON.stringify(f.service.report);
+  assert.ok(!json.includes('Alice') && !json.includes('token=private'));
+  assert.equal(f.service.report.assistance.taskId, f.taskId);
+  await f.service.trace(f.other, { taskId: f.taskId, phase: 'error' });
+  await f.service.trace(f.account, { taskId: randomUUID(), phase: 'error' });
+  assert.equal(f.service.report.scripts.length, 0);
+});
+test('guided observation cannot retry submitted tasks and manual demonstration pauses through the original engine before revealing the exact account', async (t) => {
+  const f = assistantFixture(t);
+  f.setTask({ checkpoint: { submitIntent: true }, status: 'unverified' });
+  await assert.rejects(f.service.command('assistant-start', { taskId: f.taskId, run: true }), /不能直接重试/);
+  assert.equal(f.prepared.length, 0);
+  await f.service.command('assistant-start', { taskId: f.taskId, run: false });
+  assert.equal(f.calls.length, 0);
+  await f.service.command('assistant-manual');
+  assert.deepEqual(f.calls, [{ ids: [f.taskId], action: 'takeover' }, { reveal: f.account }]);
+  assert.equal(f.service.report.assistance.phase, 'manual');
+  assert.equal(f.service.report.assistance.task.checkpoint.submitIntent, true);
+  assert.ok(f.service.report.steps.some((s) => s.note?.includes('人工演示')));
+});
+test('guided finalization freezes the evidence, keeps task state, requires review and permits another problem without deleting prior reports', async (t) => {
+  const f = assistantFixture(t);
+  await f.service.command('assistant-start', { taskId: f.taskId, run: false });
+  await assert.rejects(f.service.command('assistant-new'), /先结束/);
+  await f.service.command('assistant-problem', { issue: '等待上传' });
+  f.setTask({ status: 'failed', result: { reason: '按钮失效' } });
+  await f.service.command('assistant-finish');
+  assert.equal(f.service.report.status, 'ended');
+  assert.equal(f.service.report.assistance.task.status, 'failed');
+  assert.equal(f.calls.length, 0);
+  const id = f.service.report.id, revision = f.service.report.revision;
+  await f.service.trace(f.account, { taskId: f.taskId, phase: 'end' });
+  assert.equal(f.service.report.revision, revision);
+  await assert.rejects(f.service.export('zip'), /先预览/);
+  await f.service.command('preview');
+  assert.ok((await f.service.export('zip')).length > 1000);
+  const md = filesFor(f.service.report, {}).find((f) => f.name === 'report.md').data.toString();
+  assert.ok(md.includes('发布问题摘要') && md.includes('按钮失效'));
+  await f.service.command('assistant-new');
+  assert.equal(f.service.report, null);
+  assert.equal(f.service.active, null);
+  assert.ok(f.service.store.get(id).assistance);
+});
+test('a deleted task can still finish and export its captured evidence without recreating the task or account', async (t) => {
+  const f = assistantFixture(t);
+  await f.service.command('assistant-start', { taskId: f.taskId, run: false });
+  f.setTask(null);
+  await f.service.command('assistant-finish');
+  assert.equal(f.service.report.assistance.task.status, 'missing');
+  await f.service.command('preview');
+  assert.ok((await f.service.export('json')).length > 10);
+  assert.equal(f.calls.length, 0);
+});

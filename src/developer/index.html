@@ -10,8 +10,42 @@
     <title>栖页开发者工具中心</title>
     <link rel="stylesheet" href="./style.css" />
     <script src="./ui.js" defer></script>
+    <script src="./assistant-ui.js" defer></script>
   </head>
-  <body>
+  <body class="assistant-mode">
+    <div class="mode-bar"><strong>栖页 · 发布问题助手</strong><div><button id="mode-assistant" class="primary">简单排查</button><button id="mode-professional">专业工具</button></div></div>
+    <section id="assistant-panel">
+      <div class="assistant-heading"><h1>发布卡住了？一起找出原因</h1><p>选任务 → 记录问题 → 保存资料包发给我。无需了解网页代码。</p></div>
+      <div class="assistant-scroll">
+        <section class="assistant-card" id="assistant-setup">
+          <h2><span class="step-number">1</span>选择要排查的任务</h2>
+          <label for="assistant-task">发布任务</label><select id="assistant-task"></select>
+          <label for="assistant-issue">哪里不正常？<span class="muted">选填，用你自己的话描述即可</span></label>
+          <textarea id="assistant-issue" placeholder="例如：一直等待上传完成；没有进入发布页。请勿填写密码或验证码。"></textarea>
+          <p>自动收集网页控件、任务进度和操作记录，默认不采集截图、输入内容及登录凭据。资料只保存在本机。</p>
+          <div class="row"><button id="assistant-start" class="primary">开始记录并执行任务</button><button id="assistant-observe">只记录当前现场</button></div>
+          <p id="assistant-start-help"></p>
+        </section>
+        <section class="assistant-card" id="assistant-recording" hidden>
+          <h2><span class="step-number">2</span>正在帮你记录</h2>
+          <div id="assistant-progress" role="status"></div>
+          <p id="assistant-guidance"></p>
+          <label for="assistant-record-note">补充说明（选填）</label><textarea id="assistant-record-note" placeholder="例如：网页已经能预览视频，但任务还在等待。"></textarea>
+          <div class="row"><button id="assistant-problem">卡住了，记下现场</button><button id="assistant-manual">我来演示正确操作</button><button id="assistant-reveal">回到账号网页</button></div>
+          <p>演示时会暂停该账号的自动任务，并保留当前页面。手动完成出问题的步骤后，回这里结束记录即可。结束只停止记录，不更改任务状态。</p>
+        </section>
+        <section class="assistant-card" id="assistant-review" hidden>
+          <h2><span class="step-number">3</span>查看准备分享的资料</h2>
+          <div id="assistant-summary"></div>
+          <label><input id="assistant-reviewed" type="checkbox" />我已查看下面的资料预览，确认可以分享</label>
+          <details><summary>资料预览（可展开检查具体内容）</summary><pre id="assistant-preview"></pre></details>
+          <div id="assistant-shots"></div>
+          <p>保存后把 ZIP 附件上传到与 AI 的对话中。工具不会自动上传，也不会自动修改你的发布脚本。</p>
+        </section>
+        <section id="assistant-history" class="assistant-card"><h2>之前的排查记录</h2><div id="assistant-history-list"></div></section>
+      </div>
+      <footer class="assistant-footer"><span id="assistant-counts">选择一个任务开始</span><button id="assistant-finish" class="primary" hidden>结束记录，整理资料</button><button id="assistant-export" class="primary" hidden disabled>保存问题资料包</button><button id="assistant-another" hidden>排查另一个问题</button></footer>
+    </section>
     <header>
       <div>
         <h1>开发者工具中心</h1>

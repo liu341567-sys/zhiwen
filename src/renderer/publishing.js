@@ -1647,6 +1647,7 @@
         cell(row, state);
         const actions = E('div', 'row-actions');
         actions.append(
+          textButton('帮我排查', () => window.browserAPI.openDeveloperTools({ taskId: t.id })),
           textButton('详情 / 日志', () => details(t)),
           textButton('删除记录', () => deleteTasks([t.id])),
         );
@@ -1701,6 +1702,7 @@
         ),
       ];
     const actions = E('div', 'publish-actions');
+    actions.append(B('帮我排查发布问题', () => window.browserAPI.openDeveloperTools({ taskId: t.id }), true));
     for (const [a, l] of [
       ['start', '开始 / 继续'],
       ['pause', '暂停'],

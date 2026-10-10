@@ -203,6 +203,7 @@
   const snapshot = () => state?.report?.snapshots.at(-1);
   function render() {
     if (!state) return;
+    window.dispatchEvent(new CustomEvent('developer-state', { detail: state }));
     const savedScroll = $('workspace').scrollTop,
       focused = document.activeElement.id,
       drafts = new Map(

@@ -805,6 +805,11 @@ if (!app.requestSingleInstanceLock()) {
       } catch (error) { publishingError = `内容发布中心不可用：${error.message}。账号环境功能可继续使用，原数据未被覆盖。`; emitState(); publishingToast(publishingError,'error'); }
       try {
         developer = new DeveloperService({ directory: app.getPath('userData'),
+          publisher: () => publisher,
+          prepareView: async id => {
+            const pending = mutationQueue.then(async () => { store.open(id); await createView(id); updateViews(); emitState(); });
+            mutationQueue = pending.catch(() => {}); await pending;
+          },
           profiles: () => store.getState().profiles,
           inspectView: id => views.get(id)?.view.webContents || null,
           isLeased: id => publisher?.scheduler.leased(id) || false,

@@ -4,6 +4,7 @@ const path = require('node:path'),
 const { DeveloperStore, compare, redact, scrub } = require('./data'),
   { pageTool } = require('./page'),
   { reportData, filesFor, zip } = require('./report');
+const { PublishingAssistant } = require('./assistant');
 class DeveloperService {
   constructor({
     directory,
@@ -14,6 +15,8 @@ class DeveloperService {
     changed = () => {},
     technical = {},
     executeFrame,
+    publisher = () => null,
+    prepareView = async () => {},
   }) {
     this.store = new DeveloperStore(path.join(directory, 'developer-tools'));
     this.store.recover();
@@ -24,6 +27,7 @@ class DeveloperService {
     this.changed = changed;
     this.technical = technical;
     this.executeFrame = executeFrame;
+    this.assistant = new PublishingAssistant(this, publisher, prepareView);
     this.active = null;
     this.report = null;
     this.live = false;
@@ -133,6 +137,7 @@ class DeveloperService {
       lastError: this.lastError,
       reports: this.store.list(),
       technical: this.technical,
+      assistant: this.assistant.state(),
     };
   }
   save() {
@@ -190,6 +195,7 @@ class DeveloperService {
     this.pollDone = new Promise((r) => (completed = r));
     const reportId = this.report.id;
     try {
+      force = this.assistant.refresh() || force;
       const frames = this.frames(),
         result = await Promise.all(
           frames.map(async (f, i) => {
@@ -464,6 +470,9 @@ class DeveloperService {
       !this.report
     )
       return;
+    if (this.report.assistance && event.taskId &&
+        event.taskId !== this.report.assistance.taskId) return;
+    if (this.report.assistance && this.report.status !== 'recording') return;
     const safe = scrub(event);
     if (JSON.stringify(safe).length > 40000) return;
     const item = { id: randomUUID(), time: Date.now(), ...safe };
@@ -501,6 +510,7 @@ class DeveloperService {
   }
   async command(command, input = {}) {
     if (this.closed) throw new Error('开发者工具已关闭');
+    if (command.startsWith('assistant-')) return this.assistant.command(command, input);
     if (
       !['state', 'attach', 'load', 'delete-report'].includes(command) &&
       !this.report

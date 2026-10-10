@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('browserAPI', {
   getState: () => ipcRenderer.invoke('browser:state'),
-  openDeveloperTools: () => ipcRenderer.invoke('developer:open'),
+  openDeveloperTools: options => ipcRenderer.invoke('developer:open', options),
   createProfile: input => ipcRenderer.invoke('browser:create', input),
   updateProfile: (id, input) => ipcRenderer.invoke('browser:update', id, input),
   moveProfile: (id, beforeId = null) => ipcRenderer.invoke('browser:move', id, beforeId),

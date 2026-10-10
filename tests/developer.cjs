@@ -81,6 +81,8 @@ async function run(scale, origin) {
       return tools;
     }, 'developer window');
     await tools.waitForFunction(() => window.developerAPI);
+    await tools.locator('#mode-professional').click();
+    await tools.waitForFunction(() => !document.body.classList.contains('assistant-mode'));
   };
   const cmd = (command, input) =>
     tools.evaluate(
@@ -511,6 +513,64 @@ async function run(scale, origin) {
     check(`developer-${scale}: tools remain usable at display scale`, () => {
       assert.equal(layout.overflow, false);
       assert.ok(layout.toolbar < layout.body - 100);
+    });
+    const helpTask = await app.evaluate((_electron, id) => {
+      const publisher = globalThis.__qiyeTestDeveloper.assistant.publisher();
+      const batch = publisher.store.addBatch('问题助手夹具', [{ accountId: id,
+        accountName: '调试账号 A', platformId: 'douyin', video: { name: '测试素材' },
+        plannedAt: Date.now() + 86400000, ordinal: 0 }]);
+      const task = publisher.store.tasks().find((t) => t.batchId === batch);
+      publisher.store.log(task.id, '入口等待超时 token=must-not-export', 'warning');
+      return task.id;
+    }, a.id);
+    await shell.evaluate((taskId) => browserAPI.openDeveloperTools({ taskId }), helpTask);
+    await until(async () => await tools.locator('#assistant-task').inputValue() === helpTask, 'guided task selection');
+    const simpleInitially = await tools.evaluate(() => document.body.classList.contains('assistant-mode'));
+    check(`developer-${scale}: task shortcut opens the simple assistant without technical configuration`, () => {
+      assert.equal(simpleInitially, true);
+    });
+    await tools.locator('#assistant-issue').fill('作品发布入口等待超时');
+    await tools.locator('#assistant-observe').click();
+    await until(async () => (await state()).report?.assistance?.taskId === helpTask, 'guided recording');
+    assert.equal((await state()).active, a.id);
+    assert.equal((await state()).report.options.screenshots, false);
+    await tools.locator('#assistant-problem').click();
+    await tools.locator('#assistant-manual').click();
+    await until(async () => (await state()).report.assistance.phase === 'manual', 'guided manual takeover');
+    await account.locator('#modal').click();
+    await until(async () => (await state()).report.steps.some((s) => s.type === 'click' && s.target?.attributes?.id === 'modal'), 'manual demonstration event');
+    const demonstrated = (await state()).report;
+    check(`developer-${scale}: manual demonstration preserves the original browser and pauses the bound account`, () => {
+      assert.equal(demonstrated.assistance.task.status, 'paused');
+      assert.equal(demonstrated.assistance.taskId, helpTask);
+      assert.ok(demonstrated.steps.some((s) => s.note?.includes('人工演示')));
+    });
+    await tools.locator('#assistant-finish').click();
+    await tools.locator('#assistant-reviewed').waitFor({ state: 'visible' });
+    await until(async () => (await tools.locator('#assistant-preview').textContent()).includes('作品发布入口等待超时'), 'simple report preview');
+    const guided = (await state()).report;
+    assert.equal(guided.status, 'ended');
+    assert.ok(!JSON.stringify(guided).includes('must-not-export'));
+    assert.equal(await tools.locator('#assistant-export').isDisabled(), true);
+    await tools.locator('#assistant-reviewed').check();
+    await tools.locator('#assistant-export').click();
+    await until(async () => (await tools.locator('#toast').textContent()).includes('资料包已保存'), 'guided ZIP export');
+    const archive = fs.readFileSync(path.join(directory, 'Qiye-Developer-Report.zip'));
+    assert.ok(archive.includes(Buffer.from('发布问题摘要')));
+    assert.ok(archive.includes(Buffer.from(helpTask)));
+    const guidedLayout = await tools.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth,
+      footer: document.querySelector('.assistant-footer').getBoundingClientRect().bottom, height: innerHeight }));
+    check(`developer-${scale}: simple preview and local ZIP export retain a visible footer and require one review`, () => {
+      assert.equal(guidedLayout.overflow, false);
+      assert.ok(guidedLayout.footer <= guidedLayout.height + 1);
+    });
+    await tools.screenshot({ path: path.join(output, `assistant-${scale}.png`) });
+    await tools.locator('#assistant-another').click();
+    await until(async () => (await state()).report === null, 'reset guided workflow');
+    const reset = await state();
+    check(`developer-${scale}: another problem starts clean while the previous evidence remains local`, () => {
+      assert.equal(reset.report, null);
+      assert.ok(reset.reports.some((r) => r.id === guided.id));
     });
     await tools.close();
     await pause(250);

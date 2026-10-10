@@ -50,6 +50,17 @@ function filesFor(report, technical) {
     '## 操作时间线',
     '',
   ];
+  if (d.assistance) {
+    md.push('## 发布问题摘要', '',
+      `用户描述：${d.assistance.issue || '未填写'}`,
+      `任务参考：${d.assistance.taskId}`,
+      `平台：${d.assistance.task?.platform || '未知'} · 当前状态：${d.assistance.task?.stateLabel || '未知'}`,
+      `等待或失败原因：${d.assistance.task?.reason || d.assistance.task?.wait?.message || '未提供'}`,
+      '人工演示开始处会在时间线中标注，请对照自动操作与随后人工操作；资料包不会自动修改脚本。', '',
+      '### 最近任务日志', '',
+      ...(d.assistance.task?.logs || []).map((l) => `- ${new Date(l.time).toISOString()} [${l.level}] ${l.message}`), '',
+    );
+  }
   for (const s of d.steps) {
     md.push(
       `### 第 ${s.sequence} 步 · ${s.type}`,
