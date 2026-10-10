@@ -405,7 +405,12 @@ class DeveloperService {
     const currentReport = this.report;
     let timer;
     try {
-      await this.call(wc.mainFrame, { action: 'mask' });
+      const mask = await this.call(wc.mainFrame, {
+        action: 'mask',
+        token: randomUUID(),
+      });
+      if (!mask?.masked || !mask.token)
+        throw new Error('无法确认截图遮盖，未保存图像');
       const image = await Promise.race([
         wc.capturePage(undefined, { stayHidden: true, stayAwake: true }),
         new Promise((_r, reject) => {
@@ -416,6 +421,14 @@ class DeveloperService {
         }),
       ]);
       if (image.isEmpty()) throw new Error('原网页没有可用画面');
+      const status = await this.call(wc.mainFrame, {
+        action: 'mask-status',
+        token: mask.token,
+      });
+      if (!status?.valid)
+        throw new Error(
+          '截图期间页面跳转、变化或滚动，未保存图像；请稳定页面后重试',
+        );
       const png = image
         .resize({ width: Math.min(1280, image.getSize().width) })
         .toPNG();

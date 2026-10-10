@@ -288,6 +288,8 @@ test('closing a tool waits for a masked capture before removing its overlays', a
         code.slice(code.lastIndexOf(')(') + 2, -1),
       ).action;
       calls.push(action);
+      if (action === 'mask') return { masked: true, token: 'fixture-token' };
+      if (action === 'mask-status') return { valid: true };
       return { nodes: [], events: [] };
     },
   });
@@ -302,5 +304,38 @@ test('closing a tool waits for a masked capture before removing its overlays', a
   finish();
   await capturing;
   await closing;
-  assert.deepEqual(calls.slice(-2), ['unmask', 'stop']);
+  assert.deepEqual(calls.slice(-3), ['mask-status', 'unmask', 'stop']);
+});
+test('navigation or mutation during capture discards image bytes before encoding or persistence', async (t) => {
+  const { dir } = fixture(t);
+  const id = randomUUID(),
+    frame = {};
+  const wc = {
+    isDestroyed: () => false,
+    mainFrame: { framesInSubtree: [frame] },
+    capturePage: async () => ({
+      isEmpty: () => false,
+      resize() {
+        throw new Error('raw frame must not be encoded');
+      },
+    }),
+  };
+  const service = new DeveloperService({
+    directory: dir,
+    profiles: () => [{ id }],
+    inspectView: () => wc,
+    reveal: async () => {},
+    executeFrame: async (_frame, code) => {
+      const input = JSON.parse(code.slice(code.lastIndexOf(')(') + 2, -1));
+      if (input.action === 'mask')
+        return { masked: true, token: 'old-document' };
+      if (input.action === 'mask-status') return { valid: false };
+      return { nodes: [], events: [] };
+    },
+  });
+  t.after(() => service.close());
+  await service.attach(id, { screenshots: true });
+  assert.equal(await service.capture(), null);
+  assert.equal(service.report.screenshots.length, 0);
+  assert.ok(service.report.warnings.some((w) => w.includes('未保存图像')));
 });

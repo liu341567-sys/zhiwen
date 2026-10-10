@@ -321,16 +321,26 @@ function pageTool(input) {
     if ((root.nodeType !== 9 && !root.host) || state.observers.has(root))
       return;
     const observer = new MutationObserver((records) => {
-      if (
-        records.some(
-          (r) =>
-            !(
-              r.target instanceof Element &&
-              r.target.closest('[data-qiye-developer-overlay]')
-            ),
+      const overlay = (node) =>
+        node instanceof Element &&
+        node.hasAttribute('data-qiye-developer-overlay');
+      const changed = records.some((r) => {
+        if (
+          r.target instanceof Element &&
+          r.target.closest('[data-qiye-developer-overlay]')
         )
-      )
+          return false;
+        if (
+          r.type === 'childList' &&
+          [...r.addedNodes, ...r.removedNodes].every(overlay)
+        )
+          return false;
+        return true;
+      });
+      if (changed) {
         state.dirty = true;
+        if (state.maskToken) state.maskChanged = true;
+      }
     });
     observer.observe(root, {
       subtree: true,
@@ -352,6 +362,7 @@ function pageTool(input) {
     });
     state.observers.set(root, observer);
     const handler = (event) => {
+      if (event.type === 'scroll' && state.maskToken) state.maskChanged = true;
       const e =
         event.composedPath().find((n) => n instanceof Element) ||
         (event.type === 'scroll' ? document.documentElement : null);
@@ -485,11 +496,14 @@ function pageTool(input) {
     state.inspecting = !!input.inspect;
   }
   if (input.action === 'unmask') {
+    state.maskToken = null;
     document
       .querySelectorAll('[data-qiye-developer-overlay="mask"]')
       .forEach((e) => e.remove());
     return true;
   }
+  if (input.action === 'mask-status')
+    return { valid: state.maskToken === input.token && !state.maskChanged };
   const nodes = [];
   let truncated = false;
   const walk = (root, parent = null, depth = 0) => {
@@ -596,11 +610,15 @@ function pageTool(input) {
       }
     };
     scan(document);
+    state.maskToken = input.token;
+    state.maskChanged = false;
     // Wait for the covered surface to reach the compositor before capturePage.
     // A suspended renderer times out in the caller and never saves a raw frame.
     return new Promise((resolve) =>
       requestAnimationFrame(() =>
-        requestAnimationFrame(() => resolve({ masked: true })),
+        requestAnimationFrame(() =>
+          resolve({ masked: true, token: state.maskToken }),
+        ),
       ),
     );
   }
