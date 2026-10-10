@@ -537,8 +537,8 @@ async function run(scale, origin) {
     await tools.locator('#assistant-problem').click();
     await tools.locator('#assistant-manual').click();
     await until(async () => (await state()).report.assistance.phase === 'manual', 'guided manual takeover');
-    await account.locator('#modal').click();
-    await until(async () => (await state()).report.steps.some((s) => s.type === 'click' && s.target?.attributes?.id === 'modal'), 'manual demonstration event');
+    await account.locator('#change').click();
+    await until(async () => (await state()).report.steps.some((s) => s.type === 'click' && s.target?.attributes?.id === 'change'), 'manual demonstration event');
     const demonstrated = (await state()).report;
     check(`developer-${scale}: manual demonstration preserves the original browser and pauses the bound account`, () => {
       assert.equal(demonstrated.assistance.task.status, 'paused');
