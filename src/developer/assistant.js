@@ -19,6 +19,7 @@ class PublishingAssistant {
     this.mode = 'assistant';
   }
   task(id) {
+    if (typeof id !== 'string' || id.length > 100) throw new Error('请选择要排查的发布任务');
     const p = this.publisher();
     if (!p) throw new Error('发布中心暂不可用，请先打开发布中心');
     return p.store.task(id);
@@ -62,6 +63,16 @@ class PublishingAssistant {
   }
   async command(command, input) {
     const s = this.service;
+    if (command === 'assistant-select') {
+      const task = this.task(input.taskId);
+      if (['recording', 'paused'].includes(s.report?.status) && s.report.assistance?.taskId !== task.id)
+        throw new Error('已有其他记录正在进行，请先结束记录，再排查这个任务');
+      if (s.report && !['recording', 'paused'].includes(s.report.status))
+        await this.command('assistant-new', {});
+      this.preferredTask = task.id;
+      this.mode = 'assistant';
+      return s.state();
+    }
     if (command === 'assistant-mode') {
       if (!['assistant', 'professional'].includes(input.mode)) throw new Error('模式无效');
       this.mode = input.mode;

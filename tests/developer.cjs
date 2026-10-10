@@ -248,6 +248,7 @@ async function run(scale, origin) {
     await account.frameLocator('iframe').locator('#frame-button').click();
     await account.locator('#change').click();
     await cmd('refresh');
+    await until(async () => (await state()).report.steps.every((s) => s.beforeId && s.afterId), 'late event snapshot associations');
     let recorded = (await state()).report;
     check(
       `developer-${scale}: real click/input/select/upload/space actions have elements and snapshot links`,

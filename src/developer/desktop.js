@@ -116,10 +116,9 @@ function installDeveloperDesktop({
     )
       throw new Error('无权打开开发者工具');
     if (options?.taskId) {
-      service.assistant.task(options.taskId);
-      service.assistant.preferredTask = options.taskId;
-      service.assistant.mode = 'assistant';
+      await service.serial(() => service.command('assistant-select', { taskId: options.taskId }));
     }
+    service.assistant.mode = 'assistant';
     await open();
     notify();
     return true;

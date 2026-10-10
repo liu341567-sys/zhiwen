@@ -250,7 +250,7 @@ class DeveloperService {
           selected: null,
         })),
       );
-      if (force || signature !== this.lastSample) {
+      if (force || signature !== this.lastSample || this.report.steps.some((s) => !s.afterId)) {
         const snap = {
           id: randomUUID(),
           time: Date.now(),
@@ -338,6 +338,8 @@ class DeveloperService {
     ) {
       last.time = safe.time;
       last.target = safe.target;
+      last.afterId = null;
+      delete last.diff;
     } else {
       if (this.report.steps.length >= 600) {
         this.warn('已达 600 步上限，录制已自动暂停。');

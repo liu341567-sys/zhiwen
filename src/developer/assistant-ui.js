@@ -15,7 +15,7 @@
     $(id).onclick = async () => {
       if (busy) return;
       busy = true; render();
-      try { await fn(); } catch (error) { toast(error.message || String(error)); }
+      try { await fn(); } catch (error) { toast((error.message || String(error)).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')); }
       finally { busy = false; await call('state'); }
     };
   }
@@ -74,6 +74,8 @@
     $('assistant-counts').textContent = a ? `已记录 ${report.steps.length} 个操作 · ${report.snapshots.length} 份页面状态 · ${report.scripts.length} 条脚本事件` : '选择一个任务开始';
     if (a) {
       const taskState = a.task || {};
+      const boundTask = tasks.find((t) => t.id === a.taskId);
+      $('assistant-current-task').textContent = boundTask ? `正在记录：${boundTask.accountName} · ${boundTask.videoName}` : '任务已删除，已记录的资料仍可保存。';
       $('assistant-progress').textContent = taskState.stateLabel || '正在读取任务状态';
       $('assistant-guidance').textContent = a.phase === 'manual' ? '现在请在原账号网页演示正确的操作，完成后回来结束记录。'
         : taskState.reason || taskState.wait?.message || '你可以等待任务运行。出现问题时点「卡住了」，也可以演示正确操作。';
