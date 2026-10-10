@@ -15,6 +15,7 @@ const {
 const { filesFor, reportData, zip } = require('../src/developer/report');
 const { DeveloperService } = require('../src/developer/service');
 const { Page } = require('../src/publishing/adapters/page');
+const { PublishingService } = require('../src/publishing/service');
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiye-developer-unit-'));
@@ -58,6 +59,7 @@ test('report redaction removes nested credentials, DOM HTML, values, URLs and Wi
   ])
     assert.ok(!JSON.stringify(d).includes(secret));
   assert.deepEqual(d.nested, {});
+  assert.ok(!redact('missing /home/Alice/private.mp4').includes('Alice'));
   assert.equal(
     redact('https://example.com/path?x=private#secret'),
     'https://example.com/path',
@@ -255,6 +257,12 @@ test('optional tracing errors cannot alter successful browser operations or hide
     page.awaitOperation(Promise.reject(new Error('original failure'))),
     /original failure/,
   );
+});
+test('publishing monitoring tolerates late logs after a task was deleted', async t => {
+  const { dir } = fixture(t);
+  const service = new PublishingService({ directory: dir, profiles: () => [], getView: async () => null, inspectView: () => null, notify: () => {}, onDeveloperTrace: () => { throw new Error('optional monitor failure'); } });
+  t.after(() => service.shutdown());
+  assert.doesNotThrow(() => service.scheduler.trace(randomUUID(), 'late page log', 'info'));
 });
 test('closing a tool waits for a masked capture before removing its overlays', async (t) => {
   const { dir } = fixture(t);

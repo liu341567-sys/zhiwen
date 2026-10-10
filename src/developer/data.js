@@ -7,6 +7,7 @@ const redact = (value) =>
   String(value ?? '')
     .slice(0, 4000)
     .replace(/(?:[A-Z]:\\|\\\\)[^\r\n<>"']+/gi, '[本地路径]')
+    .replace(/\/(?:Users|home|workspace|tmp|var|mnt)\/[^\r\n<>"']+/g, '[本地路径]')
     .replace(
       /(?:bearer\s+|(?:password|passwd|cookie|token|secret|authorization|csrf|密码|令牌)\s*[:=]\s*)[^\s,;<>]+/gi,
       '[已脱敏]',

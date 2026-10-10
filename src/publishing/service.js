@@ -78,8 +78,10 @@ class PublishingService {
     });
     this.scheduler.trace = (id, message, level) => {
       this.diagnostics.event(id, message, level);
-      const task = this.store.task(id);
-      try { Promise.resolve(onDeveloperTrace(task.accountId, { taskId: id, operation: 'task-log', phase: level === 'error' ? 'error' : 'log', message })).catch(() => {}); } catch {}
+      try {
+        const task = this.store.task(id);
+        Promise.resolve(onDeveloperTrace(task.accountId, { taskId: id, operation: 'task-log', phase: level === 'error' ? 'error' : 'log', message })).catch(() => {});
+      } catch { /* Optional monitoring must tolerate an already deleted task. */ }
     };
   }
   accounts() {
