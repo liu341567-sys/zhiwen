@@ -10,7 +10,15 @@ Linux 91 项单元、语法及 75 项原生发布窗口检查通过，实际 DPR
 
 0.2.7 的 Windows 主分支 / 发布检查（37968655947 / 37968657937）在菜单用例的点击次数断言失败，未发布：鼠标悬停会使菜单在首次探测前展开，此时直接点视频只需一次。原断言强制两次不符合实际平台交互。改为分别断言视频入口恰好一次、父菜单至多一次、图文及最终提交均为零，保留完整上传 / 填写断言，使用 0.2.8 验证，不重写旧标签。
 
-Windows 构建、原生检查、安装与公开附件校验尚待完成；不以本地模拟网页代替用户已登录抖音主页的实机验收。除发布适配器、原生页面操作及测试 / 文档 / 根版本外，账号、数据库、匹配调度、原环境会话、导航与品牌资源未改动。
+[Windows 主分支检查（38010259057）](https://github.com/liu341567-sys/zhiwen/actions/runs/38010259057)与[发布检查（38010260706）](https://github.com/liu341567-sys/zhiwen/actions/runs/38010260706)对应 `9ad6812b9ba68c04ffb1e9d5a741d791f5bbd62e` / `v0.2.8`，全部通过：91 项单元与语法、23 项隔离、16 项兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、75 项发布专项。各档三次重新导航、真实悬停 / 点击、菜单仅选视频、同 URL 重复入口及顶部普通「发布」拒识全部通过。真实 NSIS 安装 / 启动 / 正常退出 / 重启 / 卸载、原图标与账号恢复、安装后的媒体工具 / 元数据 / 缩略图 / SQLite 检查通过。DPR 为 Electron 实际 1 / 1.25 / 1.5，未切换物理显示器 DPI；本地模拟网页不代替用户已登录抖音主页实机验收。除发布适配器、原生页面操作及测试 / 文档 / 根版本外，账号、数据库、匹配调度、原环境会话、导航与品牌资源未改动。
+
+发布于 2026-10-10 08:55:01（北京时间）。发布页与三个附件匿名 HTTP 200；安装包和 ZIP 完整下载，大小、SHA256 与 GitHub 摘要 / 校验文件一致。ZIP 的原品牌资源、媒体工具、许可齐全，无用户账号清单。证据：`.cache/release-0.2.8/ci-verification.json`、`verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.2.8-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.8/Qiye-0.2.8-x64.zip) | 217812629 | `30f7bd0a9d219946b1fd60508c168f58418ffe70d0b3b36ae9332b0ff5b39cfb` |
+| [Qiye-Setup-0.2.8-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.8/Qiye-Setup-0.2.8-x64.exe) | 160687045 | `d1c63315b9e5aebe58e3c99e45d9a56a3011d0b1a969bbbd8bebba86582eeb3c` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.8/SHA256SUMS.txt) | 178 | `78b897220488a47cd5e3fe31ca9878d950b3dd40c6e289130cd514410dcd0d7d` |
 
 # 0.2.5 发布确认、批次重置与记录管理
 
