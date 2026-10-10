@@ -6,11 +6,21 @@
 
 Linux 本轮 99 项单元与语法、84 项原生发布窗口专项、432 项既有窗口 UI、51 项列表与 45 项导航、23 项隔离及 16 项本地登录兼容性检查通过。Linux 原生安全存储不可用时跨重启加密会话恢复按既有规则明确跳过，Windows DPAPI 由原生门禁验证。发布专项新增冷启动零预打开账号、后台实际非零视口，以及从任务详情启动诊断 / 手动编辑 / 话题空格 / 停止 / 导出 JSON。报告验证不含填写值、密码、Cookie、查询参数、标题、素材路径或账号名称；原生环境 ID / WebContents 复用不变。单元覆盖等待原因、日志去重、实际 / 旧版间隔、删除清理、人工核实、诊断停止 / 删除竞争、重启保留及存储大小限制。
 
-初次完整原生发布检查在 150% 的模拟网页重新导航中有一次 ERR_FAILED；150% 单档与随后完整三档回归均通过。没有删除断言或弱化发布检查。Windows 原生回归和安装包检查完成后补充门禁结果。实际 DPR 为 1 / 1.25 / 1.5；不等同于切换物理显示器 DPI。本地模拟网页不等同于用户真实抖音账号发布验收。
+初次完整原生发布检查在 150% 的模拟网页重新导航中有一次 ERR_FAILED；150% 单档与随后完整三档回归均通过。没有删除断言或弱化发布检查。Windows 双工作流原生发布专项也均通过，门禁结果见下方。实际 DPR 为 1 / 1.25 / 1.5；不等同于切换物理显示器 DPI。本地模拟网页不等同于用户真实抖音账号发布验收。
 
 本地诊断需主动开始，不读取登录数据，不保存原始 HTML、输入值、媒体 URL 或截图，不自动上传。每 2 秒只读检查，最长 10 分钟，每任务约 2 MiB / 300 快照，同账号单记录、最多三个账号；报告在 SQLite 现有 settings 中独立保存，无环境清单或任务表 schema 变更。关闭或删除期间的未完成采样不得恢复记录；任务删除同步清理报告和监听器。根版本字段更新，依赖与账号隔离、启动锁定、品牌资产保持。
 
-本轮证据位于 `.cache/release-0.2.9/`：`unit.log`、`syntax.log`、`publishing-final.log`、`ui.log`、`old-viewport-proof.json`。公开附件尚在构建，不提前宣称已可下载。
+本轮证据位于 `.cache/release-0.2.9/`：`unit.log`、`syntax.log`、`publishing-final.log`、`ui.log`、`old-viewport-proof.json`。
+
+[Windows 主分支（38015238085）](https://github.com/liu341567-sys/zhiwen/actions/runs/38015238085)与[发布检查（38015252203）](https://github.com/liu341567-sys/zhiwen/actions/runs/38015252203)对应 `28bf4ab7c926f7cf76601ee06782f6d3a8a64165` / `v0.2.9`，全部通过：99 项单元、语法、23 项隔离、16 项兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航与 84 项发布专项。真实 NSIS 安装、启动、正常退出、重启恢复、卸载、原图标与账号恢复、已安装媒体工具 / 元数据 / 缩略图 / SQLite 检查通过。
+
+发布于 2026-10-10 10:09:04（北京时间）。发布页及三个附件匿名 HTTP 200；安装包和 ZIP 完整下载，大小和 SHA256 与 GitHub 摘要、发布校验文件一致。ZIP 原品牌图标、媒体工具和许可齐全，无用户账号清单；包内关键运行源码与发布提交一致（仅转换为 Windows 检出 CRLF 行尾），包含新的本地诊断模块。证据：`.cache/release-0.2.9/ci-verification.json`、`verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.2.9-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.9/Qiye-0.2.9-x64.zip) | 217819035 | `3bdcdfda8bd21d7399ef49a23b196c7d8a9dfde4cab214f31aec3ec88470969a` |
+| [Qiye-Setup-0.2.9-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.9/Qiye-Setup-0.2.9-x64.exe) | 160692357 | `3d80a0fe71d7724d7d04f9d0d900afd82a750ce1ce844b8c21773ca986c6c2b1` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.2.9/SHA256SUMS.txt) | 178 | `c8404e1e2c946c397c046eaa6c6d28d7470409c0312b58abfdc7f0a3f72d5b27` |
 
 # 0.2.8 抖音主页“作品发布”入口修复
 
