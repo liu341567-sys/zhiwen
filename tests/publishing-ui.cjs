@@ -481,7 +481,7 @@ async function run(scale) {
       await app.evaluate(
         async ({ webContents }, { id, handlers }) => {
           await webContents.fromId(id).executeJavaScript(`
-          window.entryClicks=0;window.imageEntryClicks=0;window.entryUploads=0;window.entrySubmits=0;window.entryEvents=[];
+          window.entryClicks=0;window.workEntryClicks=0;window.videoEntryClicks=0;window.imageEntryClicks=0;window.entryUploads=0;window.entrySubmits=0;window.entryEvents=[];
           if(!window.entryEventListenersInstalled){['mousemove','mousedown','mouseup','click'].forEach(type=>document.addEventListener(type,event=>window.entryEvents.push({type,target:event.target.id,x:event.clientX,y:event.clientY,trusted:event.isTrusted}),{capture:true}));window.entryEventListenersInstalled=true;}
           window.openVideoForm=()=>{
             document.body.innerHTML='<h1>视频发布</h1><input type="file" accept="video/mp4"><div id="entry-status"></div><textarea aria-label="作品描述" style="display:none"></textarea><button id="entry-submit" disabled>发布</button>';
@@ -526,7 +526,7 @@ async function run(scale) {
           webContents
             .fromId(id)
             .executeJavaScript(
-              '({clicks:window.entryClicks,images:window.imageEntryClicks,uploads:window.entryUploads,submits:window.entrySubmits,path:location.pathname,events:window.entryEvents})',
+              '({clicks:window.entryClicks,images:window.imageEntryClicks,uploads:window.entryUploads,submits:window.entrySubmits,path:location.pathname,events:window.entryEvents,workClicks:window.workEntryClicks,videoClicks:window.videoEntryClicks})',
             ),
         bWcId,
       );
@@ -562,10 +562,15 @@ async function run(scale) {
     );
     const menuEntry = await runEntry(
       '<nav><button id="work-publish"><span>作品发布</span></button><div role="menu" hidden><button role="menuitem" id="menu-video">发布视频</button><button role="menuitem" id="menu-image">发布图文</button></div></nav>',
-      "document.querySelector('#work-publish').onmouseenter=()=>{document.querySelector('[role=menu]').hidden=false;};document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;document.querySelector('[role=menu]').hidden=false;};document.querySelector('#menu-video').onclick=()=>{window.entryClicks++;window.openVideoForm();};document.querySelector('#menu-image').onclick=()=>window.imageEntryClicks++;",
+      "document.querySelector('#work-publish').onmouseenter=()=>{document.querySelector('[role=menu]').hidden=false;};document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;window.workEntryClicks++;document.querySelector('[role=menu]').hidden=false;};document.querySelector('#menu-video').onclick=()=>{window.entryClicks++;window.videoEntryClicks++;window.openVideoForm();};document.querySelector('#menu-image').onclick=()=>window.imageEntryClicks++;",
       'menu-entry-fixture',
     );
-    assert.equal(menuEntry.actions.clicks, 2);
+    // Native hover may already reveal the menu before the first probe (Windows
+    // dispatches it when DOM changes under a stationary pointer). Both routes
+    // must select video exactly once and never toggle the menu repeatedly.
+    assert.equal(menuEntry.actions.videoClicks, 1);
+    assert.ok([0, 1].includes(menuEntry.actions.workClicks));
+    assert.equal(menuEntry.actions.clicks, 1 + menuEntry.actions.workClicks);
     check(
       `publishing-${scale}: Works Publish menu selects video only and never clicks image publication or final submit`,
       () => assert.ok(true),
