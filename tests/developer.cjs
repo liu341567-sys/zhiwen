@@ -581,7 +581,7 @@ async function run(scale, origin) {
   const origin = await serve((_req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.end(`<!doctype html><title>发布测试</title><style>body{margin:20px;min-height:1800px}input,select,button{margin:5px;padding:10px}#rich{border:1px solid gray;padding:10px;width:300px}iframe{display:block;height:60px}dialog{padding:20px}</style>
-<label for="title">作品标题</label><input id="title" placeholder="填写作品标题"><input id="pw" type="password" value="p@ss-secret"><input type="hidden" value="hidden-secret"><div id="rich" contenteditable="true"><span>rich-private</span></div>
+<label for="title">作品标题</label><input id="title" placeholder="填写作品标题"><input id="pw" type="password" value="p@ss-secret"><input type="hidden" value="hidden-secret"><div id="rich" contenteditable="true"><span contenteditable="false">rich-private</span></div>
 <select id="choice"><option value="first">第一项</option><option value="second">第二项</option></select><input id="tick" type="checkbox"><input id="file" type="file" accept="video/*"><button id="submit" aria-label="发布" onclick="window.submits++">发布</button><button class="duplicate">保存</button><button class="duplicate">保存</button><button id="css-abcdef123456">动态</button>
 <button id="change" onclick="document.getElementById('dynamic').hidden=false">封面</button><div id="dynamic" hidden role="dialog">选择封面</div><a id="next" href="/next">下一步</a><x-controls></x-controls><iframe src="${iframe}/?token=raw-query"></iframe><script>window.submits=0;window.secret='script-secret'; const s=document.querySelector('x-controls').attachShadow({mode:'open'});s.innerHTML='<button id="shadow-first">上传</button><button id="shadow-second">发布</button>';window.ready=true;</script>`);
   });

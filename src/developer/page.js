@@ -124,7 +124,7 @@ function pageTool(input) {
   const describe = (e) => {
     if (!e || !(e instanceof Element) || excluded(e)) return null;
     if (!state.ids.has(e)) state.ids.set(e, ++state.counter);
-    const editable = e.matches('input,textarea') || e.isContentEditable,
+    const editable = e.matches('input,textarea') || e.isContentEditable || closestAcrossRoots(e, '[contenteditable=true],[contenteditable=""],[contenteditable=plaintext-only]'),
       privateNode = sensitive(e);
     const attrs = {};
     for (const name of [
