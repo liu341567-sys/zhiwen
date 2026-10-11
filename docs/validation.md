@@ -1,3 +1,19 @@
+# 0.3.3 同名发布入口与压缩导出验证
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38125656636)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38125669533)均通过，对应 `6e7f990ef745c4b4ee977117e821522af1be84c6` / `v0.3.3`：122 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 51 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下验证唯一导航作品发布按钮与同名内容入口并存时完成上传和填写，未点击内容入口、图文或最终提交；多个导航按钮、普通导航标签及不同目标网址仍不执行。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试网页夹具不能代替真实抖音账号验收。
+
+发布于 2026-10-11 16:52:51（北京时间）。发布页及三个附件匿名访问成功；安装包和 ZIP 完整下载，大小与 SHA256 均对照 GitHub 摘要及校验文件验证通过。包内运行时代码与验证提交一致（Windows CRLF），品牌资产、媒体工具和许可齐全，不含用户账号清单。证据保存在 `.cache/release-0.3.3/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.3-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.3/Qiye-0.3.3-x64.zip) | 217855486 | `a2de2df0b0e341194b500cc578b6b996b35afe2afc5b8b8e78717a9508ca2aea` |
+| [Qiye-Setup-0.3.3-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.3/Qiye-Setup-0.3.3-x64.exe) | 160720933 | `32cfd40f19c296c311b3d7081aabdaf89ad273925cd558c6740d78ba0806de32` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.3/SHA256SUMS.txt) | 178 | `54656cd13312611f37715738a1ebe35f62cc337ef7c5770ceb2847a092e97e97` |
+
+0.3.1 用户报告记录 13 步、18 快照与 72 个脚本事件。两次入口检查均为两个同名候选，在点击前暂停；第 5 步人工点击侧栏语义按钮后发生导航，随后录到文件上传。侧栏结构完整保存，只有一个作品发布标签；主文档快照在 800 节点截断，另一个候选的详细元素未保留。修复按控件语义和区域选择，不使用导出长路径、动态 Class 或固定坐标。
+
+0.3.2 验证构建被旧测试阻止，未发布安装包：测试直接查找 ZIP 明文字节，与新增压缩不兼容。0.3.3 修正为解压 Markdown 和 JSON 后核对内容与任务关联。34 MiB 合成页面结构压缩到 1 MiB 以下，所有文件逐字节恢复；Python 标准 ZIP 读取与 Windows 原生导出验证保留。用户本次 JSON 为 24,911,811 字节，Deflate 后为 614,201 字节，该测量仅对应 JSON，并非整个 ZIP。
+
 # 0.3.1 简单排查流程验证
 
 Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38042383367)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38042914967)均通过，对应 `40f60fc04f236ff06a5289d302b61330d9f4f0b6` / `v0.3.1`：121 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、87 项发布专项及 51 项开发者工具原生窗口分组检查。简单排查在 DPR 1 / 1.25 / 1.5 下实际验证任务入口、原环境录制、人工接管、集中预览、确认后 ZIP 导出、固定底部及新问题重置。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试使用本地网页夹具，真实抖音账号仍需用户实机验收。

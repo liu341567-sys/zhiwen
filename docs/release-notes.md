@@ -7,7 +7,15 @@
 - 调试 ZIP 使用标准 Deflate 压缩重复页面结构，保留完整 JSON、Markdown、HTML 与已审阅截图；不改变录制和脱敏规则。
 - 原账号环境、登录数据、启动配置、任务授权与提交边界保护保持原逻辑。
 
-本地单元及语法检查通过；新增 Windows 原生页面回归覆盖同名入口选择与歧义保护。Windows 验证与安装包发布完成后补充证据。测试网页夹具不能代替真实抖音账号验收。
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38125656636)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38125669533)均通过，对应 `6e7f990ef745c4b4ee977117e821522af1be84c6` / `v0.3.3`：122 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 51 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下验证唯一导航作品发布按钮与同名内容入口并存时完成上传和填写，未点击内容入口、图文或最终提交；多个导航按钮、普通导航标签及不同目标网址仍不执行。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试网页夹具不能代替真实抖音账号验收。
+
+发布于 2026-10-11 16:52:51（北京时间）。发布页及三个附件匿名访问成功；安装包和 ZIP 完整下载，大小与 SHA256 均对照 GitHub 摘要及校验文件验证通过。包内运行时代码与验证提交一致（Windows CRLF），品牌资产、媒体工具和许可齐全，不含用户账号清单。证据保存在 `.cache/release-0.3.3/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.3-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.3/Qiye-0.3.3-x64.zip) | 217855486 | `a2de2df0b0e341194b500cc578b6b996b35afe2afc5b8b8e78717a9508ca2aea` |
+| [Qiye-Setup-0.3.3-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.3/Qiye-Setup-0.3.3-x64.exe) | 160720933 | `32cfd40f19c296c311b3d7081aabdaf89ad273925cd558c6740d78ba0806de32` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.3/SHA256SUMS.txt) | 178 | `54656cd13312611f37715738a1ebe35f62cc337ef7c5770ceb2847a092e97e97` |
 
 # 栖页 0.3.1 · 发布问题助手
 
