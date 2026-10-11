@@ -578,6 +578,15 @@ function pageTool(input) {
         limitReason = 'nodes';
         return;
       }
+      if (input.action === 'mask') {
+        // The strict safety census needs only coverage/counting, not XPath,
+        // CSS suggestions or hit testing for thousands of hidden sprite paths.
+        nodes.push(null);
+        if (sensitive(e)) continue;
+        walk(e, null, depth + 1);
+        if (e.shadowRoot) walk(e.shadowRoot, null, depth + 1);
+        continue;
+      }
       const d = describe(e);
       if (!d) continue;
       d.parentId = parent;

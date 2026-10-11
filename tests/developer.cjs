@@ -166,7 +166,7 @@ async function run(scale, origin) {
     const screenshotAttempt = (await state()).report;
     check(`developer-${scale}: optimized DOM sampling does not weaken the strict screenshot privacy limit`, () => {
       assert.equal(screenshotAttempt.screenshots.length, 0);
-      assert.ok(screenshotAttempt.warnings.some((w) => w.includes('安全截图采样范围')));
+      assert.ok(screenshotAttempt.warnings.some((w) => w.includes('安全截图采样范围')), JSON.stringify(screenshotAttempt.warnings));
     });
     await account.evaluate(() => document.querySelectorAll('#sprite-library,#spacer-library,.auxiliary-frame').forEach((e) => e.remove()));
     await cmd('options', { screenshots: false });
@@ -280,6 +280,7 @@ async function run(scale, origin) {
     await account.locator('#submit').click();
     assert.equal(await account.evaluate(() => window.submits), 1);
     await cmd('start');
+    const actionBaseline = (await state()).report.snapshots.at(-1).id;
     await account.locator('#nested-cover span').click();
     await account.locator('#poi-detail').click();
     await account.locator('#context-safe').click();
@@ -339,7 +340,7 @@ async function run(scale, origin) {
       },
     );
     const comparison = await cmd('compare', {
-      before: recorded.snapshots[0].id,
+      before: actionBaseline,
       after: recorded.snapshots.at(-1).id,
     });
     check(
