@@ -152,6 +152,32 @@ async function run(scale, origin) {
     await openTools();
     const initial = await cmd('attach', { id: a.id });
     const snap = initial.report.snapshots.at(-1);
+    check(`developer-${scale}: hidden SVG sprite library and auxiliary frames leave the main publishing form intact`, () => {
+      assert.ok(snap.frames.length >= 6);
+      assert.equal(snap.frames[0].sampling.limit, 2000);
+      assert.ok(snap.frames[0].sampling.omittedDefinitions > 0);
+      assert.equal(snap.frames[0].truncated, false);
+      assert.ok(snap.frames[0].nodes.some((n) => n.attributes.id === 'title'));
+      assert.ok(snap.frames[0].nodes.some((n) => n.attributes.id === 'svg-live-button'));
+      assert.ok(!snap.frames[0].nodes.some((n) => n.tag === 'symbol'));
+    });
+    await cmd('options', { screenshots: true });
+    await cmd('screenshot');
+    const screenshotAttempt = (await state()).report;
+    check(`developer-${scale}: optimized DOM sampling does not weaken the strict screenshot privacy limit`, () => {
+      assert.equal(screenshotAttempt.screenshots.length, 0);
+      assert.ok(screenshotAttempt.warnings.some((w) => w.includes('安全截图采样范围')));
+    });
+    await account.evaluate(() => document.querySelectorAll('#sprite-library,#spacer-library,.auxiliary-frame').forEach((e) => e.remove()));
+    await cmd('options', { screenshots: false });
+    await account.evaluate(() => history.replaceState({}, '', '/creator-micro/content/manage?token=private-route-token'));
+    await cmd('refresh');
+    const routeSample = (await state()).report.snapshots.at(-1);
+    check(`developer-${scale}: isolated-page and exported URL scrubbing preserve public creator paths`, () => {
+      assert.equal(routeSample.frames[0].url, origin + '/creator-micro/content/manage');
+      assert.ok(!JSON.stringify(routeSample).includes('private-route-token'));
+    });
+    await account.evaluate(() => history.replaceState({}, '', '/start'));
     check(
       `developer-${scale}: original main and cross-origin frames analyzed without a new browser`,
       () => {
@@ -254,6 +280,9 @@ async function run(scale, origin) {
     await account.locator('#submit').click();
     assert.equal(await account.evaluate(() => window.submits), 1);
     await cmd('start');
+    await account.locator('#nested-cover span').click();
+    await account.locator('#poi-detail').click();
+    await account.locator('#context-safe').click();
     await account.locator('#title').fill('input-private');
     await account.locator('#pw').fill('p@ss-new-secret');
     await account.locator('#rich').fill('another-rich-private #人工智能');
@@ -271,6 +300,15 @@ async function run(scale, origin) {
     await cmd('refresh');
     await until(async () => (await state()).report.steps.every((s) => s.beforeId && s.afterId), 'late event snapshot associations');
     let recorded = (await state()).report;
+    check(`developer-${scale}: nested buttons and official candidate rows have readable context without private descendant text`, () => {
+      const cover = recorded.steps.find((s) => s.target?.context?.ancestors?.some((a) => a.attributes.id === 'nested-cover'));
+      assert.equal(cover.target.context.ancestors[0].semantic.name, '保存封面');
+      const poi = recorded.steps.find((s) => s.target?.attributes.id === 'poi-detail');
+      assert.ok(poi.target.context.text.includes('示例公园') && poi.target.context.text.includes('示例市测试路'));
+      const all = JSON.stringify(recorded);
+      assert.ok(!all.includes('context-rich-private') && !all.includes('context-password-private'));
+      assert.ok(recorded.steps.some((s) => s.type === 'select' && s.target?.attributes.id === 'tick' && s.target.controlState.checked));
+    });
     check(
       `developer-${scale}: real click/input/select/upload/space actions have elements and snapshot links`,
       () => {
@@ -744,9 +782,12 @@ async function run(scale, origin) {
   const origin = await serve((_req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.end(`<!doctype html><title>发布测试</title><style>body{margin:20px;min-height:1800px}input,select,button{margin:5px;padding:10px}#rich{border:1px solid gray;padding:10px;width:300px}iframe{display:block;height:60px}dialog{padding:20px}</style>
+<svg id="sprite-library" style="display:none"><defs>${Array.from({length:1000}, (_, i) => `<symbol id="symbol-${i}"><path d="M0 0 L1 1"/></symbol>`).join('')}</defs></svg><div id="spacer-library" hidden>${'<span></span>'.repeat(1300)}</div>
+<svg width="150" height="50"><foreignObject width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml"><button id="svg-live-button">选择封面</button></div></foreignObject></svg>
 <label for="title">作品标题</label><input id="title" placeholder="填写作品标题"><input id="pw" type="password" value="p@ss-secret"><input type="hidden" value="hidden-secret"><div id="rich" contenteditable="true"><span contenteditable="false">rich-private</span></div>
+<button id="nested-cover"><span>保存封面</span></button><div id="poi" role="option"><div id="poi-detail"><strong>示例公园</strong><span>示例市测试路</span></div></div><div><span id="context-safe">确认设置</span><input type="password" value="context-password-private"><div contenteditable="true"><span contenteditable="false">context-rich-private</span></div></div>
 <select id="choice"><option value="first">第一项</option><option value="second">第二项</option></select><input id="tick" type="checkbox"><input id="file" type="file" accept="video/*"><button id="submit" aria-label="发布" onclick="window.submits++">发布</button><button class="duplicate">保存</button><button class="duplicate">保存</button><button id="css-abcdef123456">动态</button>
-<button id="change" onclick="document.getElementById('dynamic').hidden=false">封面</button><div id="dynamic" hidden role="dialog">选择封面</div><a id="next" href="/next">下一步</a><x-controls></x-controls><iframe src="${iframe}/?token=raw-query"></iframe><script>window.submits=0;window.secret='script-secret'; const s=document.querySelector('x-controls').attachShadow({mode:'open'});s.innerHTML='<button id="shadow-first">上传</button><button id="shadow-second">发布</button>';window.ready=true;</script>`);
+<button id="change" onclick="document.getElementById('dynamic').hidden=false">封面</button><div id="dynamic" hidden role="dialog">选择封面</div><a id="next" href="/next">下一步</a><x-controls></x-controls><iframe src="${iframe}/?token=raw-query"></iframe>${`<iframe class="auxiliary-frame" src="${iframe}/"></iframe>`.repeat(4)}<script>window.submits=0;window.secret='script-secret'; const s=document.querySelector('x-controls').attachShadow({mode:'open'});s.innerHTML='<button id="shadow-first">上传</button><button id="shadow-second">发布</button>';window.ready=true;</script>`);
   });
   try {
     for (const scale of testArgs.filter((a) => !a.startsWith('--')).length

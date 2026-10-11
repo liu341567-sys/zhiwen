@@ -1,5 +1,6 @@
 'use strict';
-const { scrub } = require('./data');
+const { scrub, compare } = require('./data');
+const { evidenceHealth } = require('./evidence');
 const { deflateRawSync } = require('node:zlib');
 const html = (value) =>
   String(value ?? '').replace(
@@ -11,8 +12,21 @@ const html = (value) =>
   );
 function reportData(report, technical) {
   const { accountId, options, ...safe } = report;
+  const snapshots = new Map(report.snapshots.map((s) => [s.id, s]));
+  const pairs = new Map(), differences = [];
+  const steps = report.steps.map((s, i) => {
+    if (!s.beforeId || !s.afterId || !snapshots.has(s.beforeId) || !snapshots.has(s.afterId))
+      return { ...s, sequence: i + 1 };
+    const key = s.beforeId + ':' + s.afterId;
+    if (!pairs.has(key)) {
+      pairs.set(key, differences.length);
+      differences.push(compare(snapshots.get(s.beforeId), snapshots.get(s.afterId)));
+    }
+    return { ...s, sequence: i + 1, diff: { ...s.diff, differenceIndex: pairs.get(key) } };
+  });
   const data = scrub({
     ...safe,
+    evidenceHealth: evidenceHealth(report),
     environment: { reference: 'selected-existing-environment', ...technical },
     privacy: {
       inputValues: false,
@@ -23,7 +37,8 @@ function reportData(report, technical) {
       excludedSelectors: options.exclude || [],
       textIncluded: options.includeText !== false,
     },
-    steps: report.steps.map((s, i) => ({ ...s, sequence: i + 1 })),
+    steps,
+    differences,
     screenshots: report.screenshots.map((s) => ({
       id: s.id,
       time: s.time,
@@ -47,6 +62,7 @@ function filesFor(report, technical) {
     `状态：${d.status} · 操作 ${d.steps.length} 步 · 快照 ${d.snapshots.length} 份`,
     '',
     '输入值、凭据、本地文件路径和网址查询参数均不导出。截图需在工具中确认后才能导出。',
+    `证据检查：操作快照关联缺失 ${d.evidenceHealth.missingStepSnapshots.length} 个；采集未完成 ${d.evidenceHealth.incompleteSteps.length} 步；结构截断 ${d.evidenceHealth.truncatedFrames.length} 个框架快照。`,
     '',
   ];
   if (d.assistance && !d.assistance.taskId) {
@@ -77,9 +93,12 @@ function filesFor(report, technical) {
       `### 第 ${s.sequence} 步 · ${s.type}`,
       `时间：${new Date(s.time).toISOString()} · 框架：${s.frame || 'main'}`,
       `说明：${s.note || '无'}`,
+      `控件：${s.target?.semantic?.name || s.target?.context?.text || s.target?.text || s.target?.semantic?.label || '无文字 / 输入内容已隐藏'}`,
+      `所属区域：${JSON.stringify(s.target?.context?.ancestors || [])}`,
       `定位：${JSON.stringify(s.target?.locators || s.locator || [])}`,
       `前快照：${s.beforeId || '无'} · 后快照：${s.afterId || '无'}`,
       `变化：${s.diff?.total ?? 0} 处`,
+      `详细变化索引：${s.diff?.differenceIndex ?? '无'}（report.json 的 differences 数组）`,
       '',
     );
   }
@@ -91,11 +110,11 @@ function filesFor(report, technical) {
   md.push(
     '',
     '## 阅读索引',
-    '详细 DOM、属性、Shadow 根路径、定位建议和前后差异见 report.json。定位器必须结合 frame 和 roots 使用；位置不是执行坐标。',
+    '详细 DOM、属性、Shadow 根路径、定位建议和前后差异见 report.json。步骤 diff.differenceIndex 关联 differences 数组，同一前后快照的详细变化只保存一份。evidenceHealth 标记截断与缺失，不能把缺失快照当成已验证结果。定位器必须结合 frame 和 roots 使用；位置不是执行坐标。',
     '',
     ...d.warnings.map((s) => '- ' + s),
   );
-  const body = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>栖页调试报告</title><style>body{font:15px/1.6 system-ui;color:#18253b;background:#f6f8fc;margin:32px}article{max-width:1200px;margin:auto}section{background:white;padding:20px;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%}summary{cursor:pointer;font-weight:600}</style><article><h1>栖页网页调试报告</h1><p>${html(d.name)} · ${html(d.status)}</p><p>输入值和凭据均已排除；定位器请结合框架与 Shadow 根路径。</p>${d.assistance ? `<section><h2>录制用途与问题说明</h2><pre>${html(JSON.stringify(d.assistance, null, 2))}</pre></section>` : ''}${d.steps.map((s) => `<section><h2>${s.sequence}. ${html(s.type)}</h2><p>${html(s.note)}</p><pre>${html(JSON.stringify(s, null, 2))}</pre></section>`).join('')}${d.snapshots.map((s) => `<details><summary>结构快照 ${html(s.id)} · ${html(new Date(s.time).toISOString())}</summary><pre>${html(JSON.stringify(s, null, 2))}</pre></details>`).join('')}<h2>脚本执行</h2><pre>${html(JSON.stringify(d.scripts, null, 2))}</pre>${report.screenshots
+  const body = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>栖页调试报告</title><style>body{font:15px/1.6 system-ui;color:#18253b;background:#f6f8fc;margin:32px}article{max-width:1200px;margin:auto}section{background:white;padding:20px;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%}summary{cursor:pointer;font-weight:600}</style><article><h1>栖页网页调试报告</h1><p>${html(d.name)} · ${html(d.status)}</p><p>输入值和凭据均已排除；定位器请结合框架与 Shadow 根路径。</p>${d.assistance ? `<section><h2>录制用途与问题说明</h2><pre>${html(JSON.stringify(d.assistance, null, 2))}</pre></section>` : ''}${d.steps.map((s) => `<section><h2>${s.sequence}. ${html(s.type)}</h2><p>${html(s.note)}</p><pre>${html(JSON.stringify(s, null, 2))}</pre></section>`).join('')}${d.snapshots.map((s) => `<details><summary>结构快照 ${html(s.id)} · ${html(new Date(s.time).toISOString())}</summary><pre>${html(JSON.stringify(s, null, 2))}</pre></details>`).join('')}<h2>操作前后变化</h2>${d.differences.map((difference, i) => `<details><summary>变化 ${i} · ${html(difference.total)} 处</summary><pre>${html(JSON.stringify(difference, null, 2))}</pre></details>`).join('')}<h2>脚本执行</h2><pre>${html(JSON.stringify(d.scripts, null, 2))}</pre>${report.screenshots
     .filter((s) => s.reviewed)
     .map(
       (s) =>

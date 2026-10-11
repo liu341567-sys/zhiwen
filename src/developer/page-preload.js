@@ -17,7 +17,7 @@ ipcRenderer.on('developer:frame-request', async (_event, request) => {
     const result = await webFrame.executeJavaScriptInIsolatedWorld(999, [
       { code: request.script },
     ]);
-    if (result === undefined || JSON.stringify(result).length > 2 * 1024 * 1024)
+    if (result === undefined || JSON.stringify(result).length > 4 * 1024 * 1024)
       throw new Error('网页采样失败或超过范围');
     ipcRenderer.send('developer:frame-reply', request.id, result);
   } catch {

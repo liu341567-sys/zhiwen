@@ -17,6 +17,7 @@ const { filesFor, reportData, zip } = require('../src/developer/report');
 const { DeveloperService } = require('../src/developer/service');
 const { Page } = require('../src/publishing/adapters/page');
 const { PublishingService } = require('../src/publishing/service');
+const { retainEvidence, evidenceHealth, sampleSignature } = require('../src/developer/evidence');
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiye-developer-unit-'));
@@ -82,6 +83,68 @@ test('independent SQLite report store recovers interrupted recording without sta
   second.remove(report.id);
   assert.equal(store.list().length, 0);
   assert.throws(() => store.get(report.id), /不存在/);
+});
+test('public creator routes survive repeated redaction while URL credentials, queries and opaque path identifiers do not', () => {
+  for (const route of ['home', 'content/manage', 'content/publish', 'content/post/video']) {
+    const url = 'https://creator.douyin.com/creator-micro/' + route;
+    assert.equal(redact(url), url);
+    assert.equal(redact(redact(url)), url);
+  }
+  const privateURL = 'https://user:credential@creator.example.com/posts/0123456789abcdef0123456789abcdef?token=private-query#secret';
+  const safe = redact(privateURL);
+  for (const secret of ['user:', 'credential', 'private-query', '#secret', '0123456789abcdef0123456789abcdef']) assert.ok(!safe.includes(secret));
+  assert.equal(redact(safe), safe);
+  const text = redact('入口 https://creator.douyin.com/creator-micro/content/manage?token=private 下一页 https://example.com/video?account=private token=outside-secret');
+  assert.ok(text.includes('/creator-micro/content/manage') && text.includes('https://example.com/video'));
+  assert.ok(!text.includes('private') && !text.includes('outside-secret'));
+});
+test('capacity cleanup preserves over 80 linked action samples, screenshots, script errors and module markers', () => {
+  const snapshots = Array.from({ length: 130 }, () => ({ id: randomUUID(), frames: [] }));
+  const report = { snapshots, steps: snapshots.slice(0, 120).map((s) => ({ id: randomUUID(), beforeId: s.id, afterId: s.id })),
+    scripts: [{ snapshotId: snapshots[120].id }], screenshots: [{ snapshotId: snapshots[121].id }],
+    assistance: { segments: [{ snapshotId: snapshots[122].id }] } };
+  const pinned = snapshots.slice(0, 123).map((s) => s.id);
+  const bytes = Buffer.byteLength(JSON.stringify(report));
+  const result = retainEvidence(report, bytes - 100);
+  assert.ok(result.removed > 0);
+  for (const id of pinned) assert.ok(report.snapshots.some((s) => s.id === id));
+  assert.deepEqual(evidenceHealth(report).missingStepSnapshots, []);
+});
+test('ambient sampling is bounded without evicting the earliest action and capacity exhaustion is explicit', () => {
+  const first = { id: randomUUID(), frames: [] }, snapshots = [first, ...Array.from({ length: 100 }, () => ({ id: randomUUID(), frames: [] }))];
+  const report = { snapshots, steps: [{ id: randomUUID(), beforeId: first.id }], scripts: [], screenshots: [] };
+  retainEvidence(report);
+  assert.equal(report.snapshots.length, 18); // first, latest and 16 ambient samples
+  assert.equal(report.snapshots[0].id, first.id);
+  const result = retainEvidence(report, 1);
+  assert.equal(result.full, true);
+  assert.equal(report.snapshots.length, 2);
+  assert.equal(report.steps[0].beforeId, first.id);
+});
+test('sampling signatures ignore runtime node IDs and layout jitter but capture control, text and URL changes', () => {
+  const a = [{ key: 'main', url: '/before', nodes: [{ id: 1, tag: 'button', text: '发布', enabled: false, rect: { x: 1 } }] }];
+  const b = JSON.parse(JSON.stringify(a)); b[0].nodes[0].id = 2; b[0].nodes[0].rect.x = 2;
+  assert.equal(sampleSignature(a), sampleSignature(b));
+  b[0].nodes[0].enabled = true;
+  assert.notEqual(sampleSignature(a), sampleSignature(b));
+  b[0].nodes[0].enabled = false; b[0].nodes[0].controlState = { checked: true };
+  assert.notEqual(sampleSignature(a), sampleSignature(b));
+});
+test('exports share detailed action differences and report missing legacy snapshot links explicitly', (t) => {
+  const { report } = fixture(t), before = randomUUID(), after = randomUUID();
+  const node = { tag: 'input', selector: '#scheduled', roots: [], attributes: { type: 'checkbox' },
+    semantic: { label: '定时发布' }, controlState: { checked: false }, text: '', enabled: true };
+  report.snapshots = [{ id: before, frames: [{ key: 'main', nodes: [node] }] },
+    { id: after, frames: [{ key: 'main', nodes: [{ ...node, controlState: { checked: true } }] }] }];
+  report.steps = [{ id: randomUUID(), beforeId: before, afterId: after }, { id: randomUUID(), beforeId: before, afterId: after },
+    { id: randomUUID(), beforeId: randomUUID(), afterId: after }];
+  const data = reportData(report, {});
+  assert.equal(data.differences.length, 1);
+  assert.equal(data.steps[0].diff.differenceIndex, 0);
+  assert.equal(data.steps[1].diff.differenceIndex, 0);
+  assert.equal(data.differences[0].changes[0].after.enabled, true);
+  assert.equal(data.differences[0].changes[0].after.controlState.checked, true);
+  assert.equal(data.evidenceHealth.missingStepSnapshots.length, 1);
 });
 test('DOM comparison distinguishes frame and shadow root and detects disabled, removed and newly appearing controls', () => {
   const n = {
@@ -493,6 +556,27 @@ test('late and coalesced recorder events get a fresh after snapshot even when th
   s.pageEvent({ type: 'click', time: time + 150, target: { selector: '#submit' } });
   await s.poll();
   assert.ok(s.report.steps.at(-1).afterId);
+});
+test('an oversized new page sample pauses recording without deleting linked earlier evidence or claiming a successful after sample', async (t) => {
+  const f = assistantFixture(t), service = f.service;
+  await service.attach(f.account);
+  await service.command('start');
+  const before = service.report.snapshots.at(-1).id;
+  service.pageEvent({ type: 'click', time: Date.now(), target: { selector: '#schedule' } });
+  service.executeFrame = async () => ({ url: 'https://example.com/', events: [],
+    nodes: Array.from({ length: 2000 }, (_, i) => ({ tag: 'div', selector: 'div > '.repeat(600), text: '页面 '.repeat(1300),
+      attributes: { 'aria-label': '控件 '.repeat(1300) }, id: i })) });
+  await service.poll(true);
+  assert.equal(service.report.status, 'paused');
+  assert.equal(service.report.capacityPaused, true);
+  assert.ok(service.report.snapshots.some((s) => s.id === before));
+  assert.equal(service.report.steps.at(-1).afterId, null);
+  assert.equal(service.report.steps.at(-1).captureIncomplete, 'capacity');
+  assert.equal(service.store.get(service.report.id).status, 'paused');
+  await assert.rejects(service.command('resume'), /容量上限/);
+  await service.command('stop');
+  await service.command('preview');
+  assert.ok((await service.export('zip')).length > 10);
 });
 
 test('task-free recording needs no publisher or plan and uses only the chosen saved environment', async (t) => {

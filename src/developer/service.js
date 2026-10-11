@@ -5,6 +5,7 @@ const { DeveloperStore, compare, redact, scrub } = require('./data'),
   { pageTool } = require('./page'),
   { reportData, filesFor, zip } = require('./report');
 const { PublishingAssistant } = require('./assistant');
+const { REPORT_BUDGET, retainEvidence, sampleSignature } = require('./evidence');
 class DeveloperService {
   constructor({
     directory,
@@ -143,15 +144,19 @@ class DeveloperService {
   save() {
     if (!this.report) return;
     this.report.revision = (this.report.revision || 0) + 1;
-    while (Buffer.byteLength(JSON.stringify(this.report)) > 22 * 1024 * 1024) {
-      if (this.report.snapshots.length > 1) this.report.snapshots.shift();
-      else if (this.report.screenshots.length > 1)
-        this.report.screenshots.shift();
-      else throw new Error('资料已达到大小上限，请结束并新建录制');
-      this.warn('资料超过大小限额，最旧快照或截图已移除，请及时导出。');
-    }
+    const retained = retainEvidence(this.report);
+    if (retained.full) this.pauseForCapacity();
     this.store.save(this.report);
     this.changed();
+  }
+  pauseForCapacity() {
+    this.report.capacityPaused = true;
+    if (this.report.status === 'recording') this.report.status = 'paused';
+    this.live = false;
+    this.inspecting = false;
+    this.pendingErrorCapture = null;
+    this.warn('关键操作资料已达到容量上限，录制已暂停；已有操作快照保留，请结束导出后新建记录。');
+    this.configure().catch(() => {});
   }
   options(input = {}) {
     if (!input || typeof input !== 'object') throw new Error('隐私配置无效');
@@ -189,7 +194,7 @@ class DeveloperService {
   }
   async poll(force = false) {
     if (this.busy && force) await this.pollDone;
-    if (this.closed || this.busy || !this.active) return this.state();
+    if (this.closed || this.busy || !this.active || this.report?.capacityPaused) return this.state();
     this.busy = true;
     let completed;
     this.pollDone = new Promise((r) => (completed = r));
@@ -203,10 +208,10 @@ class DeveloperService {
               const data = scrub(
                 await this.call(f, {
                   action: 'snapshot',
-                  limit: Math.min(
-                    1200,
-                    Math.max(100, Math.floor(2400 / frames.length)),
-                  ),
+                  // Auxiliary storage/notification frames must not shrink the
+                  // logged-in main page's form and popup sampling budget.
+                  limit: i ? 300 : 2000,
+                  byteLimit: i ? 256 * 1024 : 3 * 1024 * 1024,
                   record: this.report.status === 'recording',
                   inspect: this.inspecting,
                 }),
@@ -241,15 +246,7 @@ class DeveloperService {
           this.save();
         }
       }
-      const signature = JSON.stringify(
-        result.map((f) => ({
-          ...f,
-          time: 0,
-          dirty: false,
-          events: [],
-          selected: null,
-        })),
-      );
+      const signature = sampleSignature(result);
       if (force || signature !== this.lastSample || this.report.steps.some((s) => !s.afterId)) {
         const snap = {
           id: randomUUID(),
@@ -258,22 +255,37 @@ class DeveloperService {
         };
         const prev = this.report.snapshots.at(-1);
         this.report.snapshots.push(snap);
+        if (retainEvidence(this.report).full) {
+          // Never delete a linked old sample to make room for this new one.
+          this.report.snapshots = this.report.snapshots.filter((s) => s.id !== snap.id);
+          for (const step of this.report.steps.filter((s) => !s.afterId))
+            step.captureIncomplete = 'capacity';
+          this.pauseForCapacity();
+          this.save();
+          return this.state();
+        }
         const pending = this.report.steps.filter((s) => !s.afterId);
         for (const s of pending) {
           s.afterId = snap.id;
-          s.diff = compare(
+          const { changes, ...summary } = compare(
             this.report.snapshots.find((v) => v.id === s.beforeId),
             snap,
           );
+          // Full changes are reproducible from protected before/after samples.
+          // Store the summary once per step; export shares detailed differences.
+          s.diff = summary;
         }
-        if (prev) snap.diff = compare(prev, snap);
+        if (prev) {
+          const { changes, ...summary } = compare(prev, snap);
+          if (!this.report.snapshots.some((s) => s.id === prev.id)) {
+            delete summary.beforeId;
+            summary.baselineUnavailable = true;
+          }
+          snap.diff = summary;
+        }
         this.lastSample = signature;
-        if (this.report.snapshots.length > 80) {
-          this.report.snapshots.shift();
-          this.warn(
-            '已达 80 份结构快照上限，最旧快照被移除；步骤仍保留时间和定位信息。',
-          );
-        }
+        if (result.some((f) => f.truncated))
+          this.warn('部分框架结构超过采集范围，已标记截断；可分模块录制，操作目标与上下文仍会保留。');
         if (
           this.screenshotEnabled &&
           ['recording'].includes(this.report.status) &&
@@ -398,6 +410,8 @@ class DeveloperService {
   }
   async capture(snapshotId, stepId) {
     if (this.capturing) return null;
+    if (this.report?.capacityPaused)
+      throw new Error('资料已达到容量上限，请先导出或删除不需要的截图');
     const wc = this.view();
     if (!this.report.options.screenshots)
       throw new Error('请先主动开启脱敏截图');
@@ -453,6 +467,11 @@ class DeveloperService {
       if (this.closed || this.suspended || this.report !== currentReport)
         return null;
       this.report.screenshots.push(s);
+      if (retainEvidence(this.report).full) {
+        this.report.screenshots.pop();
+        this.pauseForCapacity();
+        return null;
+      }
       return s;
     } catch (error) {
       this.warn(redact(error.message));
@@ -472,6 +491,7 @@ class DeveloperService {
       !this.report
     )
       return;
+    if (this.report.capacityPaused) return;
     if (this.report.assistance && !this.report.assistance.taskId) return;
     if (this.report.assistance && event.taskId &&
         event.taskId !== this.report.assistance.taskId) return;
@@ -593,6 +613,8 @@ class DeveloperService {
       case 'resume':
         if (!['paused', 'interrupted', 'ended'].includes(this.report?.status))
           throw new Error('录制未暂停');
+        if (this.report.capacityPaused)
+          throw new Error('资料已达到容量上限，请结束导出后新建记录');
         this.report.status = 'recording';
         await this.configure();
         this.save();

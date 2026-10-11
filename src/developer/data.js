@@ -3,9 +3,32 @@ const fs = require('node:fs'),
   path = require('node:path'),
   { randomUUID } = require('node:crypto'),
   { DatabaseSync } = require('node:sqlite');
-const redact = (value) =>
-  String(value ?? '')
+const redact = (value) => {
+  // Protect parsed public URLs before applying the opaque-token filter. That
+  // filter also matches slashes and used to corrupt ordinary creator routes.
+  const urls = [];
+  return String(value ?? '')
     .slice(0, 4000)
+    .replace(/[\u0001\u0002]/g, '')
+    .replace(/https?:\/\/[^\s<>"']+/gi, (value) => {
+      try {
+        const u = new URL(value);
+        const pathname = u.pathname.split('/').map((part) => {
+          let decoded;
+          try { decoded = decodeURIComponent(part); } catch { decoded = part; }
+          const safe = decoded
+            .replace(/(?:password|passwd|cookie|token|secret|authorization|csrf)\s*[:=]\s*[^\s,;<>]+/gi, '[已脱敏]')
+            .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[邮箱]')
+            .replace(/\b(?:\+?86[- ]?)?1[3-9]\d{9}\b/g, '[手机号]')
+            .replace(/[a-f0-9]{24,}|[A-Za-z0-9_+=-]{32,}/gi, '[标识]');
+          return safe === decoded ? part : encodeURIComponent(safe);
+        }).join('/');
+        urls.push(u.origin + pathname);
+        return '\u0001' + (urls.length - 1) + '\u0002';
+      } catch {
+        return '[网址]';
+      }
+    })
     .replace(/(?:[A-Z]:\\|\\\\)[^\r\n<>"']+/gi, '[本地路径]')
     .replace(/\/(?:Users|home|workspace|tmp|var|mnt)\/[^\r\n<>"']+/g, '[本地路径]')
     .replace(
@@ -15,17 +38,8 @@ const redact = (value) =>
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[邮箱]')
     .replace(/\b(?:\+?86[- ]?)?1[3-9]\d{9}\b/g, '[手机号]')
     .replace(/\b(?:[a-f0-9]{24,}|[A-Za-z0-9_+/=-]{32,})\b/gi, '[不透明标识]')
-    .replace(/https?:\/\/[^\s<>"']+/gi, (value) => {
-      try {
-        const u = new URL(value);
-        return (
-          u.origin +
-          u.pathname.replace(/[a-f0-9]{24,}|[A-Za-z0-9_-]{32,}/gi, '[标识]')
-        );
-      } catch {
-        return '[网址]';
-      }
-    });
+    .replace(/\u0001(\d+)\u0002/g, (_match, index) => urls[Number(index)] || '[网址]');
+};
 function scrub(value) {
   if (typeof value === 'string') return redact(value);
   if (Array.isArray(value)) return value.map(scrub);
@@ -85,6 +99,8 @@ function compare(before, after) {
       n.tag,
       n.attributes,
       n.text,
+      n.semantic,
+      n.controlState,
       n.visible,
       n.enabled,
       n.clickable,
@@ -117,6 +133,8 @@ function compare(before, after) {
                     'roots',
                     'attributes',
                     'text',
+                    'semantic',
+                    'controlState',
                     'visible',
                     'enabled',
                     'clickable',

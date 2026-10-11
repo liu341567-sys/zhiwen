@@ -98,7 +98,8 @@
         ? boundTask ? `${boundTask.accountName} · ${boundTask.videoName}` : '任务已删除，已记录的资料仍可保存。'
         : `${a.name || report.name} · ${a.scope === 'partial' ? '部分模块' : '完整流程'} · 直接记录原账号网页`;
       $('assistant-progress').textContent = paused ? '已暂停录制，点击继续后再操作' : a.taskId ? taskState.stateLabel || '正在读取任务状态' : '录制已开始，请在账号网页操作';
-      $('assistant-guidance').textContent = paused ? '暂停期间的操作不会进入记录；已录制内容会保留。'
+      $('assistant-guidance').textContent = report.capacityPaused ? '关键操作资料已达到容量上限，录制已暂停且已有快照保留。请点击「结束记录，整理资料」，保存后新建记录。'
+        : paused ? '暂停期间的操作不会进入记录；已录制内容会保留。'
         : a.phase === 'manual' ? '请在原账号网页演示操作。可随时回来标记模块、记下问题或暂停；完成后结束记录。'
         : taskState.reason || taskState.wait?.message || '出现问题时点「记下问题现场」，再点「演示正确操作」。不会自动重试任务。';
       $('assistant-record-help').textContent = a.taskId ? '「演示正确操作」会暂停该账号自动任务并保留网页。结束记录只停止录制，不改变任务状态。'
@@ -112,7 +113,7 @@
       if (timeline.dataset.signature !== signature) {
         timeline.dataset.signature = signature;
         const labels = { click: '点击', input: '输入（内容不记录）', change: '选择 / 修改', file: '选择文件（路径不记录）', scroll: '滚动', navigation: '页面跳转', note: '说明' };
-        timeline.replaceChildren(...report.steps.slice(-80).map((s) => node('li', `${new Date(s.time).toLocaleTimeString()} · ${s.note || labels[s.type] || s.type}${s.note ? '' : ' · ' + (s.target?.text || s.target?.attributes?.placeholder || s.target?.tag || '网页控件')}`)));
+        timeline.replaceChildren(...report.steps.slice(-80).map((s) => node('li', `${new Date(s.time).toLocaleTimeString()} · ${s.note || labels[s.type] || s.type}${s.note ? '' : ' · ' + (s.target?.semantic?.name || s.target?.context?.text || s.target?.text || s.target?.semantic?.label || s.target?.context?.ancestors?.find((a) => a.semantic?.name)?.semantic.name || s.target?.attributes?.placeholder || s.target?.tag || '网页控件')}`)));
       }
       const shots = $('assistant-shots'); shots.replaceChildren();
       for (const shot of report.screenshots) {

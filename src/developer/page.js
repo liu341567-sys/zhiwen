@@ -3,9 +3,28 @@
 // storage access, network calls, page scripts, values or inline HTML are exposed.
 function pageTool(input) {
   const key = '__qiyeDeveloperTools';
-  const clean = (s, max = 240) =>
-    String(s || '')
+  const clean = (s, max = 240) => {
+    const urls = [];
+    return String(s || '')
       .slice(0, 4000)
+      .replace(/[\u0001\u0002]/g, '')
+      .replace(/https?:\/\/[^\s<>"']+/gi, (value) => {
+        try {
+          const u = new URL(value);
+          const pathname = u.pathname.split('/').map((part) => {
+            let decoded;
+            try { decoded = decodeURIComponent(part); } catch { decoded = part; }
+            const safe = decoded
+              .replace(/(?:password|passwd|cookie|token|secret|authorization|csrf)\s*[:=]\s*[^\s,;<>]+/gi, '[已脱敏]')
+              .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[邮箱]')
+              .replace(/\b(?:\+?86[- ]?)?1[3-9]\d{9}\b/g, '[手机号]')
+              .replace(/[a-f0-9]{24,}|[A-Za-z0-9_+=-]{32,}/gi, '[标识]');
+            return safe === decoded ? part : encodeURIComponent(safe);
+          }).join('/');
+          urls.push(u.origin + pathname);
+          return '\u0001' + (urls.length - 1) + '\u0002';
+        } catch { return '[网址]'; }
+      })
       .replace(
         /(?:bearer\s+|(?:password|passwd|cookie|token|secret|authorization|csrf|密码|令牌)\s*[:=]\s*)[^\s,;<>]+/gi,
         '[已脱敏]',
@@ -13,18 +32,9 @@ function pageTool(input) {
       .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[邮箱]')
       .replace(/\b(?:\+?86[- ]?)?1[3-9]\d{9}\b/g, '[手机号]')
       .replace(/\b(?:[a-f0-9]{24,}|[A-Za-z0-9_+/=-]{32,})\b/gi, '[不透明标识]')
-      .replace(/https?:\/\/[^\s<>"']+/gi, (value) => {
-        try {
-          const u = new URL(value);
-          return (
-            u.origin +
-            u.pathname.replace(/[a-f0-9]{24,}|[A-Za-z0-9_-]{32,}/gi, '[标识]')
-          );
-        } catch {
-          return '[网址]';
-        }
-      })
+      .replace(/\u0001(\d+)\u0002/g, (_match, index) => urls[Number(index)] || '[网址]')
       .slice(0, max);
+  };
   const safeURL = (value) => {
     try {
       const u = new URL(value);
@@ -78,6 +88,22 @@ function pageTool(input) {
       e,
       'input[type=password],input[type=hidden],input[autocomplete="one-time-code"],input[autocomplete="current-password"],input[autocomplete="new-password"],[data-qiye-private]',
     ) || excluded(e);
+  // Read only non-editable, non-excluded descendant text. Never use innerText
+  // on a parent: rich editor chips and private descendants can live inside it.
+  const contextText = (e) => {
+    const pieces = [];
+    let visited = 0;
+    const visit = (n) => {
+      if (++visited > 120) return;
+      if (n.nodeType === 3) { pieces.push(n.textContent); return; }
+      if (!(n instanceof Element) || sensitive(n) || n.isContentEditable ||
+          closestAcrossRoots(n, '[contenteditable=true],[contenteditable=""],[contenteditable=plaintext-only]') ||
+          n.matches('input,textarea,select,[contenteditable=true],[contenteditable=""],[contenteditable=plaintext-only],script,style')) return;
+      for (const child of n.childNodes) visit(child);
+    };
+    visit(e);
+    return state.policy.includeText === false ? '' : clean(pieces.join(' ').replace(/\s+/g, ' ').trim(), 160);
+  };
   const path = (e) => {
     const p = [];
     for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
@@ -143,6 +169,11 @@ function pageTool(input) {
       'placeholder',
       'accept',
       'autocomplete',
+      'disabled',
+      'readonly',
+      'min',
+      'max',
+      'step',
       'data-testid',
       'data-test',
     ]) {
@@ -240,7 +271,11 @@ function pageTool(input) {
                 [...(e.labels || [])].map((l) => l.textContent).join(' '),
             ),
         placeholder: privateNode ? '' : clean(e.getAttribute('placeholder')),
+        name: privateNode || editable ? '' : e.matches('button,a,label,option,[role=button],[role=option],[role=menuitem]') ? contextText(e) : '',
       },
+      controlState: !privateNode && e.matches('input[type=checkbox],input[type=radio]')
+        ? { checked: e.checked, indeterminate: e.indeterminate }
+        : undefined,
       unstableAttributes: ['id', 'class'].filter(
         (name) => e.getAttribute(name) && !stable(e.getAttribute(name)),
       ),
@@ -400,6 +435,19 @@ function pageTool(input) {
               : event.type;
       const target = describe(e);
       if (!target) return;
+      // A clicked child can have no direct text; retain its owning control and
+      // a short ancestor chain so candidates and nested buttons are readable.
+      target.context = { text: contextText(e), ancestors: [] };
+      for (let p = e.parentElement, count = 0; p && count < 4;
+           p = p.parentElement || p.getRootNode()?.host, count++) {
+        if (sensitive(p)) break;
+        const d = describe(p);
+        if (!d) break;
+        target.context.ancestors.push({ tag: d.tag, selector: d.selector,
+          roots: d.roots, attributes: d.attributes, semantic: d.semantic,
+          text: contextText(p) });
+        if (p.matches('button,a[href],label,[role=button],[role=option],[role=menuitem],[role=dialog],dialog')) break;
+      }
       const item = {
         time: Date.now(),
         type,
@@ -506,22 +554,41 @@ function pageTool(input) {
     return { valid: state.maskToken === input.token && !state.maskChanged };
   const nodes = [];
   let truncated = false;
+  let omittedDefinitions = 0;
+  let sampledBytes = 0;
+  let limitReason = null;
   const walk = (root, parent = null, depth = 0) => {
     attachRoot(root);
     for (const e of root.children || []) {
       if (
         excluded(e) ||
-        ['SCRIPT', 'STYLE', 'NOSCRIPT', 'META', 'LINK'].includes(e.tagName)
+        ['SCRIPT', 'STYLE', 'NOSCRIPT', 'META', 'LINK'].includes(e.tagName.toUpperCase())
       )
         continue;
+      // Hidden SVG sprite definitions are not live controls. Keep rendered SVG
+      // and foreignObject content. The strict screenshot masking walk is
+      // deliberately unchanged and continues to fail closed on excess nodes.
+      if (input.action !== 'mask' && e.namespaceURI === 'http://www.w3.org/2000/svg' &&
+          ['defs', 'symbol'].includes(e.tagName.toLowerCase())) {
+        omittedDefinitions++;
+        continue;
+      }
       if (nodes.length >= (input.limit || 1200)) {
         truncated = true;
+        limitReason = 'nodes';
         return;
       }
       const d = describe(e);
       if (!d) continue;
       d.parentId = parent;
       d.depth = depth;
+      const size = new TextEncoder().encode(JSON.stringify(d)).length;
+      if (input.action !== 'mask' && input.byteLimit && sampledBytes + size > input.byteLimit) {
+        truncated = true;
+        limitReason = 'bytes';
+        return;
+      }
+      sampledBytes += size;
       nodes.push(d);
       if (sensitive(e)) continue;
       walk(e, d.id, depth + 1);
@@ -633,6 +700,8 @@ function pageTool(input) {
     time: Date.now(),
     nodes,
     truncated,
+    sampling: { limit: input.limit || 1200, byteLimit: input.byteLimit || null,
+      sampledBytes, limitReason, omittedDefinitions },
     dirty: state.dirty,
     events: state.events.splice(0),
     selected: state.selected,
