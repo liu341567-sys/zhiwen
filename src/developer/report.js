@@ -1,5 +1,6 @@
 'use strict';
 const { scrub } = require('./data');
+const { deflateRawSync } = require('node:zlib');
 const html = (value) =>
   String(value ?? '').replace(
     /[&<>"']/g,
@@ -108,7 +109,8 @@ function filesFor(report, technical) {
   }
   return files;
 }
-// ZIP store format, UTF-8 names and CRC32; no runtime dependency or shell tools.
+// Compress repetitive DOM reports; PNGs are already compressed. Standard ZIP
+// methods, UTF-8 names and CRC32 need no extra dependency or shell tools.
 function zip(files) {
   const parts = [],
     central = [];
@@ -126,28 +128,33 @@ function zip(files) {
       throw new Error('不安全的资料路径');
     const name = Buffer.from(f.name),
       data = f.data,
-      checksum = crc(data);
+      checksum = crc(data),
+      compressed = f.name.endsWith('.png') ? data : deflateRawSync(data),
+      payload = compressed.length < data.length ? compressed : data,
+      method = payload === data ? 0 : 8;
     const h = Buffer.alloc(30);
     h.writeUInt32LE(0x04034b50);
     h.writeUInt16LE(20, 4);
     h.writeUInt16LE(0x800, 6);
+    h.writeUInt16LE(method, 8);
     h.writeUInt32LE(checksum, 14);
-    h.writeUInt32LE(data.length, 18);
+    h.writeUInt32LE(payload.length, 18);
     h.writeUInt32LE(data.length, 22);
     h.writeUInt16LE(name.length, 26);
-    parts.push(h, name, data);
+    parts.push(h, name, payload);
     const c = Buffer.alloc(46);
     c.writeUInt32LE(0x02014b50);
     c.writeUInt16LE(20, 4);
     c.writeUInt16LE(20, 6);
     c.writeUInt16LE(0x800, 8);
+    c.writeUInt16LE(method, 10);
     c.writeUInt32LE(checksum, 16);
-    c.writeUInt32LE(data.length, 20);
+    c.writeUInt32LE(payload.length, 20);
     c.writeUInt32LE(data.length, 24);
     c.writeUInt16LE(name.length, 28);
     c.writeUInt32LE(offset, 42);
     central.push(c, name);
-    offset += h.length + name.length + data.length;
+    offset += h.length + name.length + payload.length;
   }
   const size = central.reduce((n, b) => n + b.length, 0),
     end = Buffer.alloc(22);

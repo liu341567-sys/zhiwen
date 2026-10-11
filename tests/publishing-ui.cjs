@@ -679,6 +679,19 @@ async function run(scale) {
       `publishing-${scale}: reported home-page Works Publish entry opens the upload form in the original environment`,
       () => assert.ok(true),
     );
+    const duplicateWorks = await runEntry(
+      '<aside><button id="work-publish" type="button" aria-expanded="false" aria-disabled="false" style="width:152px;height:40px"><span><div><span>作品发布</span></div></span></button></aside><main><button id="content-publish">作品发布</button></main>',
+      "document.querySelector('#work-publish').onclick=()=>{window.entryClicks++;window.workEntryClicks++;window.openVideoForm();};document.querySelector('#content-publish').onclick=()=>{window.imageEntryClicks++;};",
+      'recorded-duplicate-works-home',
+    );
+    assert.equal(duplicateWorks.actions.workClicks, 1);
+    assert.equal(duplicateWorks.actions.clicks, 1);
+    assert.ok(duplicateWorks.result.logs.some((log) => log.includes('唯一导航发布按钮')));
+    assert.ok(duplicateWorks.result.logs.some((log) => log.includes('navigation/button') && log.includes('content/button')));
+    check(
+      `publishing-${scale}: recorded home ambiguity chooses the unique semantic sidebar Works Publish button and uploads without clicking the duplicate content entry`,
+      () => assert.ok(true),
+    );
     for (const captureMode of ['pending', 'rejected', 'empty']) {
       await app.evaluate(
         async ({ webContents }, id) =>
@@ -770,6 +783,24 @@ async function run(scale) {
     );
     assert.equal(probe.target, null);
     assert.equal(probe.count, 2);
+    for (const html of [
+      '<aside><button>作品发布</button><button>作品发布</button></aside>',
+      '<main><button>作品发布</button><button>作品发布</button></main>',
+      '<aside><span>作品发布</span></aside><main><button>作品发布</button></main>',
+      '<aside><a href="/creator-micro/content/upload?item=A">发布视频</a></aside><main><a href="/creator-micro/content/upload?item=B">发布视频</a></main>',
+    ]) {
+      await setScenario(html);
+      probe = await app.evaluate(
+        async (_electron, id) => globalThis.__publishingEntryProbe(id),
+        b.id,
+      );
+      assert.equal(probe.target, null);
+      assert.equal(probe.count, 2);
+    }
+    check(
+      `publishing-${scale}: competing navigation buttons, duplicate content buttons, plain navigation labels and different upload destinations stay ambiguous`,
+      () => assert.ok(true),
+    );
     check(
       `publishing-${scale}: disabled/transparent/external controls and ambiguous URLs never become entry targets`,
       () => assert.ok(true),

@@ -390,7 +390,7 @@ function findEntry({ excluded = [] } = {}) {
     ) {
       target = matches[0];
       reason = '重复入口指向同一平台网址';
-    } else {
+    } else if (new Set(matches.map((c) => c.href).filter(Boolean)).size <= 1) {
       const menu = matches.filter((c) =>
         c.e.closest('[role="menu"],[role="menuitem"]'),
       );
@@ -403,6 +403,19 @@ function findEntry({ excluded = [] } = {}) {
       } else if (nav.length === 1 && explicit.includes(nav[0].name)) {
         target = nav[0];
         reason = '导航内明确的视频入口';
+      } else if (
+        nav.length === 1 &&
+        generic.includes(nav[0].name) &&
+        nav[0].e.matches('button,[role="button"],[role="menuitem"]') &&
+        !nav[0].href
+      ) {
+        // The creator home can show another “作品发布” in its content area.
+        // A unique semantic navigation button is the same owner confirmed by
+        // manual recordings; a plain navigation label or competing nav buttons
+        // still cannot establish a safe target. Hover/click and form checks are
+        // unchanged, including video-only submenu selection.
+        target = nav[0];
+        reason = '唯一导航发布按钮，排除内容区同名入口';
       }
     }
   }
@@ -422,6 +435,12 @@ function findEntry({ excluded = [] } = {}) {
     candidates: available.slice(0, 12).map((c) => ({
       name: c.name,
       path: c.href ? new URL(c.href).pathname : null,
+      tag: c.e.tagName.toLowerCase(),
+      scope: c.e.closest('[role="menu"],[role="menuitem"]')
+        ? 'menu'
+        : c.e.closest('nav,aside,header,[role="navigation"]')
+          ? 'navigation'
+          : 'content',
     })),
     count: available.length,
   };
@@ -461,7 +480,7 @@ async function openPublishingPage(page, context, state) {
       return state;
     const info = found.entry;
     context.log(
-      `发布入口检查：页面 ${new URL(state.url).pathname}，视频上传控件 ${state.uploadCount} 个，候选 ${info.count} 个；${info.reason}；${info.candidates.map((c) => c.name + (c.path ? ' → ' + c.path : '')).join('、') || '无匹配入口'}`,
+      `发布入口检查：页面 ${new URL(state.url).pathname}，视频上传控件 ${state.uploadCount} 个，候选 ${info.count} 个；${info.reason}；${info.candidates.map((c) => c.name + ' [' + c.scope + '/' + c.tag + ']' + (c.path ? ' → ' + c.path : '')).join('、') || '无匹配入口'}`,
     );
     if (!info.target) return state;
     excluded.push(info.target.key);

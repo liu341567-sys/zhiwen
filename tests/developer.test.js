@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
+const { inflateRawSync } = require('node:zlib');
 const {
   DeveloperStore,
   redact,
@@ -184,6 +185,37 @@ test('ZIP central directory and CRC allow standard readers to recover all report
       file,
     ]);
   }
+});
+test('large DOM exports compress below the upload limit and retain every file byte and central offset', () => {
+  const node = JSON.stringify({ tag: 'button', text: '作品发布', role: 'button', visible: true, disabled: false, selector: 'nav button', attributes: { 'aria-label': '作品发布' } }) + '\n';
+  const data = Buffer.from(node.repeat(Math.ceil(34 * 1024 * 1024 / Buffer.byteLength(node))));
+  const files = [
+    { name: 'report.json', data },
+    { name: 'report.md', data: Buffer.from('发布问题摘要\n'.repeat(20)) },
+    { name: 'report.html', data: Buffer.from('<pre>作品发布</pre>\n'.repeat(20)) },
+    { name: 'screenshots/shot.png', data: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) },
+  ];
+  const buffer = zip(files);
+  assert.ok(data.length > 32 * 1024 * 1024);
+  assert.ok(buffer.length < 1024 * 1024, `compressed bytes: ${buffer.length}`);
+  let local = 0, central = buffer.readUInt32LE(buffer.length - 6);
+  for (const file of files) {
+    assert.equal(buffer.readUInt32LE(local), 0x04034b50);
+    assert.equal(buffer.readUInt32LE(central), 0x02014b50);
+    const method = buffer.readUInt16LE(local + 8), size = buffer.readUInt32LE(local + 18);
+    const nameSize = buffer.readUInt16LE(local + 26), body = local + 30 + nameSize;
+    assert.equal(method, file.name.endsWith('.png') ? 0 : 8);
+    assert.equal(buffer.readUInt16LE(central + 10), method);
+    assert.equal(buffer.readUInt32LE(central + 20), size);
+    assert.equal(buffer.readUInt32LE(central + 24), file.data.length);
+    assert.equal(buffer.readUInt32LE(central + 42), local);
+    assert.equal(buffer.subarray(local + 30, body).toString(), file.name);
+    const payload = buffer.subarray(body, body + size);
+    assert.deepEqual(method === 8 ? inflateRawSync(payload) : payload, file.data);
+    local = body + size;
+    central += 46 + nameSize;
+  }
+  assert.equal(central, buffer.length - 22);
 });
 test('service uses existing views only, isolates event streams, and requires a fresh review after mutation', async (t) => {
   const { dir } = fixture(t);
