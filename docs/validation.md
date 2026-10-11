@@ -1,3 +1,17 @@
+# 0.3.5 录制采集与证据保留验证
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38154824691)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38155161786)均通过，对应 `5463b8e5dd2a67edfe5148e8ddf740425a6a8d9d` / `v0.3.5`：131 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 75 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下验证含千个 SVG 图标定义与多个辅助 iframe 的主页面采集、实际 SVG / foreignObject 保留、嵌套按钮与候选项上下文、正常创作者路由保留、严格截图限额和脱敏、原环境独立录制、预览与 ZIP 导出；保留原任务排查与专业工具验证。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试使用本地网页夹具，真实已登录平台仍需实机录制验证。
+
+发布于 2026-10-12 00:34:21（北京时间）。发布页及三个附件匿名访问成功；安装包和 ZIP 完整下载，大小与 SHA256 均对照 GitHub 摘要及校验文件验证通过。包内运行时代码与验证提交一致（Windows CRLF），品牌资产、媒体工具和许可齐全，不含用户账号清单。证据保存在 `.cache/release-0.3.5/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.5-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.5/Qiye-0.3.5-x64.zip) | 217862076 | `0c61f63abf52121828314c99ac8651e60e0db2f1d9a097b20462e4ad6ec49a49` |
+| [Qiye-Setup-0.3.5-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.5/Qiye-Setup-0.3.5-x64.exe) | 160726451 | `f6525b485da80455c8ed23fdd3b4af815937b9582c39ae024e309c9556c40f21` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.5/SHA256SUMS.txt) | 178 | `74667f123c8f54cc824df5e0ad42851ed618caf7212b131ba5daf5499da9932e` |
+
+新增回归覆盖公共创作者路由的重复脱敏、保留超过 80 份关联证据、优先淘汰普通采样、容量暂停且不假造后快照、忽略布局抖动并记录控件状态变化、共享变化索引以及显式报告历史快照缺失；Windows 页面使用中文控件与候选行，验证勾选状态和私密子节点排除。未更改真实平台封面、位置、官方定时或发布提交逻辑。
+
 # 0.3.4 无任务操作录制与问题排查验证
 
 Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38128611811)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38128839412)均通过，对应 `c4550a616eacd2f7d9710c70f247c02be23912b5` / `v0.3.4`：125 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 63 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下从零发布任务实际验证直接录制、暂停排除操作、继续、模块快照关联、预览和 ZIP 导出，以及无任务问题记录与人工演示；保留原任务排查与专业工具验证。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试使用本地网页夹具，真实已登录平台仍需实机录制验证。
