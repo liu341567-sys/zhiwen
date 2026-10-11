@@ -17,6 +17,7 @@ class PublishingAssistant {
     this.prepareView = prepareView;
     this.preferredTask = null;
     this.mode = 'assistant';
+    this.workflow = 'record';
   }
   task(id) {
     if (typeof id !== 'string' || id.length > 100) throw new Error('请选择要排查的发布任务');
@@ -29,6 +30,10 @@ class PublishingAssistant {
     return {
       mode: this.mode,
       preferredTask: this.preferredTask,
+      workflow: this.workflow,
+      environments: this.service.profiles().map((p) => ({ id: p.id, name: p.name,
+        platformId: p.platformId, leased: this.service.isLeased(p.id),
+        running: !!this.service.inspectView(p.id) && !this.service.inspectView(p.id).isDestroyed() })),
       tasks: tasks.map((t) => ({ id: t.id, accountName: t.accountName,
         videoName: t.video.name, status: t.status, statusLabel: statuses[t.status],
         canRun: runnable(t), accountId: t.accountId })),
@@ -36,7 +41,7 @@ class PublishingAssistant {
   }
   refresh() {
     const s = this.service, a = s.report?.assistance;
-    if (!a || !['recording', 'paused'].includes(s.report.status)) return false;
+    if (!a?.taskId || !['recording', 'paused'].includes(s.report.status)) return false;
     let data;
     try {
       const t = this.task(a.taskId), p = this.publisher();
@@ -70,12 +75,42 @@ class PublishingAssistant {
       if (s.report && !['recording', 'paused'].includes(s.report.status))
         await this.command('assistant-new', {});
       this.preferredTask = task.id;
+      this.workflow = 'diagnostic';
       this.mode = 'assistant';
       return s.state();
     }
     if (command === 'assistant-mode') {
       if (!['assistant', 'professional'].includes(input.mode)) throw new Error('模式无效');
       this.mode = input.mode;
+      return s.state();
+    }
+    if (command === 'assistant-workflow') {
+      if (!['record', 'diagnostic'].includes(input.workflow)) throw new Error('记录方式无效');
+      if (['recording', 'paused'].includes(s.report?.status)) throw new Error('请先结束当前记录');
+      this.workflow = input.workflow;
+      return s.state();
+    }
+    if (command === 'assistant-record') {
+      if (['recording', 'paused'].includes(s.report?.status)) throw new Error('已有记录正在进行，请先结束并保存');
+      if (!['record', 'diagnostic'].includes(input.workflow || 'record')) throw new Error('记录方式无效');
+      const profile = s.profiles().find((p) => p.id === input.accountId);
+      if (!profile) throw new Error('请选择已有的账号环境');
+      if (s.isLeased(profile.id)) throw new Error('此账号正在自动执行任务，请先在任务列表暂停，或关联任务后人工接管');
+      await this.prepareView(profile.id);
+      if (s.isLeased(profile.id)) throw new Error('此账号刚开始自动执行任务，请先暂停再录制');
+      await s.attach(profile.id, { includeText: true, screenshots: false });
+      this.workflow = input.workflow || 'record';
+      const name = redact(input.name || (this.workflow === 'record' ? '人工操作录制' : '网页问题排查')).slice(0, 120);
+      s.report.name = name;
+      s.report.assistance = { kind: this.workflow, name,
+        scope: input.scope === 'partial' ? 'partial' : 'full',
+        issue: redact(input.issue).slice(0, 1000), phase: 'manual', segments: [], transitions: [] };
+      await s.command('start');
+      await s.command('note', { note: '人工操作记录开始；仅连接已有环境，未创建或执行发布任务。' });
+      // Activate recording before returning to the original page so the first
+      // human operation is captured. Opening a saved profile does not recreate it.
+      try { await s.reveal(profile.id); }
+      catch (error) { await s.command('pause'); throw error; }
       return s.state();
     }
     if (command === 'assistant-new') {
@@ -99,7 +134,8 @@ class PublishingAssistant {
       await this.prepareView(t.accountId);
       await s.attach(t.accountId, { includeText: true, screenshots: false });
       this.preferredTask = t.id;
-      s.report.assistance = { taskId: t.id, issue: redact(input.issue).slice(0, 1000),
+      this.workflow = 'diagnostic';
+      s.report.assistance = { kind: 'diagnostic', taskId: t.id, issue: redact(input.issue).slice(0, 1000),
         phase: 'automatic', transitions: [], task: null };
       await s.command('start');
       this.refresh();
@@ -111,7 +147,7 @@ class PublishingAssistant {
       this.refresh();
       return s.state();
     }
-    if (!s.report?.assistance) throw new Error('请先选择任务并开始记录');
+    if (!s.report?.assistance) throw new Error('请先选择账号环境或任务并开始记录');
     const a = s.report.assistance;
     if (command === 'assistant-finish') {
       if (['recording', 'paused'].includes(s.report.status)) {
@@ -122,16 +158,40 @@ class PublishingAssistant {
       s.save();
       return s.state();
     }
+    if (command === 'assistant-pause') {
+      if (s.report.status !== 'recording') throw new Error('当前没有正在进行的记录');
+      await s.command('note', { note: '暂停录制；暂停期间的人工操作不纳入流程。' });
+      await s.command('pause');
+      return s.state();
+    }
+    if (command === 'assistant-resume') {
+      if (s.report.status !== 'paused') throw new Error('记录未暂停');
+      if (s.isLeased(s.active)) throw new Error('此账号正在执行自动任务，请先暂停任务再继续人工录制');
+      await s.command('resume');
+      await s.command('note', { note: '继续人工操作录制。' });
+      return s.state();
+    }
     if (s.report.status !== 'recording') throw new Error('记录已结束，请新建记录');
-    if (command === 'assistant-problem') {
+    if (command === 'assistant-segment') {
+      const note = redact(input.note).trim().slice(0, 500);
+      if (!note) throw new Error('请填写这一步或模块的说明，例如：开始设置封面');
+      await s.poll(true);
+      await s.command('note', { note: '模块 / 步骤标记：' + note });
+      a.segments ||= [];
+      a.segments.push({ time: Date.now(), label: note, stepId: s.report.steps.at(-1)?.id,
+        snapshotId: s.report.snapshots.at(-1)?.id });
+      a.segments = a.segments.slice(-100);
+      s.save();
+    } else if (command === 'assistant-problem') {
       a.issue = redact(input.issue || a.issue || '用户反馈页面卡住或出现异常').slice(0, 1000);
       await s.command('note', { note: '用户标记问题：' + a.issue });
       this.refresh();
       await s.poll(true);
     } else if (command === 'assistant-manual') {
-      await this.publisher().action({ ids: [a.taskId], action: 'takeover' });
+      if (a.taskId) await this.publisher().action({ ids: [a.taskId], action: 'takeover' });
+      else if (s.isLeased(s.active)) throw new Error('此账号正在自动执行任务，请先暂停任务再演示');
       a.phase = 'manual';
-      await s.command('note', { note: '人工演示正确操作开始。已暂停此账号的自动任务，保留当前网页；本段为人工操作。' });
+      await s.command('note', { note: a.taskId ? '人工演示正确操作开始。已暂停此账号的自动任务，保留当前网页；本段为人工操作。' : '人工演示正确操作开始；保留当前网页，本段为人工操作，未执行自动任务。' });
       await s.reveal(s.active);
       this.refresh();
     } else throw new Error('问题助手操作无效');

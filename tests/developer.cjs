@@ -536,6 +536,87 @@ async function run(scale, origin) {
       assert.equal(layout.overflow, false);
       assert.ok(layout.toolbar < layout.body - 100);
     });
+    // The simple recording path must work before a publishing plan exists.
+    await tools.locator('#mode-assistant').click();
+    assert.equal(await tools.locator('#assistant-task-fields').isVisible(), false);
+    await tools.locator('#assistant-environment').selectOption(a.id);
+    await tools.locator('#assistant-scope').selectOption('partial');
+    await tools.locator('#assistant-name').fill('封面与位置操作演示');
+    const plansBefore = await app.evaluate(() => globalThis.__qiyeTestDeveloper.assistant.publisher().store.tasks().length);
+    assert.equal(plansBefore, 0);
+    await tools.locator('#assistant-observe').click();
+    await until(async () => (await state()).report?.assistance?.kind === 'record' && (await state()).report.status === 'recording', 'task-free recording');
+    await account.locator('#change').click();
+    await until(async () => (await state()).report.steps.some((s) => s.type === 'click' && s.target?.attributes?.id === 'change'), 'task-free original page event');
+    const standalone = (await state()).report;
+    check(`developer-${scale}: recording starts in an existing account without creating or executing any publishing plan`, () => {
+      assert.equal(standalone.accountId, a.id);
+      assert.equal(standalone.assistance.taskId, undefined);
+      assert.equal(standalone.assistance.scope, 'partial');
+      assert.equal(standalone.name, '封面与位置操作演示');
+      assert.equal(standalone.options.screenshots, false);
+    });
+    await tools.locator('#assistant-pause').click();
+    await until(async () => (await state()).report.status === 'paused', 'simple pause');
+    const pausedSteps = (await state()).report.steps.length;
+    await account.locator('#change').click();
+    await pause(200);
+    assert.equal((await state()).report.steps.length, pausedSteps);
+    await tools.locator('#assistant-resume').click();
+    await until(async () => (await state()).report.status === 'recording', 'simple resume');
+    await tools.locator('#assistant-record-note').fill('开始设置封面');
+    await tools.locator('#assistant-segment').click();
+    await until(async () => (await state()).report.assistance.segments.length === 1, 'module marker');
+    await account.locator('#change').click();
+    await until(async () => (await state()).report.steps.filter((s) => s.type === 'click' && s.target?.attributes?.id === 'change').length === 2, 'continued original page event');
+    const resumedReport = (await state()).report;
+    check(`developer-${scale}: simple pause excludes unrelated operations and module markers bind to real snapshots`, () => {
+      assert.ok(resumedReport.steps.some((step) => step.note?.includes('暂停录制')));
+      assert.ok(resumedReport.steps.some((step) => step.note?.includes('继续人工操作')));
+      assert.ok(resumedReport.snapshots.some((snapshot) => snapshot.id === resumedReport.assistance.segments[0].snapshotId));
+    });
+    await tools.locator('#assistant-finish').click();
+    await until(async () => (await tools.locator('#assistant-preview').textContent()).includes('封面与位置操作演示'), 'task-free report preview');
+    const standaloneEnded = (await state()).report, marker = standaloneEnded.assistance.segments[0];
+    assert.ok(standaloneEnded.steps.some((step) => step.id === marker.stepId));
+    assert.ok(standaloneEnded.snapshots.some((snapshot) => snapshot.id === marker.snapshotId));
+    assert.equal(await tools.locator('#assistant-export').isDisabled(), true);
+    await tools.locator('#assistant-reviewed').check();
+    await tools.locator('#assistant-export').click();
+    await until(async () => (await tools.locator('#toast').textContent()).includes('资料包已保存'), 'task-free ZIP export');
+    const standaloneArchive = fs.readFileSync(path.join(directory, 'Qiye-Developer-Report.zip'));
+    const standaloneJson = JSON.parse(readZipEntry(standaloneArchive, 'report.json'));
+    const standaloneLayout = await tools.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth,
+      footer: document.querySelector('.assistant-footer').getBoundingClientRect().bottom, height: innerHeight }));
+    check(`developer-${scale}: task-free ZIP includes module associations and stays usable at this Windows scale`, () => {
+      assert.equal(standaloneJson.assistance.kind, 'record');
+      assert.equal(standaloneJson.assistance.segments[0].label, '开始设置封面');
+      assert.ok(readZipEntry(standaloneArchive, 'report.md').includes(Buffer.from('人工操作录制摘要')));
+      assert.equal(standaloneLayout.overflow, false);
+      assert.ok(standaloneLayout.footer <= standaloneLayout.height + 1);
+    });
+    assert.equal(await app.evaluate(() => globalThis.__qiyeTestDeveloper.assistant.publisher().store.tasks().length), plansBefore);
+    await tools.screenshot({ path: path.join(output, `recording-${scale}.png`) });
+    await tools.locator('#assistant-another').click();
+    await until(async () => (await state()).report === null, 'fresh independent problem');
+    await tools.locator('#workflow-diagnostic').click();
+    await tools.locator('#assistant-environment').selectOption(b.id);
+    await tools.locator('#assistant-issue').fill('官方页面操作变化，需要演示正确步骤');
+    await tools.locator('#assistant-observe').click();
+    await until(async () => (await state()).report?.assistance?.kind === 'diagnostic', 'task-free problem recording');
+    await tools.locator('#assistant-problem').click();
+    await tools.locator('#assistant-manual').click();
+    await tools.locator('#assistant-finish').click();
+    await until(async () => (await state()).report.status === 'ended', 'task-free problem finished');
+    const standaloneProblem = (await state()).report;
+    check(`developer-${scale}: problem evidence and correct demonstration can also be captured without a task`, () => {
+      assert.equal(standaloneProblem.accountId, b.id);
+      assert.equal(standaloneProblem.assistance.taskId, undefined);
+      assert.ok(standaloneProblem.steps.some((s) => s.note?.includes('用户标记问题')));
+      assert.ok(standaloneProblem.steps.some((s) => s.note?.includes('人工演示正确操作')));
+    });
+    await tools.locator('#assistant-another').click();
+    await until(async () => (await state()).report === null, 'fresh guided problem');
     const helpTask = await app.evaluate((_electron, id) => {
       const publisher = globalThis.__qiyeTestDeveloper.assistant.publisher();
       const batch = publisher.store.addBatch('问题助手夹具', [{ accountId: id,

@@ -494,3 +494,92 @@ test('late and coalesced recorder events get a fresh after snapshot even when th
   await s.poll();
   assert.ok(s.report.steps.at(-1).afterId);
 });
+
+test('task-free recording needs no publisher or plan and uses only the chosen saved environment', async (t) => {
+  const { dir } = fixture(t), id = randomUUID(), other = randomUUID(), actions = [], frame = {};
+  const wc = { isDestroyed: () => false, mainFrame: { framesInSubtree: [frame] } };
+  const service = new DeveloperService({ directory: dir, profiles: () => [{ id, name: '已有账号' }, { id: other }],
+    inspectView: (p) => p === id ? wc : null, publisher: () => null,
+    prepareView: async (p) => actions.push(['prepare', p]), reveal: async (p) => actions.push(['reveal', p]),
+    executeFrame: async () => ({ url: 'https://example.com/', nodes: [], events: [] }) });
+  t.after(() => service.close());
+  assert.equal(service.state().assistant.workflow, 'record');
+  assert.equal(service.state().assistant.tasks.length, 0);
+  assert.equal(service.state().assistant.environments.length, 2);
+  await service.command('assistant-record', { accountId: id, scope: 'partial', name: '封面与定位模块' });
+  assert.deepEqual(actions, [['prepare', id], ['reveal', id]]);
+  assert.equal(service.active, id);
+  assert.equal(service.report.status, 'recording');
+  assert.equal(service.report.assistance.scope, 'partial');
+  assert.equal(service.report.assistance.taskId, undefined);
+  assert.equal(service.report.assistance.task, undefined);
+  assert.equal(service.report.options.screenshots, false);
+  await service.trace(id, { phase: 'error', operation: 'unrelated-script' });
+  assert.equal(service.report.scripts.length, 0);
+  await service.command('assistant-segment', { note: '开始设置封面 token=private' });
+  const segment = service.report.assistance.segments[0];
+  assert.ok(segment.label.includes('已脱敏') && !segment.label.includes('private'));
+  assert.ok(service.report.steps.some((s) => s.id === segment.stepId));
+  assert.ok(service.report.snapshots.some((s) => s.id === segment.snapshotId));
+  await service.command('assistant-pause');
+  const count = service.report.steps.length;
+  service.pageEvent({ type: 'click', time: Date.now(), target: { selector: '#ignored' } });
+  assert.equal(service.report.steps.length, count);
+  await service.command('assistant-resume');
+  service.pageEvent({ type: 'click', time: Date.now(), target: { selector: '#cover' } });
+  await service.command('assistant-finish');
+  assert.equal(service.report.status, 'ended');
+  const recorded = service.report.steps.find((s) => s.target?.selector === '#cover');
+  assert.ok(recorded.beforeId && recorded.afterId);
+  await assert.rejects(service.export('zip'), /先预览/);
+  await service.command('preview');
+  assert.ok((await service.export('zip')).length > 500);
+  const markdown = filesFor(service.report, {}).find((f) => f.name === 'report.md').data.toString();
+  assert.ok(markdown.includes('人工操作录制摘要') && markdown.includes('部分模块') && markdown.includes(segment.stepId));
+  assert.ok(!markdown.includes('任务参考：undefined'));
+  const saved = service.report.id;
+  await service.command('assistant-new');
+  assert.ok(service.store.get(saved).assistance);
+});
+
+test('problem recording also works without a task, labels the failure and manual correction without invoking publishing', async (t) => {
+  const f = assistantFixture(t);
+  f.setTask(null);
+  await f.service.command('assistant-workflow', { workflow: 'diagnostic' });
+  await f.service.command('assistant-record', { accountId: f.other, workflow: 'diagnostic', issue: '官方定位搜索变化' });
+  await f.service.command('assistant-problem');
+  await f.service.command('assistant-manual');
+  await f.service.command('assistant-finish');
+  assert.deepEqual(f.prepared, [f.other]);
+  assert.deepEqual(f.calls, [{ reveal: f.other }, { reveal: f.other }]);
+  assert.equal(f.service.report.assistance.kind, 'diagnostic');
+  assert.ok(f.service.report.steps.some((s) => s.note?.includes('人工演示正确操作')));
+  const md = filesFor(f.service.report, {}).find((f) => f.name === 'report.md').data.toString();
+  assert.ok(md.includes('网页问题排查摘要') && md.includes('官方定位搜索变化'));
+});
+
+test('standalone recording validates profile and leases before and after opening and refuses overwriting an active recording', async (t) => {
+  const f = assistantFixture(t);
+  await assert.rejects(f.service.command('assistant-record', { accountId: randomUUID() }), /已有的账号环境/);
+  f.service.isLeased = () => true;
+  await assert.rejects(f.service.command('assistant-record', { accountId: f.account }), /正在自动执行/);
+  assert.equal(f.prepared.length, 0);
+  let leased = false;
+  f.service.isLeased = () => leased;
+  f.service.assistant.prepareView = async () => { leased = true; };
+  await assert.rejects(f.service.command('assistant-record', { accountId: f.account }), /刚开始自动执行/);
+  assert.equal(f.service.report, null);
+  leased = false;
+  f.service.assistant.prepareView = async () => {};
+  await f.service.command('assistant-record', { accountId: f.account });
+  const id = f.service.report.id;
+  await assert.rejects(f.service.command('assistant-select', { taskId: f.taskId }), /其他记录/);
+  await assert.rejects(f.service.command('assistant-workflow', { workflow: 'diagnostic' }), /结束当前/);
+  await assert.rejects(f.service.command('assistant-record', { accountId: f.other }), /已有记录/);
+  await f.service.command('assistant-pause');
+  leased = true;
+  await assert.rejects(f.service.command('assistant-resume'), /先暂停任务/);
+  assert.equal(f.service.report.status, 'paused');
+  assert.equal(f.service.report.id, id);
+  assert.deepEqual(f.calls, [{ reveal: f.account }]);
+});

@@ -472,6 +472,7 @@ class DeveloperService {
       !this.report
     )
       return;
+    if (this.report.assistance && !this.report.assistance.taskId) return;
     if (this.report.assistance && event.taskId &&
         event.taskId !== this.report.assistance.taskId) return;
     if (this.report.assistance && this.report.status !== 'recording') return;

@@ -48,10 +48,19 @@ function filesFor(report, technical) {
     '',
     '输入值、凭据、本地文件路径和网址查询参数均不导出。截图需在工具中确认后才能导出。',
     '',
-    '## 操作时间线',
-    '',
   ];
-  if (d.assistance) {
+  if (d.assistance && !d.assistance.taskId) {
+    md.push(d.assistance.kind === 'record' ? '## 人工操作录制摘要' : '## 网页问题排查摘要', '',
+      `流程名称：${d.assistance.name || d.name}`,
+      `范围：${d.assistance.scope === 'partial' ? '部分模块 / 步骤' : '完整流程'}`,
+      `问题说明：${d.assistance.issue || '未填写'}`,
+      '来源：直接连接已有账号环境；无需发布计划，工具没有创建或启动自动任务。',
+      '请按模块标记、暂停 / 继续和人工演示标记还原操作。输入事件保留控件与动作，不包含实际输入值。', '',
+      '### 模块 / 步骤索引', '',
+      ...(d.assistance.segments || []).map((m) => `- ${m.label} · 步骤 ${m.stepId} · 快照 ${m.snapshotId}`), '',
+    );
+  }
+  if (d.assistance?.taskId) {
     md.push('## 发布问题摘要', '',
       `用户描述：${d.assistance.issue || '未填写'}`,
       `任务参考：${d.assistance.taskId}`,
@@ -62,6 +71,7 @@ function filesFor(report, technical) {
       ...(d.assistance.task?.logs || []).map((l) => `- ${new Date(l.time).toISOString()} [${l.level}] ${l.message}`), '',
     );
   }
+  md.push('## 操作时间线', '');
   for (const s of d.steps) {
     md.push(
       `### 第 ${s.sequence} 步 · ${s.type}`,
@@ -85,7 +95,7 @@ function filesFor(report, technical) {
     '',
     ...d.warnings.map((s) => '- ' + s),
   );
-  const body = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>栖页调试报告</title><style>body{font:15px/1.6 system-ui;color:#18253b;background:#f6f8fc;margin:32px}article{max-width:1200px;margin:auto}section{background:white;padding:20px;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%}summary{cursor:pointer;font-weight:600}</style><article><h1>栖页网页调试报告</h1><p>${html(d.name)} · ${html(d.status)}</p><p>输入值和凭据均已排除；定位器请结合框架与 Shadow 根路径。</p>${d.steps.map((s) => `<section><h2>${s.sequence}. ${html(s.type)}</h2><p>${html(s.note)}</p><pre>${html(JSON.stringify(s, null, 2))}</pre></section>`).join('')}${d.snapshots.map((s) => `<details><summary>结构快照 ${html(s.id)} · ${html(new Date(s.time).toISOString())}</summary><pre>${html(JSON.stringify(s, null, 2))}</pre></details>`).join('')}<h2>脚本执行</h2><pre>${html(JSON.stringify(d.scripts, null, 2))}</pre>${report.screenshots
+  const body = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>栖页调试报告</title><style>body{font:15px/1.6 system-ui;color:#18253b;background:#f6f8fc;margin:32px}article{max-width:1200px;margin:auto}section{background:white;padding:20px;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%}summary{cursor:pointer;font-weight:600}</style><article><h1>栖页网页调试报告</h1><p>${html(d.name)} · ${html(d.status)}</p><p>输入值和凭据均已排除；定位器请结合框架与 Shadow 根路径。</p>${d.assistance ? `<section><h2>录制用途与问题说明</h2><pre>${html(JSON.stringify(d.assistance, null, 2))}</pre></section>` : ''}${d.steps.map((s) => `<section><h2>${s.sequence}. ${html(s.type)}</h2><p>${html(s.note)}</p><pre>${html(JSON.stringify(s, null, 2))}</pre></section>`).join('')}${d.snapshots.map((s) => `<details><summary>结构快照 ${html(s.id)} · ${html(new Date(s.time).toISOString())}</summary><pre>${html(JSON.stringify(s, null, 2))}</pre></details>`).join('')}<h2>脚本执行</h2><pre>${html(JSON.stringify(d.scripts, null, 2))}</pre>${report.screenshots
     .filter((s) => s.reviewed)
     .map(
       (s) =>

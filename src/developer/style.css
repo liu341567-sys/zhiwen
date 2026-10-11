@@ -394,3 +394,14 @@ label {
 .history-row span { overflow-wrap:anywhere; }
 #assistant-preview { max-height:300px; overflow:auto; }
 @media(max-width:860px) { .assistant-heading { padding:18px; } .assistant-scroll { padding:0 18px 16px; } .assistant-footer { padding:12px 18px; } .assistant-card { padding:18px; } }
+
+.workflow-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
+.workflow-option { display:flex; flex-direction:column; align-items:flex-start; padding:16px; text-align:left; white-space:normal; gap:6px; }
+.workflow-option strong { font-size:17px; }
+.workflow-option span { font-size:13px; line-height:1.6; opacity:.88; }
+#assistant-environment, #assistant-scope, #assistant-name { width:100%; }
+#assistant-setup label { display:block; margin:14px 0 7px; color:var(--ink); }
+#assistant-run-options { margin-top:16px; }
+#assistant-timeline { max-height:240px; overflow:auto; padding-left:24px; overflow-wrap:anywhere; }
+#assistant-timeline li { padding:5px 0; color:var(--muted); font-size:14px; }
+@media(max-width:800px) { .workflow-options { gap:8px; } .workflow-option { padding:12px; } }
