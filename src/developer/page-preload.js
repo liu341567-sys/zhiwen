@@ -20,12 +20,12 @@ ipcRenderer.on('developer:frame-request', async (_event, request) => {
     if (result === undefined || JSON.stringify(result).length > 4 * 1024 * 1024)
       throw new Error('网页采样失败或超过范围');
     ipcRenderer.send('developer:frame-reply', request.id, result);
-  } catch {
+  } catch (error) {
     ipcRenderer.send(
       'developer:frame-reply',
       request.id,
       null,
-      '框架不可访问或正在跳转',
+      error?.message === '页面超出安全截图采样范围' ? 'mask-limit' : 'unavailable',
     );
   }
 });
