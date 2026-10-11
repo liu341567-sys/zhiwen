@@ -782,13 +782,14 @@ async function run(scale, origin) {
   });
   const origin = await serve((_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    const stress = _req.url.split('?')[0] === '/start';
     res.end(`<!doctype html><title>发布测试</title><style>body{margin:20px;min-height:1800px}input,select,button{margin:5px;padding:10px}#rich{border:1px solid gray;padding:10px;width:300px}iframe{display:block;height:60px}dialog{padding:20px}</style>
-<svg id="sprite-library" style="display:none"><defs>${Array.from({length:1000}, (_, i) => `<symbol id="symbol-${i}"><path d="M0 0 L1 1"/></symbol>`).join('')}</defs></svg><div id="spacer-library" hidden>${'<span></span>'.repeat(1300)}</div>
+${stress ? `<svg id="sprite-library" style="display:none"><defs>${Array.from({length:1000}, (_, i) => `<symbol id="symbol-${i}"><path d="M0 0 L1 1"/></symbol>`).join('')}</defs></svg><div id="spacer-library" hidden>${'<span></span>'.repeat(1300)}</div>` : ''}
 <svg width="150" height="50"><foreignObject width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml"><button id="svg-live-button">选择封面</button></div></foreignObject></svg>
 <label for="title">作品标题</label><input id="title" placeholder="填写作品标题"><input id="pw" type="password" value="p@ss-secret"><input type="hidden" value="hidden-secret"><div id="rich" contenteditable="true"><span contenteditable="false">rich-private</span></div>
 <button id="nested-cover"><span>保存封面</span></button><div id="poi" role="option"><div id="poi-detail"><strong>示例公园</strong><span>示例市测试路</span></div></div><div><span id="context-safe">确认设置</span><input type="password" value="context-password-private"><div contenteditable="true"><span contenteditable="false">context-rich-private</span></div></div>
 <select id="choice"><option value="first">第一项</option><option value="second">第二项</option></select><input id="tick" type="checkbox"><input id="file" type="file" accept="video/*"><button id="submit" aria-label="发布" onclick="window.submits++">发布</button><button class="duplicate">保存</button><button class="duplicate">保存</button><button id="css-abcdef123456">动态</button>
-<button id="change" onclick="document.getElementById('dynamic').hidden=false">封面</button><div id="dynamic" hidden role="dialog">选择封面</div><a id="next" href="/next">下一步</a><x-controls></x-controls><iframe src="${iframe}/?token=raw-query"></iframe>${`<iframe class="auxiliary-frame" src="${iframe}/"></iframe>`.repeat(4)}<script>window.submits=0;window.secret='script-secret'; const s=document.querySelector('x-controls').attachShadow({mode:'open'});s.innerHTML='<button id="shadow-first">上传</button><button id="shadow-second">发布</button>';window.ready=true;</script>`);
+<button id="change" onclick="document.getElementById('dynamic').hidden=false">封面</button><div id="dynamic" hidden role="dialog">选择封面</div><a id="next" href="/next">下一步</a><x-controls></x-controls><iframe src="${iframe}/?token=raw-query"></iframe>${stress ? `<iframe class="auxiliary-frame" src="${iframe}/"></iframe>`.repeat(4) : ''}<script>window.submits=0;window.secret='script-secret'; const s=document.querySelector('x-controls').attachShadow({mode:'open'});s.innerHTML='<button id="shadow-first">上传</button><button id="shadow-second">发布</button>';window.ready=true;</script>`);
   });
   try {
     for (const scale of testArgs.filter((a) => !a.startsWith('--')).length
