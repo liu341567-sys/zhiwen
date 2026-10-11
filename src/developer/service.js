@@ -431,6 +431,8 @@ class DeveloperService {
         action: 'mask',
         token: randomUUID(),
       });
+      if (mask?.reason === 'mask-limit')
+        throw new Error('页面超出安全截图采样范围');
       if (!mask?.masked || !mask.token)
         throw new Error('无法确认截图遮盖，未保存图像');
       const image = await Promise.race([

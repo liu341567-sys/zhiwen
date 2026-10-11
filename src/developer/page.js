@@ -625,7 +625,9 @@ function pageTool(input) {
     }
   }
   if (input.action === 'mask') {
-    if (truncated) throw new Error('页面超出安全截图采样范围');
+    // Electron replaces errors thrown across isolated worlds with a generic
+    // execution failure. Return a fixed code so the caller can explain it.
+    if (truncated) return { masked: false, reason: 'mask-limit' };
     removeHighlight();
     const allowed =
       /^(?:作品发布|发布视频|发布图文|上传视频|上传|发布|取消|确定|保存|下一步|上一步|标题|作品标题|简介|作品简介|作品描述|话题|封面|定位|位置|定时|立即发布|重新上传|上传完成|上传成功|处理中|选择视频|返回|视频发布|预览|登录|扫码登录|关闭|继续|提交|操作成功|发布成功|审核中|选择封面|添加话题)$/;

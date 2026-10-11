@@ -51,8 +51,7 @@ function installDeveloperDesktop({
       return;
     clearTimeout(request.timer);
     pending.delete(id);
-    if (error) request.reject(new Error(error === 'mask-limit'
-      ? '页面超出安全截图采样范围' : '框架暂不可访问'));
+    if (error) request.reject(new Error('框架暂不可访问'));
     else request.resolve(result);
   });
   const notify = () => {
