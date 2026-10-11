@@ -775,13 +775,13 @@ async function run(scale, origin) {
 }
 (async () => {
   const iframe = await serve((_req, res) => {
-    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end(
       '<button id="frame-button" onclick="this.disabled=true">上传</button>',
     );
   });
   const origin = await serve((_req, res) => {
-    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end(`<!doctype html><title>发布测试</title><style>body{margin:20px;min-height:1800px}input,select,button{margin:5px;padding:10px}#rich{border:1px solid gray;padding:10px;width:300px}iframe{display:block;height:60px}dialog{padding:20px}</style>
 <svg id="sprite-library" style="display:none"><defs>${Array.from({length:1000}, (_, i) => `<symbol id="symbol-${i}"><path d="M0 0 L1 1"/></symbol>`).join('')}</defs></svg><div id="spacer-library" hidden>${'<span></span>'.repeat(1300)}</div>
 <svg width="150" height="50"><foreignObject width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml"><button id="svg-live-button">选择封面</button></div></foreignObject></svg>
