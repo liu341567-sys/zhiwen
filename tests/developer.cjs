@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const { inflateRawSync } = require('node:zlib');
 const { _electron } = require('playwright-core');
 const { ProfileStore } = require('../src/profile-store');
 const root = path.resolve(__dirname, '..');
@@ -18,6 +19,26 @@ function check(label, fn) {
   fn();
   checks++;
   console.log('✓ ' + label);
+}
+function readZipEntry(archive, wanted) {
+  let offset = 0;
+  while (archive.readUInt32LE(offset) === 0x04034b50) {
+    const method = archive.readUInt16LE(offset + 8);
+    const size = archive.readUInt32LE(offset + 18);
+    const nameSize = archive.readUInt16LE(offset + 26);
+    const extraSize = archive.readUInt16LE(offset + 28);
+    const name = archive.subarray(offset + 30, offset + 30 + nameSize).toString();
+    const body = offset + 30 + nameSize + extraSize;
+    if (name === wanted) {
+      assert.ok(method === 0 || method === 8);
+      const data = archive.subarray(body, body + size);
+      const unpacked = method === 8 ? inflateRawSync(data) : data;
+      assert.equal(unpacked.length, archive.readUInt32LE(offset + 22));
+      return unpacked;
+    }
+    offset = body + size;
+  }
+  throw new Error('Missing ZIP entry: ' + wanted);
 }
 async function until(fn, label) {
   const end = Date.now() + 15000;
@@ -557,8 +578,8 @@ async function run(scale, origin) {
     await tools.locator('#assistant-export').click();
     await until(async () => (await tools.locator('#toast').textContent()).includes('资料包已保存'), 'guided ZIP export');
     const archive = fs.readFileSync(path.join(directory, 'Qiye-Developer-Report.zip'));
-    assert.ok(archive.includes(Buffer.from('发布问题摘要')));
-    assert.ok(archive.includes(Buffer.from(helpTask)));
+    assert.ok(readZipEntry(archive, 'report.md').includes(Buffer.from('发布问题摘要')));
+    assert.equal(JSON.parse(readZipEntry(archive, 'report.json')).assistance.taskId, helpTask);
     const guidedLayout = await tools.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth,
       footer: document.querySelector('.assistant-footer').getBoundingClientRect().bottom, height: innerHeight }));
     check(`developer-${scale}: simple preview and local ZIP export retain a visible footer and require one review`, () => {
