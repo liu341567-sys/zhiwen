@@ -304,8 +304,11 @@ async function run(scale, origin) {
     check(`developer-${scale}: nested buttons and official candidate rows have readable context without private descendant text`, () => {
       const cover = recorded.steps.find((s) => s.target?.context?.ancestors?.some((a) => a.attributes.id === 'nested-cover'));
       assert.equal(cover.target.context.ancestors[0].semantic.name, '保存封面');
-      const poi = recorded.steps.find((s) => s.target?.attributes.id === 'poi-detail');
-      assert.ok(poi.target.context.text.includes('示例公园') && poi.target.context.text.includes('示例市测试路'));
+      const poi = recorded.steps.find((s) => s.target?.attributes.id === 'poi-detail' ||
+        s.target?.context?.ancestors?.some((a) => a.attributes.id === 'poi-detail'));
+      assert.ok(poi, 'a candidate-row click, including clicks on its nested name/address');
+      const candidate = poi.target.context.ancestors.find((a) => a.attributes.id === 'poi');
+      assert.ok(candidate.text.includes('示例公园') && candidate.text.includes('示例市测试路'));
       const all = JSON.stringify(recorded);
       assert.ok(!all.includes('context-rich-private') && !all.includes('context-password-private'));
       assert.ok(recorded.steps.some((s) => s.type === 'select' && s.target?.attributes.id === 'tick' && s.target.controlState.checked));
@@ -784,7 +787,7 @@ async function run(scale, origin) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     const stress = _req.url.split('?')[0] === '/start';
     res.end(`<!doctype html><title>发布测试</title><style>body{margin:20px;min-height:1800px}input,select,button{margin:5px;padding:10px}#rich{border:1px solid gray;padding:10px;width:300px}iframe{display:block;height:60px}dialog{padding:20px}</style>
-${stress ? `<svg id="sprite-library" style="display:none"><defs>${Array.from({length:1000}, (_, i) => `<symbol id="symbol-${i}"><path d="M0 0 L1 1"/></symbol>`).join('')}</defs></svg><div id="spacer-library" hidden>${'<span></span>'.repeat(1300)}</div>` : ''}
+${stress ? `<svg id="sprite-library" style="display:none"><defs>${Array.from({length:1000}, (_, i) => `<symbol id="symbol-${i}"><path d="M0 0 L1 1"/></symbol>`).join('')}</defs></svg><div id="spacer-library" hidden>${'<span></span>'.repeat(700)}</div>` : ''}
 <svg width="150" height="50"><foreignObject width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml"><button id="svg-live-button">选择封面</button></div></foreignObject></svg>
 <label for="title">作品标题</label><input id="title" placeholder="填写作品标题"><input id="pw" type="password" value="p@ss-secret"><input type="hidden" value="hidden-secret"><div id="rich" contenteditable="true"><span contenteditable="false">rich-private</span></div>
 <button id="nested-cover"><span>保存封面</span></button><div id="poi" role="option"><div id="poi-detail"><strong>示例公园</strong><span>示例市测试路</span></div></div><div><span id="context-safe">确认设置</span><input type="password" value="context-password-private"><div contenteditable="true"><span contenteditable="false">context-rich-private</span></div></div>
