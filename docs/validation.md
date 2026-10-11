@@ -1,3 +1,17 @@
+# 0.3.4 无任务操作录制与问题排查验证
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38128611811)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38128839412)均通过，对应 `c4550a616eacd2f7d9710c70f247c02be23912b5` / `v0.3.4`：125 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 63 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下从零发布任务实际验证直接录制、暂停排除操作、继续、模块快照关联、预览和 ZIP 导出，以及无任务问题记录与人工演示；保留原任务排查与专业工具验证。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试使用本地网页夹具，真实已登录平台仍需实机录制验证。
+
+发布于 2026-10-11 17:46:32（北京时间）。发布页及三个附件匿名访问成功；安装包和 ZIP 完整下载，大小与 SHA256 均对照 GitHub 摘要及校验文件验证通过。包内运行时代码与验证提交一致（Windows CRLF），品牌资产、媒体工具和许可齐全，不含用户账号清单。证据保存在 `.cache/release-0.3.4/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.4-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.4/Qiye-0.3.4-x64.zip) | 217858381 | `0a9ce9a27d39e5b5e6806d1261273f65ac95707531be1bfca6ad5c014c34eb48` |
+| [Qiye-Setup-0.3.4-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.4/Qiye-Setup-0.3.4-x64.exe) | 160723246 | `de66fa83ddc54495b7d6155684f3d50bde9181e7af53e01295394e8d77203e14` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.4/SHA256SUMS.txt) | 178 | `f93cbb338aaf1b7fade91b564ab3e5343db198e7795ea5865c3fcc44305e14c2` |
+
+新增回归覆盖发布中心不可用时的独立录制、原环境 ID 精确绑定、未打开的已保存环境入口、开始前后账号占用检查、禁止覆盖正在录制的报告、暂停不记录及模块备注脱敏；确认结束不创建或执行任务，且导出仍需预览。未更改真实平台封面、位置、官方定时或发布提交逻辑。
+
 # 0.3.3 同名发布入口与压缩导出验证
 
 Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38125656636)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38125669533)均通过，对应 `6e7f990ef745c4b4ee977117e821522af1be84c6` / `v0.3.3`：122 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 51 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下验证唯一导航作品发布按钮与同名内容入口并存时完成上传和填写，未点击内容入口、图文或最终提交；多个导航按钮、普通导航标签及不同目标网址仍不执行。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。测试网页夹具不能代替真实抖音账号验收。
