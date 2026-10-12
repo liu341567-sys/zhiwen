@@ -6,7 +6,19 @@
 - 新增「循环定时」：日循环或周循环，开始日期、每日多个 HH:mm 及周发布日。每账号独立排期，预览展开为具体官方时间，确认后固定保存；不重复素材，不在执行时重算，不回退为本地定时。
 - 官方时间仍核对账号实际范围、禁用日期与回读；自动提交授权、结果待核实保护、原会话隔离、导航及开发者工具保持。
 
-Windows专项、完整回归及安装包验证进行中；真实抖音权限、网页控件与最终上线仍需已登录账号实测。
+Windows专项、完整回归及实际安装、重启、原账号恢复检查通过；真实抖音权限、网页控件与最终上线仍需已登录账号实测。
+
+[Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.10/Qiye-Setup-0.3.10-x64.exe) · [解压版 ZIP](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.10/Qiye-0.3.10-x64.zip)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38233748564)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38233896493)均通过，对应 `c5c7440e6cf9f1d2a1b494080de90ceb7546c259` / `v0.3.10`：149 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、45 项官方选项及简化向导专项，以及 81 项开发者工具检查。DPR 1 / 1.25 / 1.5 下验证原账号后台搜索、固定/备选名称与完整地址核对、空结果回退、未匹配转人工、取消清理、原生官方时间范围及回读、从首页开始的完整简化向导，以及单账号多视频周循环展开/保存/执行。单元验证日循环、周循环、跨月年、过去时段跳过、账号独立时钟、输入校验、无本地定时新任务及重启后的不可变快照。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。网页测试使用本地夹具，不能代替用户已登录抖音账号验收。
+
+发布于 2026-10-12 18:16:07（北京时间）。公开安装包和 ZIP 均已完整下载，大小与 SHA256 对照 GitHub 摘要及校验文件验证；包内版本及运行时代码与验证提交一致，包括循环排期、简化界面及后台地点适配器，已移除查询准备模块。原品牌、媒体工具及许可齐全，不含用户账号或原始录制资料。证据位于 `.cache/release-0.3.10/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-Setup-0.3.10-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.10/Qiye-Setup-0.3.10-x64.exe) | 160735456 | `425ad5e841865ce09293fdbf4f4312a9f6ed9d0e55170806816ef1412daeeab9` |
+| [Qiye-0.3.10-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.10/Qiye-0.3.10-x64.zip) | 217870356 | `926901033702dd059f74c715d15d74bcadf7328e0b6d7f6d22acf24ec678c14c` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.10/SHA256SUMS.txt) | 180 | `4a665fccf9b09011a017526f66f9e3a93b29311eb32e08ce433f496c866de4e2` |
 
 # 栖页 0.3.8 · 官方定时核验与地点查询准备
 
