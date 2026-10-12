@@ -542,7 +542,6 @@
     operations.append(
       E('span', 'publish-metric', `${data.videos.length} 条本地素材`),
     );
-    operations.append(more);
     body.append(operations);
     const { wrap, body: rows } = table([
       '选择',
