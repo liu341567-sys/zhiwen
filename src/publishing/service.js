@@ -7,6 +7,9 @@ const { PublishingStore } = require('./store'),
   media = require('./media'),
   { Scheduler } = require('./scheduler');
 const douyin = require('./adapters/douyin');
+const optionConfig = require('./options');
+const { Page } = require('./adapters/page');
+const douyinOptions = require('./adapters/douyin-options');
 const presets = require('../platform-presets.json');
 const clone = (v) => structuredClone(v);
 const text = (v, max = 1000) => {
@@ -30,6 +33,8 @@ class PublishingService {
     this.store = new PublishingStore(this.directory);
     this.profiles = profiles;
     this.getView = getView;
+    this.inspectView = inspectView;
+    this.optionQueries = new Map();
     this.takeoverView = takeover;
     this.notify = notify;
     this.changed = changed;
@@ -367,7 +372,7 @@ class PublishingService {
     );
     rows
       .filter((row) => !row.cancelled)
-      .forEach((row) => this.validateCover(row.cover));
+      .forEach((row) => { this.validateCover(row.cover); row.location = optionConfig.location(row.location); row.nativeSchedule = optionConfig.nativeSchedule(row.nativeSchedule); if (row.nativeSchedule && row.plannedAt >= optionConfig.epoch(row.nativeSchedule)) throw new Error('本地开始时间必须早于官方发布时间，请留出上传时间'); });
     const previewId = randomUUID();
     this.store.saveDraft(
       { input, rows, createdAt: Date.now() },
@@ -419,6 +424,7 @@ class PublishingService {
         ordinal: i,
         cover: clone(row.cover),
         location: clone(row.location),
+        nativeSchedule: optionConfig.nativeSchedule(row.nativeSchedule),
         locked: row.locked === true,
         cancelled: row.cancelled === true,
         autoSubmit: row.autoSubmit === true,
@@ -445,12 +451,8 @@ class PublishingService {
         await fs.promises.access(cover.path, fs.constants.R_OK);
         t.cover = { mode: 'image', ...cover };
       }
-      if (!['none', 'specified'].includes(t.location?.mode))
-        throw new Error('无效定位配置');
-      if (t.location.mode === 'specified') {
-        t.location.label = text(t.location.label, 200);
-        if (!t.location.label) throw new Error('指定位置不能为空');
-      }
+      t.location = optionConfig.location(t.location);
+      if (t.nativeSchedule && t.plannedAt >= optionConfig.epoch(t.nativeSchedule)) throw new Error('本地开始时间必须早于官方发布时间');
       if (
         !t.cancelled &&
         !allowDuplicates &&
@@ -609,6 +611,15 @@ class PublishingService {
         return this.bindAccount(input.id, input.platformId);
       case 'preview':
         return this.preview(input);
+      case 'location-search':
+        return this.searchLocation(input);
+      case 'location-select':
+        return this.searchLocation(input, true);
+      case 'location-cancel': {
+        const query = this.optionQueries.get(input?.requestId);
+        if (query && query.accountId === input.accountId) query.abort.abort();
+        return { cancelled: true };
+      }
       case 'draft':
         return this.saveDraft(input);
       case 'confirm':
@@ -626,9 +637,31 @@ class PublishingService {
     }
   }
   async shutdown() {
+    this.closing = true;
+    for (const q of this.optionQueries.values()) q.abort.abort();
+    await Promise.allSettled([...this.optionQueries.values()].map((q) => q.done));
     this.diagnostics.close();
     await this.scheduler.shutdown();
     this.store.close();
+  }
+  async searchLocation({ accountId, query, requestId, label, address }, select = false) {
+    if (this.closing) throw new Error('发布中心正在退出');
+    if (!this.accounts().some((a) => a.id === accountId && a.platformId === 'douyin')) throw new Error('请选择原抖音账号环境');
+    query = text(query, 200); if (!query) throw new Error('请填写位置搜索词');
+    const wc = this.inspectView?.(accountId);
+    if (!wc || wc.isDestroyed()) throw new Error('请先打开此原账号，并进入上传后的视频编辑页');
+    const release = this.scheduler.reserveAccount(accountId), abort = new AbortController();
+    if (typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/.test(requestId) || this.optionQueries.has(requestId)) { release(); throw new Error('位置搜索请求标识无效'); }
+    const page = new Page(wc, abort.signal), id = requestId;
+    const done = (async () => {
+      try { await page.connect();
+        if (select) { const chosen = await douyinOptions.setLocation(page, optionConfig.location({ mode: 'specified', label, address, query }), { log: () => {}, checkpoint: () => {} });
+          await douyinOptions.verify(page, null, chosen); return { accountId, query, selected: chosen }; }
+        return { accountId, query, candidates: await douyinOptions.search(page, query) }; }
+      finally { await douyinOptions.cleanup(page).catch(() => {}); page.detach(); release(); this.optionQueries.delete(id); }
+    })();
+    this.optionQueries.set(id, { accountId, abort, done });
+    return done;
   }
 }
 module.exports = { PublishingService };

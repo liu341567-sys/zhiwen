@@ -55,6 +55,7 @@
     distribution: { mode: 'all' },
     cover: { mode: 'first' },
     location: { mode: 'none' },
+    nativeSchedule: null,
     covers: {},
     locations: {},
     schedule: {
@@ -178,6 +179,7 @@
         locked,
         cover: row.cover,
         location: row.location,
+        nativeSchedule: row.nativeSchedule,
         plannedAt: row.plannedAt,
         autoSubmit: row.autoSubmit,
       });
@@ -198,6 +200,7 @@
         for (const key of [
           'cover',
           'location',
+          'nativeSchedule',
           'plannedAt',
           'autoSubmit',
           'locked',
@@ -999,7 +1002,7 @@
     const cover = panel('封面与定位');
     cover.append(
       note(
-        '自定义封面、指定帧、定位及平台原生定时需要在抖音页面人工设置并核实。本地计划时间是开始执行时间，并非作品精确上线时间。',
+        '默认封面沿用平台设置；自定义图片和指定帧仍需人工设置。指定位置在上传后搜索官方候选并核对；官方定时与本地开始执行时间分别设置。',
         true,
       ),
     );
@@ -1038,7 +1041,16 @@
       }),
     );
     cover.append(perVideo);
+    cover.append(B('逐账号设置定位', () => {
+      const blocks = input.accountIds.map((id) => { const p = panel(data.accounts.find((a) => a.id === id)?.name || id);
+        p.append(locationControl(input.locations[id] || input.location, (value) => { input.locations[id] = value; }, id)); return p; });
+      show('逐账号定位', blocks, () => saveSoon());
+    }));
     body.append(cover);
+    const native = panel('抖音官方定时');
+    native.append(nativeControl(input.nativeSchedule, (v) => { input.nativeSchedule = v; saveSoon(); }, true));
+    native.append(note('任务先按本地计划上传并提交，作品由抖音按官方时间安排发布。当前录制账号显示2小时后至14天内，执行时会核对账号实际范围及最终时间。审核、上传耗时和上线结果仍由平台决定。'));
+    body.append(native);
     const schedule = panel('本地发布时间计划');
     schedule.append(
       choice(
@@ -1177,7 +1189,7 @@
     }
     return p;
   }
-  function locationControl(value, onChange) {
+  function locationControl(value, onChange, forAccount = null) {
     const p = E('div'),
       c = structuredClone(value || { mode: 'none' });
     p.append(
@@ -1185,13 +1197,13 @@
         '发布定位',
         [
           ['none', '不设置定位'],
-          ['specified', '指定位置（人工设置）'],
+          ['specified', '指定位置（官方搜索）'],
         ],
         c.mode,
         (v) => {
           c.mode = v;
           onChange(c);
-          p.replaceChildren(locationControl(c, onChange));
+          p.replaceChildren(locationControl(c, onChange, forAccount));
         },
       ),
     );
@@ -1201,6 +1213,44 @@
         onChange(c);
       });
       p.append(f);
+      p.append(field('官方位置搜索词（留空使用名称）', 'text', c.query || '', (v) => { c.query = v; onChange(c); }),
+        field('完整地点地址（同名地点须填写）', 'text', c.address || '', (v) => { c.address = v; onChange(c); }));
+      let accountId = forAccount || input.accountIds[0] || '', revision = 0;
+      const results = E('div', 'publish-actions');
+      p.append(choice('位置搜索账号', [['', '请选择'], ...data.accounts.filter((a) => a.platformId === 'douyin' && input.accountIds.includes(a.id) && (!forAccount || a.id === forAccount)).map((a) => [a.id, a.name])], accountId,
+        (v) => { accountId = v; revision++; results.replaceChildren(); }),
+        B('读取官方位置候选', async () => {
+          const request = ++revision, query = (c.query || c.label || '').trim(), selectedAccount = accountId;
+          const fingerprint = JSON.stringify([accountId, c.label, c.query, c.address]), requestId = crypto.randomUUID();
+          const cancel = setInterval(() => { if (!p.isConnected || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) {
+            clearInterval(cancel); cmd('location-cancel', { accountId: selectedAccount, requestId }).catch(() => {});
+          } }, 300);
+          results.replaceChildren(E('span', 'publish-help', '正在此原账号网页搜索…'));
+          try {
+            const response = await cmd('location-search', { accountId: selectedAccount, query, requestId });
+            if (!p.isConnected || request !== revision || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) return;
+            results.replaceChildren();
+            for (const candidate of response.candidates) results.append(B(`${candidate.name} · ${candidate.address}`, async () => {
+              if (accountId !== selectedAccount || (c.query || c.label || '').trim() !== query) throw new Error('搜索条件已变化，请重新搜索');
+              const selectionId = crypto.randomUUID(), selectionRevision = ++revision;
+              const cancelSelection = setInterval(() => { if (!p.isConnected || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) {
+                clearInterval(cancelSelection); cmd('location-cancel', { accountId: selectedAccount, requestId: selectionId }).catch(() => {});
+              } }, 300);
+              for (const button of results.querySelectorAll('button')) button.disabled = true;
+              try {
+                const selected = await cmd('location-select', { accountId: selectedAccount, query, label: candidate.name, address: candidate.address, requestId: selectionId });
+                if (!p.isConnected || selectionRevision !== revision || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) return;
+                c.label = selected.selected.label; c.address = selected.selected.address; c.query = query; onChange(c);
+                p.replaceChildren(locationControl(c, onChange, forAccount));
+              } finally {
+                clearInterval(cancelSelection);
+                for (const button of results.querySelectorAll('button')) button.disabled = false;
+              }
+            }));
+          } catch (error) { if (p.isConnected && request === revision) results.replaceChildren(note(error.message, true)); throw error; }
+          finally { clearInterval(cancel); }
+        }), results,
+        E('p', 'publish-help', '候选直接来自所选账号网页。需先在原账号进入上传后的视频编辑页；不会创建账号、导航或上传占位素材。也可直接填写准确名称与地址，执行时自动核对官方候选。'));
       if (data.locations.length)
         p.append(
           choice(
@@ -1210,7 +1260,7 @@
             (v) => {
               c.label = v;
               onChange(c);
-              p.replaceChildren(locationControl(c, onChange));
+              p.replaceChildren(locationControl(c, onChange, forAccount));
             },
           ),
         );
@@ -1225,6 +1275,16 @@
         }),
       );
     }
+    return p;
+  }
+  function nativeControl(value, onChange, batch = false) {
+    const p = E('div'); let c = value ? structuredClone(value) : null;
+    p.append(choice('官方发布方式', [['none', '按本地执行计划发布'], ['at', '抖音官方定时']], c ? 'at' : 'none', (v) => {
+      c = v === 'at' ? (c || { at: '', timezone: 'Asia/Shanghai', intervalMinutes: 10 }) : null;
+      onChange(c); p.replaceChildren(nativeControl(c, onChange, batch));
+    }));
+    if (c) p.append(field('官方发布时间（北京时间）', 'datetime-local', c.at || '', (v) => { c.at = v; c.timezone = 'Asia/Shanghai'; onChange(c); }));
+    if (c && batch) p.append(field('同一账号官方定时间隔（分钟）', 'number', c.intervalMinutes ?? 10, (v) => { c.intervalMinutes = Number(v); onChange(c); }));
     return p;
   }
   function taskPreview(body) {
@@ -1308,6 +1368,7 @@
       '标题',
       '完整话题组',
       '计划开始时间',
+      '官方发布时间 / 地点',
       '锁定 / 取消',
       '操作',
     ]);
@@ -1356,6 +1417,7 @@
           rowOverride(r, { plannedAt: r.plannedAt });
         });
         cell(row, time);
+        cell(row, E('span', 'publish-help', `${r.nativeSchedule?.at?.replace('T', ' ') || '不启用官方定时'}${r.nativeSchedule ? '（北京时间）' : ''}\n${r.location?.mode === 'specified' ? r.location.label + (r.location.address ? ' · ' + r.location.address : '') : '不设置定位'}`));
         const flags = E('div');
         flags.append(
           check('锁定', r.locked, (v) => {
@@ -1375,6 +1437,7 @@
             const p = E('div');
             let cover = structuredClone(r.cover),
               location = structuredClone(r.location),
+              nativeSchedule = structuredClone(r.nativeSchedule || null),
               autoSubmit = r.autoSubmit;
             p.append(
               coverControl(cover, (v) => {
@@ -1382,7 +1445,8 @@
               }),
               locationControl(location, (v) => {
                 location = v;
-              }),
+              }, r.accountId),
+              nativeControl(nativeSchedule, (v) => { nativeSchedule = v; }),
               check('授权自动提交', autoSubmit, (v) => {
                 autoSubmit = v;
               }),
@@ -1390,8 +1454,9 @@
             show('单任务参数', [p], () => {
               r.cover = cover;
               r.location = location;
+              r.nativeSchedule = nativeSchedule;
               r.autoSubmit = autoSubmit;
-              rowOverride(r, { cover, location, autoSubmit });
+              rowOverride(r, { cover, location, nativeSchedule, autoSubmit });
               lockRow(r, true);
               fill();
             });
@@ -1623,7 +1688,10 @@
         const text = E('div', 'publish-caption');
         text.append(E('div', '', t.title), E('div', 'muted', t.topics));
         cell(row, text);
-        cell(row, date(t.plannedAt));
+        const timing = E('div');
+        timing.append(E('div', '', '开始：' + date(t.plannedAt)));
+        if (t.nativeSchedule?.at) timing.append(E('div', 'muted', '官方：' + t.nativeSchedule.at.replace('T', ' ') + '（北京时间）'));
+        cell(row, timing);
         const state = E('div'),
           badge = E('span', 'publish-status', statuses[t.status]);
         badge.dataset.status = t.status;
@@ -1691,7 +1759,7 @@
         E(
           'p',
           'publish-help',
-          `环境 ID：${t.accountId}\n素材：${t.video.path}\n计划：${date(t.plannedAt)}\n最终标题：${t.title}\n完整话题组：${t.topics}`,
+          `环境 ID：${t.accountId}\n素材：${t.video.path}\n本地计划开始：${date(t.plannedAt)}\n官方发布时间：${t.nativeSchedule?.at?.replace('T', ' ') || '未设置'}${t.nativeSchedule?.at ? '（北京时间）' : ''}\n定位：${t.location?.mode === 'specified' ? t.location.label + ' · ' + (t.location.address || '执行时核对唯一候选') : '不设置'}\n最终标题：${t.title}\n完整话题组：${t.topics}`,
         ),
         E(
           'pre',

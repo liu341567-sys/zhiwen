@@ -1,5 +1,6 @@
 'use strict';
 const { Page } = require('./page');
+const options = require('./douyin-options');
 const MANAGEMENT_URL =
   'https://creator.douyin.com/creator-micro/content/manage';
 const stateWhen = (condition) =>
@@ -14,10 +15,10 @@ const descriptor = {
     title: true,
     topics: true,
     cover: 'manual',
-    location: 'manual',
-    nativeSchedule: 'manual',
+    location: 'automatic',
+    nativeSchedule: 'automatic',
   },
-  note: '预览适配器：真实账号发布与话题关联需实机核实，请先使用单条人工确认。上传、填写与提交需实时识别发布页；自定义封面、定位和平台原生定时目前需人工设置并核实。实际作品上线时间由平台决定。',
+  note: '原账号环境自动上传与填写；官方位置按名称和地址匹配，官方定时设置后回读，控件变化时暂停。自定义封面仍需人工设置；请先用单条任务验证当前账号。实际审核与上线由平台决定。',
 };
 function observe() {
   const visible = (e) => {
@@ -707,10 +708,16 @@ async function execute(task, context, { getView, validate, accountStatus }) {
     }
     context.checkpoint({ filled: true });
     context.log('已填写并核对最终标题与整组话题');
+    let nativeVerified = null, locationVerified = null;
+    if (!task.checkpoint.manualOptionsConfirmed) {
+      if (task.location.mode === 'specified') locationVerified = await options.setLocation(page, task.location, context);
+      if (task.nativeSchedule && typeof task.nativeSchedule === 'object')
+        nativeVerified = await options.schedule(page, task.nativeSchedule, context);
+    }
     const special =
       task.cover.mode !== 'first' ||
-      task.location.mode !== 'none' ||
-      task.nativeSchedule;
+      (task.location.mode !== 'none' && !locationVerified) ||
+      (task.nativeSchedule && !nativeVerified);
     if (special && !task.checkpoint.manualOptionsConfirmed)
       return manual(
         '任务包含自定义封面 / 定位 / 平台定时，请在原页面设置，核实后点击「已完成平台设置，继续」',
@@ -739,6 +746,7 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       ))
     )
       return manual('提交前页面素材归属发生变化，请人工核对；未提交');
+    if (nativeVerified || locationVerified) await options.verify(page, nativeVerified, locationVerified);
     context.checkpoint({
       uploaded: true,
       uploadCompletionEvidence: preSubmit.uploadComplete
@@ -784,12 +792,15 @@ async function execute(task, context, { getView, validate, accountStatus }) {
         status: 'submitted',
         reason: '页面反馈提交成功；作品审核与上线状态仍需核实',
         submittedAt: Date.now(),
+        ...(nativeVerified ? { nativeSchedule: nativeVerified } : {}),
+        ...(locationVerified ? { location: locationVerified } : {}),
       };
     return {
       status: 'unverified',
       reason: '返回作品管理页，但尚无当前作品的明确提交证据，请人工核实',
     };
   } finally {
+    await options.cleanup(page).catch(() => {});
     page.detach();
   }
 }

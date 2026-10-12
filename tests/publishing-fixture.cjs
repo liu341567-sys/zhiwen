@@ -100,3 +100,20 @@ globalThis.__publishingEntryProbe = async (accountId) => {
     page.detach();
   }
 };
+
+globalThis.__publishingOptionsFixture = async (accountId, input = {}) => {
+  const view = BrowserWindow.getAllWindows()[0].contentView.children.find((v) => v.webContents?.profileId === accountId);
+  const options = require('../src/publishing/adapters/douyin-options');
+  const controller = new AbortController(), page = new Page(view.webContents, controller.signal);
+  const logs = [], checkpoint = {}, context = { log: (m) => logs.push(m), checkpoint: (v) => Object.assign(checkpoint, v) };
+  const timer = input.abortAfter ? setTimeout(() => controller.abort(), input.abortAfter) : null;
+  try {
+    await page.connect();
+    const location = input.location ? await options.setLocation(page, input.location, context) : null;
+    const native = input.nativeSchedule ? await options.schedule(page, input.nativeSchedule, context) : null;
+    if (input.intervene) await view.webContents.executeJavaScript(`document.querySelector('[data-qiye-poi-root]').dispatchEvent(new MouseEvent('click',{bubbles:true}));void 0;`);
+    await options.verify(page, native, location);
+    return { ok: true, location, native, logs, checkpoint, state: await options.read(page) };
+  } catch (error) { return { ok: false, reason: error.message, manual: !!error.manual, logs, checkpoint }; }
+  finally { clearTimeout(timer); await options.cleanup(page); page.detach(); }
+};

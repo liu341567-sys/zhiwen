@@ -170,6 +170,9 @@ function installDesktop({ window, service, assertManager }) {
         '标题',
         '话题组',
         '计划开始时间',
+        '官方发布时间（北京时间）',
+        '地点名称',
+        '地点地址',
         '实际提交时间',
         '状态',
         '结果 / 原因',
@@ -195,6 +198,9 @@ function installDesktop({ window, service, assertManager }) {
             t.title,
             t.topics,
             new Date(t.plannedAt).toISOString(),
+            t.nativeSchedule?.at?.replace('T', ' ') || '',
+            t.location?.mode === 'specified' ? t.location.label : '',
+            t.location?.mode === 'specified' ? t.location.address || '' : '',
             t.result?.submittedAt
               ? new Date(t.result.submittedAt).toISOString()
               : '',

@@ -44,6 +44,12 @@ class Scheduler {
   leased(id) {
     return this.accounts.has(id);
   }
+  reserveAccount(id) {
+    if (this.stopping || this.accounts.has(id)) throw new Error('此账号正在执行操作，请稍后搜索位置');
+    this.accounts.add(id);
+    let released = false;
+    return () => { if (!released) { released = true; this.accounts.delete(id); this.changed(); } };
+  }
   runtime() {
     return {
       timerActive: !!this.timer && !this.stopping,

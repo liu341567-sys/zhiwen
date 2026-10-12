@@ -1,5 +1,6 @@
 'use strict';
 const { randomInt } = require('node:crypto');
+const options = require('./options');
 const shuffle = (items, random = (n) => randomInt(n)) => {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -207,7 +208,7 @@ function generate(input, videos, accounts, random, now = Date.now()) {
   }
   const titles = assign(pairs, input.title, 'title', random),
     topics = assign(pairs, input.topics, 'topics', random),
-    plan = times(pairs, input.schedule, now);
+    plan = times(pairs, input.schedule, now), nativePlan = options.nativePlans(pairs, input.nativeSchedule, now);
   return pairs.map((pair, index) => {
     const video = videos.find((v) => v.id === pair.videoId),
       account = accounts.find((a) => a.id === pair.accountId);
@@ -232,9 +233,10 @@ function generate(input, videos, accounts, random, now = Date.now()) {
         override.location ||
           input.locations?.[pair.key] ||
           input.locations?.[pair.videoId] ||
+          input.locations?.[pair.accountId] ||
           input.location || { mode: 'none' },
       ),
-      nativeSchedule: input.nativeSchedule || null,
+      nativeSchedule: Object.hasOwn(override, 'nativeSchedule') ? structuredClone(override.nativeSchedule) : nativePlan[index],
       minIntervalMs: (input.schedule?.intervalMinutes ?? 10) * 60000,
       plannedAt: Number.isFinite(override.plannedAt)
         ? override.plannedAt
