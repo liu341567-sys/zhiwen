@@ -6,6 +6,7 @@ const { DeveloperStore, compare, redact, scrub } = require('./data'),
   { reportData, filesFor, zip } = require('./report');
 const { PublishingAssistant } = require('./assistant');
 const { REPORT_BUDGET, retainEvidence, sampleSignature } = require('./evidence');
+const { packedReport } = require('./codec');
 class DeveloperService {
   constructor({
     directory,
@@ -146,7 +147,7 @@ class DeveloperService {
     this.report.revision = (this.report.revision || 0) + 1;
     const retained = retainEvidence(this.report);
     if (retained.full) this.pauseForCapacity();
-    this.store.save(this.report);
+    this.store.save(this.report, retained.full ? undefined : retained);
     this.changed();
   }
   pauseForCapacity() {
@@ -189,6 +190,7 @@ class DeveloperService {
     this.screenshotEnabled = this.report.options.screenshots;
     this.lastSample = null;
     this.lastError = null;
+    this.coalescingStep = null;
     await this.poll(true);
     return this.state();
   }
@@ -336,19 +338,27 @@ class DeveloperService {
     )
       return;
     if (!event.target || event.target.sensitive) return;
+    // A file input emits both input and change for one selection. Only the
+    // upload/change is meaningful, and it contains the safe file metadata.
+    if (event.type === 'input' && event.target.attributes?.type === 'file') return;
+    if (event.type === 'scroll' && event.target.visible === false) return;
     if (JSON.stringify(event).length > 50000) return;
     const safe = scrub(event);
     delete safe.note;
     const last = this.report.steps.at(-1);
     if (
-      last &&
+      last && last === this.coalescingStep &&
       ['input', 'scroll'].includes(safe.type) &&
       last.type === safe.type &&
       last.frame === frame &&
       last.target?.selector === safe.target?.selector &&
-      safe.time - last.time < 500
+      JSON.stringify(last.target?.roots || []) === JSON.stringify(safe.target?.roots || []) &&
+      typeof safe.target?.selector === 'string' &&
+      safe.time >= (last.lastEventAt || last.time) &&
+      safe.time - (last.lastEventAt || last.time) < (safe.type === 'input' ? 2000 : 500)
     ) {
-      last.time = safe.time;
+      last.lastEventAt = safe.lastEventAt || safe.time;
+      last.eventCount = (last.eventCount || 1) + (safe.eventCount || 1);
       last.target = safe.target;
       last.afterId = null;
       delete last.diff;
@@ -357,7 +367,7 @@ class DeveloperService {
         this.warn('已达 600 步上限，录制已自动暂停。');
         this.report.status = 'paused';
         this.configure().catch(() => {});
-      } else
+      } else {
         this.report.steps.push({
           id: randomUUID(),
           ...safe,
@@ -367,6 +377,8 @@ class DeveloperService {
           note: '',
           inputRedacted: true,
         });
+        this.coalescingStep = this.report.steps.at(-1);
+      }
     }
     this.save();
   }
@@ -602,6 +614,7 @@ class DeveloperService {
         if (['recording', 'paused'].includes(this.report?.status))
           throw new Error('当前已有录制');
         this.report.status = 'recording';
+        this.coalescingStep = null;
         this.report.endedAt = null;
         await this.poll(true);
         await this.configure();
@@ -609,6 +622,7 @@ class DeveloperService {
         return this.state();
       case 'pause':
         this.report.status = 'paused';
+        this.coalescingStep = null;
         await this.configure();
         this.save();
         return this.state();
@@ -618,6 +632,7 @@ class DeveloperService {
         if (this.report.capacityPaused)
           throw new Error('资料已达到容量上限，请结束导出后新建记录');
         this.report.status = 'recording';
+        this.coalescingStep = null;
         await this.configure();
         this.save();
         return this.state();
@@ -755,7 +770,7 @@ class DeveloperService {
         if (!this.report) throw new Error('请先连接环境或加载报告');
         this.report.reviewedRevision = this.report.revision;
         this.store.save(this.report);
-        return reportData(this.report, this.technical);
+        return packedReport(reportData(this.report, this.technical)).data;
       default:
         throw new Error('未知的开发者工具操作');
     }

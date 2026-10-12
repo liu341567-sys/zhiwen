@@ -1,4 +1,5 @@
 'use strict';
+const { packedReport, EXPANDED_BUDGET } = require('./codec');
 const REPORT_BUDGET = 22 * 1024 * 1024;
 
 function referencedSnapshots(report) {
@@ -20,8 +21,8 @@ function referencedSnapshots(report) {
 function retainEvidence(report, budget = REPORT_BUDGET) {
   const protectedIds = referencedSnapshots(report);
   const ambient = report.snapshots.filter((s) => !protectedIds.has(s.id));
-  let bytes = Buffer.byteLength(JSON.stringify(report)), removed = 0;
-  while (ambient.length && (ambient.length > 16 || bytes > budget)) {
+  let packed = packedReport(report, true), removed = 0;
+  while (ambient.length && (ambient.length > 16 || packed.bytes > budget || packed.expandedBytes > EXPANDED_BUDGET)) {
     const obsolete = ambient.shift();
     report.snapshots = report.snapshots.filter((s) => s.id !== obsolete.id);
     for (const s of report.snapshots) {
@@ -31,9 +32,9 @@ function retainEvidence(report, budget = REPORT_BUDGET) {
       }
     }
     removed++;
-    bytes = Buffer.byteLength(JSON.stringify(report));
+    packed = packedReport(report, true);
   }
-  return { bytes, removed, full: bytes > budget };
+  return { ...packed, removed, full: packed.bytes > budget || packed.expandedBytes > EXPANDED_BUDGET };
 }
 
 function sampleSignature(frames) {

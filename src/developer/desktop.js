@@ -9,6 +9,7 @@ const {
 const path = require('node:path'),
   fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
+const { displayState } = require('./codec');
 function installDeveloperDesktop({
   service,
   manager,
@@ -195,7 +196,7 @@ function installDeveloperDesktop({
         return { saved: true };
       });
     }
-    return service.serial(() => service.command(command, input));
+    return displayState(await service.serial(() => service.command(command, input)));
   });
   return { open, notify, close: () => window?.close() };
 }

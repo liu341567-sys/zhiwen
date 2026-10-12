@@ -301,6 +301,10 @@ async function run(scale, origin) {
     await cmd('refresh');
     await until(async () => (await state()).report.steps.every((s) => s.beforeId && s.afterId), 'late event snapshot associations');
     let recorded = (await state()).report;
+    check(`developer-${scale}: historical IPC snapshots retain metadata while full comparisons stay in the original service`, () => {
+      assert.ok(recorded.snapshots.at(-1).frames[0].nodes.length);
+      assert.ok(recorded.snapshots.slice(0, -1).every((s) => s.frames.every((f) => !f.nodes && f.nodesDeferred)));
+    });
     check(`developer-${scale}: nested buttons and official candidate rows have readable context without private descendant text`, () => {
       const cover = recorded.steps.find((s) => s.target?.context?.ancestors?.some((a) => a.attributes.id === 'nested-cover'));
       assert.equal(cover.target.context.ancestors[0].semantic.name, '保存封面');
@@ -353,6 +357,21 @@ async function run(scale, origin) {
           comparison.changes.some((c) => c.after?.attributes.id === 'dynamic'),
         ),
     );
+    await account.locator('#title').fill('coalesced-private');
+    await cmd('refresh');
+    const firstInput = (await state()).report.steps.at(-1);
+    await pause(650);
+    await account.locator('#title').pressSequentially('xyz', { delay: 40 });
+    await cmd('refresh');
+    const continuedInput = (await state()).report.steps.at(-1);
+    check(`developer-${scale}: real typing across polls coalesces without losing its baseline and file selection has one upload event`, () => {
+      assert.equal(continuedInput.id, firstInput.id);
+      assert.equal(continuedInput.beforeId, firstInput.beforeId);
+      assert.equal(continuedInput.time, firstInput.time);
+      assert.ok(continuedInput.eventCount >= 4 && continuedInput.lastEventAt > continuedInput.time && continuedInput.afterId);
+      assert.ok(!recorded.steps.some((s) => s.type === 'input' && s.target?.attributes.type === 'file'));
+      assert.ok(!JSON.stringify(continuedInput).includes('coalesced-private'));
+    });
     await cmd('pause');
     const pausedCount = (await state()).report.steps.length;
     await account.locator('#submit').click();
@@ -476,6 +495,9 @@ async function run(scale, origin) {
       `developer-${scale}: reviewed local exports associate snapshots and images and omit account ID`,
       () => {
         assert.equal(exported.accountId, undefined);
+        assert.equal(exported.domEncoding, 'node-pool-v1');
+        const decoded = require('../src/developer/codec').unpackReport(exported);
+        assert.ok(decoded.snapshots.at(-1).frames[0].nodes.length);
         assert.equal(
           exported.screenshots[0].file,
           'screenshots/' + shot.id + '.png',

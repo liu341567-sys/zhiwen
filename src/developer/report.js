@@ -1,6 +1,7 @@
 'use strict';
 const { scrub, compare } = require('./data');
 const { evidenceHealth } = require('./evidence');
+const { packedReport } = require('./codec');
 const { deflateRawSync } = require('node:zlib');
 const html = (value) =>
   String(value ?? '').replace(
@@ -53,7 +54,7 @@ function reportData(report, technical) {
   return data;
 }
 function filesFor(report, technical) {
-  const d = reportData(report, technical),
+  const d = packedReport(reportData(report, technical)).data,
     json = JSON.stringify(d, null, 2);
   const md = [
     '# 栖页网页调试报告',
@@ -92,6 +93,7 @@ function filesFor(report, technical) {
     md.push(
       `### 第 ${s.sequence} 步 · ${s.type}`,
       `时间：${new Date(s.time).toISOString()} · 框架：${s.frame || 'main'}`,
+      ...(s.eventCount > 1 ? [`连续操作合并：${s.eventCount} 次 · 结束：${new Date(s.lastEventAt).toISOString()}`] : []),
       `说明：${s.note || '无'}`,
       `控件：${s.target?.semantic?.name || s.target?.context?.text || s.target?.text || s.target?.semantic?.label || '无文字 / 输入内容已隐藏'}`,
       `所属区域：${JSON.stringify(s.target?.context?.ancestors || [])}`,
@@ -110,11 +112,11 @@ function filesFor(report, technical) {
   md.push(
     '',
     '## 阅读索引',
-    '详细 DOM、属性、Shadow 根路径、定位建议和前后差异见 report.json。步骤 diff.differenceIndex 关联 differences 数组，同一前后快照的详细变化只保存一份。evidenceHealth 标记截断与缺失，不能把缺失快照当成已验证结果。定位器必须结合 frame 和 roots 使用；位置不是执行坐标。',
+    '详细 DOM、属性、Shadow 根路径、定位建议和前后差异见 report.json。schemaVersion=2、domEncoding=node-pool-v1：每个快照 frames[].nodeRefs 中的数字依次关联全局 domNodes 数组（从 0 开始）；展开方法是 frame.nodes = frame.nodeRefs.map((i, j) => ({...report.domNodes[i], ...frame.nodeStates[j]}))。该共享是无损的，顺序、框架、定位路径与状态均保留，不可把索引当成元素身份。步骤 diff.differenceIndex 关联 differences 数组，同一前后快照的详细变化只保存一份。evidenceHealth 标记截断与缺失，不能把缺失快照当成已验证结果。定位器必须结合 frame 和 roots 使用；位置不是执行坐标。连续输入保留首末时间、eventCount 与最终后快照，点击、话题结束空格、选择、上传、跳转及模块标记不与输入合并。',
     '',
     ...d.warnings.map((s) => '- ' + s),
   );
-  const body = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>栖页调试报告</title><style>body{font:15px/1.6 system-ui;color:#18253b;background:#f6f8fc;margin:32px}article{max-width:1200px;margin:auto}section{background:white;padding:20px;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%}summary{cursor:pointer;font-weight:600}</style><article><h1>栖页网页调试报告</h1><p>${html(d.name)} · ${html(d.status)}</p><p>输入值和凭据均已排除；定位器请结合框架与 Shadow 根路径。</p>${d.assistance ? `<section><h2>录制用途与问题说明</h2><pre>${html(JSON.stringify(d.assistance, null, 2))}</pre></section>` : ''}${d.steps.map((s) => `<section><h2>${s.sequence}. ${html(s.type)}</h2><p>${html(s.note)}</p><pre>${html(JSON.stringify(s, null, 2))}</pre></section>`).join('')}${d.snapshots.map((s) => `<details><summary>结构快照 ${html(s.id)} · ${html(new Date(s.time).toISOString())}</summary><pre>${html(JSON.stringify(s, null, 2))}</pre></details>`).join('')}<h2>操作前后变化</h2>${d.differences.map((difference, i) => `<details><summary>变化 ${i} · ${html(difference.total)} 处</summary><pre>${html(JSON.stringify(difference, null, 2))}</pre></details>`).join('')}<h2>脚本执行</h2><pre>${html(JSON.stringify(d.scripts, null, 2))}</pre>${report.screenshots
+  const body = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>栖页调试报告</title><style>body{font:15px/1.6 system-ui;color:#18253b;background:#f6f8fc;margin:32px}article{max-width:1200px;margin:auto}section{background:white;padding:20px;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%}summary{cursor:pointer;font-weight:600}</style><article><h1>栖页网页调试报告</h1><p>${html(d.name)} · ${html(d.status)}</p><p>输入值和凭据均已排除；定位器请结合框架与 Shadow 根路径。</p>${d.assistance ? `<section><h2>录制用途与问题说明</h2><pre>${html(JSON.stringify(d.assistance, null, 2))}</pre></section>` : ''}${d.steps.map((s) => `<section><h2>${s.sequence}. ${html(s.type)}</h2><p>${html(s.note)}</p><pre>${html(JSON.stringify(s, null, 2))}</pre></section>`).join('')}${d.snapshots.map((s) => `<details><summary>结构快照 ${html(s.id)} · ${html(new Date(s.time).toISOString())}</summary><pre>${html(JSON.stringify(s, null, 2))}</pre></details>`).join('')}<details><summary>共享元素词典 · ${d.domNodes.length} 个元素版本</summary><p>快照 frame.nodeRefs 数字按顺序指向以下 domNodes 数组，索引从 0 开始。id 与 rect 的逐快照信息位于同位置的 nodeStates；复用不改变快照内容。</p><pre>${html(JSON.stringify(d.domNodes, null, 2))}</pre></details><h2>操作前后变化</h2>${d.differences.map((difference, i) => `<details><summary>变化 ${i} · ${html(difference.total)} 处</summary><pre>${html(JSON.stringify(difference, null, 2))}</pre></details>`).join('')}<h2>脚本执行</h2><pre>${html(JSON.stringify(d.scripts, null, 2))}</pre>${report.screenshots
     .filter((s) => s.reviewed)
     .map(
       (s) =>

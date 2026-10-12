@@ -433,6 +433,7 @@ function pageTool(input) {
                 e.matches('select,input[type=checkbox],input[type=radio]')
               ? 'select'
               : event.type;
+      if (type === 'input' && e.matches('input[type=file]')) return;
       const target = describe(e);
       if (!target) return;
       // A clicked child can have no direct text; retain its owning control and
@@ -469,9 +470,10 @@ function pageTool(input) {
         ['input', 'scroll'].includes(type) &&
         last.type === type &&
         last.target.id === target.id &&
-        item.time - last.time < 500
+        item.time - (last.lastEventAt || last.time) < (type === 'input' ? 2000 : 500)
       )
-        state.events[state.events.length - 1] = item;
+        state.events[state.events.length - 1] = { ...item, time: last.time,
+          lastEventAt: item.time, eventCount: (last.eventCount || 1) + 1 };
       else state.events.push(item);
       if (state.events.length > 200) {
         state.events.shift();

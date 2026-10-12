@@ -18,6 +18,7 @@ const { DeveloperService } = require('../src/developer/service');
 const { Page } = require('../src/publishing/adapters/page');
 const { PublishingService } = require('../src/publishing/service');
 const { retainEvidence, evidenceHealth, sampleSignature } = require('../src/developer/evidence');
+const { packedReport, unpackReport, displayState } = require('../src/developer/codec');
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiye-developer-unit-'));
@@ -29,6 +30,63 @@ function fixture(t) {
     report: store.create(randomUUID(), { exclude: [], includeText: true }),
   };
 }
+test('shared DOM storage reconstructs exact snapshots, geometry, frame/shadow paths and changing controls without altering old evidence', () => {
+  const nodes = Array.from({ length: 600 }, (_, id) => ({ id, tag: 'input',
+    selector: 'html > body > '.repeat(40) + `input:nth-of-type(${id + 1})`,
+    roots: ['#shadow-host'], attributes: { type: 'checkbox' },
+    semantic: { label: `选项 ${id}` }, controlState: { checked: false },
+    rect: { x: 20, y: id * 40, width: 120, height: 32 }, enabled: true, visible: true }));
+  const snapshots = Array.from({ length: 85 }, (_, j) => ({ id: randomUUID(), time: j,
+    frames: [{ key: 'main', url: 'https://example.com/', nodes: nodes.map((n) => ({ ...n,
+      rect: { ...n.rect, y: n.rect.y - j * 10 }, controlState: { checked: j > 60 && n.id === 1 } })) },
+    { key: 'frame-1', nodes: [nodes[0]] }] }));
+  const report = { snapshots, steps: snapshots.map((s) => ({ id: randomUUID(), beforeId: s.id, afterId: s.id })), scripts: [], screenshots: [] };
+  const original = JSON.stringify(report), result = retainEvidence(report);
+  assert.equal(result.full, false); assert.equal(report.snapshots.length, 85);
+  assert.ok(result.bytes < Buffer.byteLength(original) / 5);
+  assert.deepEqual(unpackReport(JSON.parse(result.serialized)).snapshots, JSON.parse(original).snapshots);
+  assert.equal(report.snapshots[0].frames[0].nodes[1].controlState.checked, false);
+  assert.equal(report.snapshots.at(-1).frames[0].nodes[1].controlState.checked, true);
+  assert.throws(() => { report.snapshots[0].frames[0].nodes[1].controlState.checked = true; }, TypeError);
+  assert.deepEqual(evidenceHealth(report).missingStepSnapshots, []);
+});
+test('sharing discards unused dictionary entries and rejects broken indices or excessive readable expansion', () => {
+  const report = { snapshots: [{ id: 'one', frames: [{ nodes: [{ tag: 'button', selector: '#obsolete' }] }] },
+    { id: 'two', frames: [{ nodes: [{ tag: 'button', selector: '#current' }] }] }] };
+  assert.equal(packedReport(report).data.domNodes.length, 2);
+  report.snapshots.shift(); const packed = packedReport(report).data;
+  assert.equal(packed.domNodes.length, 1); assert.equal(packed.domNodes[0].selector, '#current');
+  for (const ref of [-1, 5, 0.5, '0']) {
+    const invalid = structuredClone(packed); invalid.snapshots[0].frames[0].nodeRefs = [ref];
+    assert.throws(() => unpackReport(invalid), /索引无效/);
+  }
+  const invalidState = structuredClone(packed); invalidState.snapshots[0].frames[0].nodeStates = [{ text: 'overridden' }];
+  assert.throws(() => unpackReport(invalidState), /状态无效/);
+  const expanded = { schemaVersion: 2, domEncoding: 'node-pool-v1', domNodes: [{ text: 'x'.repeat(2000) }],
+    snapshots: [{ frames: [{ nodeRefs: Array(100000).fill(0) }] }] };
+  assert.throws(() => unpackReport(expanded), /安全容量/);
+});
+test('version 1 SQLite rows and shared version 2 rows both survive restart and report deletion', (t) => {
+  const { store, report } = fixture(t);
+  const legacy = { ...report, id: randomUUID(), snapshots: [{ id: randomUUID(), frames: [{ key: 'main', nodes: [{ tag: 'button', text: '封面' }] }] }] };
+  store.db.prepare('INSERT INTO reports VALUES(?,?,?)').run(legacy.id, Date.now(), JSON.stringify(legacy));
+  assert.deepEqual(store.get(legacy.id), legacy); store.save(legacy);
+  const stored = JSON.parse(store.db.prepare('SELECT data FROM reports WHERE id=?').get(legacy.id).data);
+  assert.equal(stored.schemaVersion, 2); assert.equal(stored.domEncoding, 'node-pool-v1');
+  assert.deepEqual(store.get(legacy.id), legacy); store.remove(legacy.id);
+  assert.ok(!store.list().some((row) => row.id === legacy.id));
+});
+test('window state sends only the current DOM while keeping all historical IDs and full comparison evidence in the service', () => {
+  const node = { tag: 'button', selector: '#cover', enabled: false },
+    report = { snapshots: [{ id: 'a', frames: [{ key: 'main', nodes: [node] }] },
+      { id: 'b', frames: [{ key: 'main', nodes: [{ ...node, enabled: true }] }] }], steps: [] };
+  const visible = displayState({ report, profiles: [] });
+  assert.equal(visible.report.snapshots[0].frames[0].nodes, undefined);
+  assert.equal(visible.report.snapshots[0].frames[0].nodeCount, 1);
+  assert.equal(visible.report.snapshots.at(-1).frames[0].nodes[0].enabled, true);
+  assert.equal(report.snapshots[0].frames[0].nodes[0].enabled, false);
+  assert.equal(compare(...report.snapshots).changes[0].kind, 'changed');
+});
 test('report redaction removes nested credentials, DOM HTML, values, URLs and Windows paths but preserves graph IDs', () => {
   const id = randomUUID();
   const d = scrub({
@@ -557,6 +615,50 @@ test('late and coalesced recorder events get a fresh after snapshot even when th
   await s.poll();
   assert.ok(s.report.steps.at(-1).afterId);
 });
+test('continuous input retains original timing and baseline across polls but never merges click, space, roots or pause boundaries', async (t) => {
+  const f = assistantFixture(t), s = f.service;
+  await s.attach(f.account); await s.command('start');
+  const time = Date.now(), target = { selector: '#title', roots: ['#editor'] };
+  s.pageEvent({ type: 'input', time, target }); await s.poll();
+  const original = s.report.steps.at(-1), baseline = original.beforeId;
+  s.pageEvent({ type: 'input', time: time + 1300, target }); await s.poll();
+  assert.equal(s.report.steps.at(-1).id, original.id);
+  assert.equal(original.time, time); assert.equal(original.lastEventAt, time + 1300);
+  assert.equal(original.eventCount, 2); assert.equal(original.beforeId, baseline); assert.ok(original.afterId);
+  s.pageEvent({ type: 'topic-space', time: time + 1400, target });
+  s.pageEvent({ type: 'input', time: time + 1500, target });
+  assert.notEqual(s.report.steps.at(-1).id, original.id);
+  const next = s.report.steps.at(-1);
+  s.pageEvent({ type: 'input', time: time + 1600, target: { ...target, roots: ['#other-editor'] } });
+  assert.notEqual(s.report.steps.at(-1).id, next.id);
+  await s.command('pause'); await s.command('resume');
+  const previous = s.report.steps.at(-1);
+  s.pageEvent({ type: 'input', time: time + 1700, target: { ...target, roots: ['#other-editor'] } });
+  assert.notEqual(s.report.steps.at(-1).id, previous.id);
+  const count = s.report.steps.length;
+  s.pageEvent({ type: 'input', time: time + 1800, target: { selector: '#file', attributes: { type: 'file' } } });
+  s.pageEvent({ type: 'scroll', time: time + 1800, target: { selector: '#hidden-frame', visible: false } });
+  assert.equal(s.report.steps.length, count);
+  s.pageEvent({ type: 'upload', time: time + 1801, target: { selector: '#file', attributes: { type: 'file' }, file: { count: 1 } } });
+  assert.equal(s.report.steps.length, count + 1);
+});
+test('shared JSON and HTML exports remain self-describing, fully reconstructable and scrubbed before pooling', (t) => {
+  const { report } = fixture(t), id = randomUUID();
+  report.snapshots = [{ id, time: Date.now(), frames: [{ key: 'main', nodes: [{ tag: 'input', id: 1,
+    selector: '#title', rect: { x: 1, y: 2 }, value: 'private-input', text: 'user@example.com' }] }] }];
+  report.steps = [{ id: randomUUID(), time: Date.now(), type: 'input', eventCount: 3,
+    lastEventAt: Date.now(), beforeId: id, afterId: id }];
+  const files = filesFor(report, {}), json = files.find((f) => f.name === 'report.json').data.toString(),
+    exported = JSON.parse(json), readable = unpackReport(exported);
+  assert.equal(exported.schemaVersion, 2); assert.equal(exported.domEncoding, 'node-pool-v1');
+  assert.equal(exported.snapshots[0].frames[0].nodeRefs[0], 0);
+  assert.equal(readable.snapshots[0].frames[0].nodes[0].id, 1);
+  assert.deepEqual(readable.snapshots[0].frames[0].nodes[0].rect, { x: 1, y: 2 });
+  assert.ok(!json.includes('private-input') && !json.includes('user@example.com'));
+  assert.ok(files.find((f) => f.name === 'report.md').data.toString().includes('frame.nodeStates[j]'));
+  assert.ok(files.find((f) => f.name === 'report.md').data.toString().includes('连续操作合并：3 次'));
+  assert.ok(files.find((f) => f.name === 'report.html').data.toString().includes('共享元素词典'));
+});
 test('an oversized new page sample pauses recording without deleting linked earlier evidence or claiming a successful after sample', async (t) => {
   const f = assistantFixture(t), service = f.service;
   await service.attach(f.account);
@@ -564,8 +666,8 @@ test('an oversized new page sample pauses recording without deleting linked earl
   const before = service.report.snapshots.at(-1).id;
   service.pageEvent({ type: 'click', time: Date.now(), target: { selector: '#schedule' } });
   service.executeFrame = async () => ({ url: 'https://example.com/', events: [],
-    nodes: Array.from({ length: 2000 }, (_, i) => ({ tag: 'div', selector: 'div > '.repeat(600), text: '页面 '.repeat(1300),
-      attributes: { 'aria-label': '控件 '.repeat(1300) }, id: i })) });
+    nodes: Array.from({ length: 2000 }, (_, i) => ({ tag: 'div', selector: `#unique-${i} > ` + 'div > '.repeat(600), text: `${i} ` + '页面 '.repeat(1300),
+      attributes: { 'aria-label': `${i} ` + '控件 '.repeat(1300) }, id: i })) });
   await service.poll(true);
   assert.equal(service.report.status, 'paused');
   assert.equal(service.report.capacityPaused, true);

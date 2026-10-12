@@ -1,4 +1,5 @@
 'use strict';
+const { packedReport, unpackReport, EXPANDED_STORAGE_LIMIT } = require('./codec');
 const fs = require('node:fs'),
   path = require('node:path'),
   { randomUUID } = require('node:crypto'),
@@ -167,7 +168,7 @@ class DeveloperStore {
     if (typeof id !== 'string') throw new Error('报告标识无效');
     const row = this.db.prepare('SELECT data FROM reports WHERE id=?').get(id);
     if (!row) throw new Error('报告不存在');
-    return JSON.parse(row.data);
+    return unpackReport(JSON.parse(row.data));
   }
   create(accountId, options = {}) {
     const d = {
@@ -190,11 +191,11 @@ class DeveloperStore {
     this.save(d);
     return d;
   }
-  save(d) {
+  save(d, packed) {
     if (!d || typeof d.id !== 'string') throw new Error('报告格式无效');
-    const str = JSON.stringify(d);
-    if (Buffer.byteLength(str) > 24 * 1024 * 1024)
-      throw new Error('报告已达 24 MB，请结束并新建录制');
+    const encoded = packed || packedReport(d), str = encoded.serialized;
+    if (encoded.bytes > 24 * 1024 * 1024 || encoded.expandedBytes > EXPANDED_STORAGE_LIMIT)
+      throw new Error('报告已达到安全容量，请结束并新建录制');
     this.db
       .prepare(
         'INSERT INTO reports VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET updated=excluded.updated,data=excluded.data',
