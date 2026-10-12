@@ -9,7 +9,21 @@
 
 使用方法不变：不需要创建发布任务。打开原账号 → 开发 → 录制操作 → 开始 → 真人演示 → 结束并检查 → 保存 ZIP。已有上传及简介资料可复用，后续只需补录未保存的封面设置、地址选择、官方定时，确认设置后即可结束，无需再次提交作品。
 
-本版只改善录制与资料存储，不宣称封面、定位、抖音官方定时已自动适配。Windows 构建与安装验证进行中；发布前会补充验证证据和可用下载链接。
+本版只改善录制与资料存储，不宣称封面、定位、抖音官方定时已自动适配。实际 Windows 构建、安装、重启与原环境恢复已验证通过。
+
+[Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.6/Qiye-Setup-0.3.6-x64.exe) · [解压版 ZIP](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.6/Qiye-0.3.6-x64.zip)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38192315692)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38192990920)均通过，对应 `367702702d112abc6c4f25b5ba2bd035ce9a7830` / `v0.3.6`：137 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、93 项发布专项及 81 项开发者工具原生窗口分组检查。DPR 1 / 1.25 / 1.5 下验证跨采样真实键盘输入合并、上传动作去重、历史结构不重复跨窗口传输、共享格式还原，以及既有无任务录制、暂停/继续、模块标记、元素定位、隐私遮盖和导出。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。窗口测试使用本地网页夹具，不能代替真实已登录抖音全流程验收。
+
+发布于 2026-10-12 09:54:23（北京时间）。发布页匿名访问成功；安装包和 ZIP 完整下载，大小与 SHA256 均对照 GitHub 摘要及校验文件验证通过。包内版本与运行时代码和验证提交一致（Windows CRLF），包括新增 codec 模块；品牌资产、媒体工具和许可齐全，不含用户账号清单。证据保存在 `.cache/release-0.3.6/ci-verification.json`、`verification.json` 与本地录制/导出测量文件。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-Setup-0.3.6-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.6/Qiye-Setup-0.3.6-x64.exe) | 160728598 | `a5d9c580c92aa7b2f8c84dece0fec993c3b86941c11f681ef358a3d8ab5ceb5d` |
+| [Qiye-0.3.6-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.6/Qiye-0.3.6-x64.zip) | 217864635 | `c96d3c9f0acf97aa9ad92e8543ba089260551213afea506abb2acf6155c0469b` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.6/SHA256SUMS.txt) | 178 | `2de5b2124cc70307282eb94c38e5198bfb27f028c3eb0a9e5a4aea5790609662` |
+
+本地对用户此前已导出的脱敏资料做无损往返核验：原页面资料紧凑 JSON 为 23,320,091 字节，共享后 7,094,951 字节。20 份快照重复扩展至 100 份关联样本后，共享存储 11,044,669 字节，未触发容量暂停且无关联缺失；此为存储重放，不是新的网页操作或真实发布验收。原导出 ZIP 1,942,219 字节，按新格式重新导出 749,103 字节，22 步与20份快照全部保留；原容量暂停警告仍保留，不假造未采集的后续操作。真实资料只在本地分析，未上传至仓库或发布附件。
 
 # 栖页 0.3.5 · 操作录制证据保留与页面采集修复
 
