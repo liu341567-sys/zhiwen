@@ -376,7 +376,8 @@ async function main() {
     });
     await shell.locator('button[data-module="publish"]').click();
     await shell.locator('#publishing-module').waitFor({ state: 'visible' });
-    assert.equal(await shell.locator('[data-publish-page]').count(), 9);
+    assert.equal(await shell.locator('[data-publish-page]').count(), 7);
+    assert.equal(await shell.locator('[data-publish-page="create"],[data-publish-page="plan"]').count(), 0);
     assert.equal(await shell.locator('.publish-menu-group').count(), 3);
     const ffmpeg = path.join(path.dirname(executable), 'resources', 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
     const ffprobe = path.join(path.dirname(executable), 'resources', 'media', 'ffprobe.exe');
