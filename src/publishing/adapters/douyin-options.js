@@ -153,7 +153,10 @@ async function search(page, query) {
   if (s.unavailable || !s.poiRoot) fail('请在此原账号上传后的视频编辑页使用官方位置搜索；未导航或上传占位视频');
   await page.click({ selector: '[data-qiye-poi-root]' });
   await until(page, (s) => s.poiInput);
+  const baseline = randomUUID();
+  await read(page, { action: 'watch', token: baseline });
   await page.fill('[data-qiye-poi-input]', '');
+  await until(page, (s, input) => s.query === '' && s.watch?.token === input.token && s.watch.quietMs >= 800 && !s.loading, { token: baseline }, 20000);
   const token = randomUUID();
   await read(page, { action: 'watch', token });
   await page.fill('[data-qiye-poi-input]', query);

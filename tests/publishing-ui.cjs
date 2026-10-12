@@ -200,6 +200,18 @@ async function run(scale) {
       .nth(0)
       .fill('第一期测试标题');
     await shell.locator('.publish-control textarea').nth(1).fill('#AI #运营');
+    await shell.getByLabel('官方发布方式', { exact: true }).selectOption('at');
+    const officialAt = new Date(Date.now() + 3 * 86400000 + 8 * 3600000).toISOString().slice(0, 10) + 'T12:21';
+    await shell.getByLabel('官方发布时间（北京时间）', { exact: true }).fill(officialAt);
+    await shell.getByLabel('同一账号官方定时间隔（分钟）', { exact: true }).fill('17');
+    await shell.getByLabel('官方发布时间（北京时间）', { exact: true }).fill(officialAt.replace('12:21', '13:29'));
+    await shell.getByRole('button', { name: '保存草稿', exact: true }).click();
+    const officialDraft = (await command('state')).drafts.find((d) => d.id === 'current');
+    assert.equal(officialDraft.data.input.nativeSchedule.intervalMinutes, 17);
+    assert.equal(officialDraft.data.input.nativeSchedule.at, officialAt.replace('12:21', '13:29'));
+    assert.equal(officialDraft.data.input.nativeSchedule.timezone, 'Asia/Shanghai');
+    await shell.getByLabel('官方发布方式', { exact: true }).selectOption('none');
+    check(`publishing-${scale}: official schedule draft retains interval when datetime changes and can return to local execution mode`, () => assert.ok(true));
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     assert.equal(await shell.locator('.publish-table tbody tr').count(), 2);
     await shell
@@ -263,6 +275,8 @@ async function run(scale) {
     await options.getByLabel('指定帧时间（秒）', { exact: true }).fill('0.5');
     await options.getByLabel('发布定位').selectOption('specified');
     await options.getByLabel('平台位置名称', { exact: true }).fill('上海市');
+    await options.getByLabel('官方发布方式', { exact: true }).selectOption('at');
+    await options.getByLabel('官方发布时间（北京时间）', { exact: true }).fill(officialAt);
     await options.getByLabel('授权自动提交', { exact: true }).check();
     await options.getByRole('button', { name: '关闭', exact: true }).click();
     await settingsButton().click();
@@ -273,6 +287,7 @@ async function run(scale) {
     );
     assert.equal(await options.getByLabel('封面方式').inputValue(), 'first');
     assert.equal(await options.getByLabel('发布定位').inputValue(), 'none');
+    assert.equal(await options.getByLabel('官方发布方式').inputValue(), 'none');
     await options.getByRole('button', { name: '关闭', exact: true }).click();
     check(
       `publishing-${scale}: closing unsaved task settings discards cover, location and submission authorization changes`,
