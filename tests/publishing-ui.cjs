@@ -1106,7 +1106,7 @@ async function run(scale) {
     assert.deepEqual(sequenceStats, {
       uploads: 2,
       submissions: 2,
-      files: [path.basename(source), path.basename(secondSource)],
+      files: [path.basename(firstSequential.video.path), path.basename(secondSource)],
     });
     await app.evaluate(
       async ({ webContents }, id) =>
