@@ -161,6 +161,7 @@ async function run(scale) {
     await shell.getByRole('button',{name:'保存草稿',exact:true}).click();
     assert.equal((await command('state')).drafts.find(d=>d.id==='current').data.input.nativeSchedule.mode,'cycle');
     await shell.getByRole('button',{name:'下一步',exact:true}).click();
+    await until(async () => (await command('state')).drafts.some(d => d.id.startsWith('preview:')));
     const compiled=(await command('state')).drafts.find(d=>d.id.startsWith('preview:')).data.rows;
     assert.deepEqual(compiled.map(r=>r.nativeSchedule.at),[expected.at,expected.at.slice(0,10)+'T14:33']);assert.ok(compiled.every(r=>r.accountId===b.id));
     await shell.getByRole('button',{name:'确认生成并执行',exact:true}).click();
