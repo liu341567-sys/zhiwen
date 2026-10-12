@@ -11,9 +11,9 @@ const check = (label) => { checks++; console.log('✓ ' + label); };
 function fixture(account, settings = {}) {
   return `<!doctype html><meta charset="utf-8"><style>
     body{font:14px sans-serif;margin:24px;min-height:700px}button,label{padding:8px;cursor:pointer}input,textarea{padding:8px}
-    #poi{width:360px;min-height:36px;background:#eef4ff;padding:8px}.semi-select-dropdown{background:white;border:1px solid #888;width:360px}
+    #poi{width:min(360px,calc(100vw - 64px));min-height:36px;background:#eef4ff;padding:8px}.semi-select-dropdown{background:white;border:1px solid #888;width:min(360px,calc(100vw - 64px))}
     [role=option]{padding:8px;cursor:pointer}.address-demo{font-size:12px;color:#555}
-    .semi-datepicker-month-grid{position:fixed;top:40px;left:60px;width:360px;background:white;border:1px solid #888;padding:12px;z-index:10}
+    .semi-datepicker-month-grid{box-sizing:border-box;position:fixed;top:30px;left:18px;width:min(360px,calc(100vw - 36px));background:white;border:1px solid #888;padding:12px;z-index:10}
     #days{display:grid;grid-template-columns:repeat(7,1fr)}.semi-datepicker-day{padding:5px;cursor:pointer;text-align:center}.semi-datepicker-day-disabled{color:#bbb}
     .semi-datepicker-navigation{display:flex;justify-content:space-between}#wheels{display:flex;gap:30px}.semi-scrolllist-list-outer{height:70px;overflow-y:scroll;width:100px}
     ul{margin:0;padding:0;list-style:none}li{height:25px;line-height:25px;cursor:pointer}.semi-scrolllist-item-selected{background:#eef4ff}
