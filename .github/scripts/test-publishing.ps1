@@ -1,8 +1,13 @@
+param([switch]$OptionsOnly)
 $ErrorActionPreference = 'Continue'
 $logDirectory = 'test-results/ui'
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 $logPath = Join-Path $logDirectory 'windows-publishing.log'
-& npm run test:publishing 2>&1 | Tee-Object -FilePath $logPath
+if ($OptionsOnly) {
+  & node tests/publishing-options.cjs 2>&1 | Tee-Object -FilePath $logPath
+} else {
+  & npm run test:publishing 2>&1 | Tee-Object -FilePath $logPath
+}
 $testExitCode = $LASTEXITCODE
 if ($testExitCode -eq 0) {
   $summaries = (Get-Content -LiteralPath $logPath | Where-Object {

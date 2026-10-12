@@ -114,6 +114,9 @@ globalThis.__publishingOptionsFixture = async (accountId, input = {}) => {
     if (input.intervene) await view.webContents.executeJavaScript(`document.querySelector('[data-qiye-poi-root]').dispatchEvent(new MouseEvent('click',{bubbles:true}));void 0;`);
     await options.verify(page, native, location);
     return { ok: true, location, native, logs, checkpoint, state: await options.read(page) };
-  } catch (error) { return { ok: false, reason: error.message, manual: !!error.manual, logs, checkpoint }; }
+  } catch (error) {
+    const layout = await view.webContents.executeJavaScriptInIsolatedWorld(2002, [{ code: `({width:innerWidth,height:innerHeight,targets:[...document.querySelectorAll('[data-qiye-option]')].map(e=>{const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {marker:e.dataset.qiyeOption,rect:{x:r.x,y:r.y,width:r.width,height:r.height},hit:hit?{tag:hit.tagName,id:hit.id,class:hit.className}:null}})})` }]).catch(() => null);
+    return { ok: false, reason: error.message, manual: !!error.manual, logs, checkpoint, layout };
+  }
   finally { clearTimeout(timer); await options.cleanup(page); page.detach(); }
 };

@@ -1,0 +1,28 @@
+name: Windows publishing option controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/publishing/adapters/douyin-options.js
+      - src/publishing/adapters/page.js
+      - tests/publishing-options.cjs
+      - tests/publishing-fixture.cjs
+      - .github/workflows/publishing-options.yml
+permissions:
+  contents: read
+jobs:
+  options:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run setup:electron
+      - name: Verify native option controls at all three display scales
+        shell: pwsh
+        run: ./.github/scripts/test-publishing.ps1 -OptionsOnly
