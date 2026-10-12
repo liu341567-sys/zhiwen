@@ -10,7 +10,19 @@
 
 使用：配置参数 → 抖音官方定时 → 选择官方发布时间。定位选“指定位置”，填写名称与完整地址，或在已上传视频的原账号网页中读取候选；任务执行时再次搜索并核实。建议先用一条视频、一个账号和默认封面验证。
 
-Windows 回归与安装包验证进行中；完成后补充真实验证记录及下载链接。测试网页来自录制的控件结构，实际已登录抖音账号的完整发布仍需用户实机验收；平台权限、验证码或控件变化时明确暂停，不模拟设置成功。
+Windows 回归及实际安装、重启、原账号恢复检查通过。测试网页来自录制的控件结构，实际已登录抖音账号的完整发布仍需用户实机验收；平台权限、验证码或控件变化时明确暂停，不模拟设置成功。
+
+[Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.7/Qiye-Setup-0.3.7-x64.exe) · [解压版 ZIP](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.7/Qiye-0.3.7-x64.zip)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38198946774)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38199739498)均通过，对应 `3c7db381924bdc64cac584549a461699def1b96e` / `v0.3.7`：143 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、24 项官方选项与后台原生流程专项，以及 81 项开发者工具检查。DPR 1 / 1.25 / 1.5 下验证不同账号的官方候选、完整地址匹配、候选换序和同名保护、日期/月/重复时间滚轮、延迟分钟更新、账号范围与禁用日期、手动干预、取消与监听释放、官方配置草稿及后台上传到提交闭环。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。网页测试使用本地夹具，不能代替用户已登录抖音账号验收。
+
+发布于 2026-10-12 11:38:15（北京时间）。公开安装包和 ZIP 均已完整下载，大小与 SHA256 对照 GitHub 摘要及校验文件验证；包内版本和代码与验证提交一致，包括官方选项模块，原品牌、媒体工具及许可齐全，不含用户账号或原始录制资料。证据位于 `.cache/release-0.3.7/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-Setup-0.3.7-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.7/Qiye-Setup-0.3.7-x64.exe) | 160734865 | `5fbe840ae10f0ae5e8e4fcb53ae7d27003c7c24a1886345c791717820625e051` |
+| [Qiye-0.3.7-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.7/Qiye-0.3.7-x64.zip) | 217868659 | `796c8ab4bf1af18283ff8be12b266086323223e99dc412f4522840f6f6b5edd1` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.7/SHA256SUMS.txt) | 178 | `0c62ba0784862b73ef92ab956f9c097f96e563c7a02b8d0590fb2c4f7e00bb3c` |
 
 # 栖页 0.3.6 · 完整流程录制容量优化
 
