@@ -621,6 +621,9 @@ class DeveloperService {
         this.save();
         return this.state();
       case 'pause':
+        // Drain the unprivileged child-frame event queue before disabling it.
+        // Otherwise a later resume can combine or misdate pre-pause typing.
+        await this.poll(true);
         this.report.status = 'paused';
         this.coalescingStep = null;
         await this.configure();
