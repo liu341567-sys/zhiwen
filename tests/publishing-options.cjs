@@ -137,7 +137,7 @@ async function run(scale) {
     await shell.getByRole('button',{name:'下一步',exact:true}).click();await shell.getByRole('button',{name:'确认生成并执行',exact:true}).click();
     await shell.locator('.publish-dialog[open]').getByRole('button',{name:'确认生成并执行',exact:true}).click();
     await until(async()=>{const tasks=(await command('state')).tasks;return tasks.length===1&&tasks[0].status==='manual';});
-    const created=(await command('state')).tasks[0];assert.equal(created.checkpoint.preparedMediaReused,true,JSON.stringify(created));assert.equal(created.checkpoint.nativeScheduleVerified.at,expected.at);assert.equal(created.nativeSchedule.at,expected.at);assert.equal(await evaluate(b,'window.uploads'),1);assert.equal(await evaluate(b,'window.submissions'),0);
+    const created=(await command('state')).tasks[0],debug=JSON.stringify({task:created,logs:await command('logs',created.id)});assert.equal(created.checkpoint.preparedMediaReused,true,debug);assert.equal(created.nativeSchedule?.at,expected.at,debug);assert.equal(created.checkpoint.nativeScheduleVerified?.at,expected.at,debug);assert.equal(await evaluate(b,'window.uploads'),1);assert.equal(await evaluate(b,'window.submissions'),0);
     await command('tasks',{ids:[created.id],action:'cancel'});
     check(`options-${scale}: real wizard prepares homepage account, displays official candidates, persists schedule and reuses exact upload while keeping submission review`);
     await assert.rejects(command('location-search',{accountId:b.id,query:'广场',prepareVideoId:preparedVideo.id,requestId:require('node:crypto').randomUUID()}),/未覆盖/);

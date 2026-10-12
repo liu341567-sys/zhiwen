@@ -606,6 +606,7 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       if (state.login || state.challenge || state.error || state.ready) return manual('查询准备页无法安全切换到当前任务上传页，请人工检查');
       context.log('地点查询准备素材与当前任务不同，已打开空白上传页；未提交查询素材');
     }
+    let preparedReused = false;
     let owned = await page.evaluate(
       (id) => document.documentElement.dataset.qiyePublishTask === id,
       task.id,
@@ -615,16 +616,17 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       if (prepared?.consumed) {
         await page.evaluate((id) => { document.documentElement.dataset.qiyePublishTask = id; }, task.id);
         context.checkpoint({ uploadStarted: true, preparedMediaReused: true });
+        preparedReused = true;
         owned = true;
         context.log('已核对并接收地点查询时上传的本任务素材，未重复上传');
       }
     }
     if (!state.ready) {
-      if ((task.checkpoint.uploaded || task.checkpoint.uploadStarted) && !owned)
+      if ((task.checkpoint.uploaded || task.checkpoint.uploadStarted || preparedReused) && !owned)
         return manual(
           '先前上传页面已变化，无法核实当前素材，请人工检查，未重新上传',
         );
-      if (!task.checkpoint.uploaded && !task.checkpoint.uploadStarted) {
+      if (!task.checkpoint.uploaded && !task.checkpoint.uploadStarted && !preparedReused) {
         if (!state.hasUpload)
           return manual('当前发布页上传控件变化或存在多个候选，请人工检查');
         const extension = task.video.format;
@@ -646,7 +648,7 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       if (state.challenge || state.login || state.error)
         return manual(state.error || '上传过程中需要登录 / 验证');
     } else if (
-      !(task.checkpoint.uploaded || task.checkpoint.uploadStarted) ||
+      !(task.checkpoint.uploaded || task.checkpoint.uploadStarted || preparedReused) ||
       !owned
     ) {
       return manual(
