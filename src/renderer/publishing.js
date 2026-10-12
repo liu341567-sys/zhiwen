@@ -1217,29 +1217,31 @@
         field('完整地点地址（同名地点须填写）', 'text', c.address || '', (v) => { c.address = v; onChange(c); }));
       let accountId = forAccount || input.accountIds[0] || '', revision = 0;
       const results = E('div', 'publish-actions');
-      p.append(choice('位置搜索账号', [['', '请选择'], ...data.accounts.filter((a) => a.platformId === 'douyin' && input.accountIds.includes(a.id) && (!forAccount || a.id === forAccount)).map((a) => [a.id, a.name])], accountId,
-        (v) => { accountId = v; revision++; results.replaceChildren(); }),
-        B('读取官方位置候选', async () => {
+      let preparationVideoId = input.videoIds[0] || '';
+      async function queryLocations(prepare = false) {
+        if (prepare && !preparationVideoId) throw new Error('请先选择本次要发布的视频');
           const request = ++revision, query = (c.query || c.label || '').trim(), selectedAccount = accountId;
-          const fingerprint = JSON.stringify([accountId, c.label, c.query, c.address]), requestId = crypto.randomUUID();
-          const cancel = setInterval(() => { if (!p.isConnected || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) {
+          const currentFingerprint = () => JSON.stringify([accountId, c.label, c.query, c.address, prepare ? preparationVideoId : null]);
+          const fingerprint = currentFingerprint(), requestId = crypto.randomUUID(); let searching = true;
+          const cancel = setInterval(() => { if (!p.isConnected || fingerprint !== currentFingerprint()) {
             clearInterval(cancel); cmd('location-cancel', { accountId: selectedAccount, requestId }).catch(() => {});
-          } }, 300);
+          } else if (searching) { cmd('location-status', { accountId: selectedAccount, requestId }).then((status) => { if (searching && p.isConnected && request === revision && status?.stage) results.replaceChildren(E('span', 'publish-help', status.stage)); }).catch(() => {}); } }, 300);
           results.replaceChildren(E('span', 'publish-help', '正在此原账号网页搜索…'));
           try {
-            const response = await cmd('location-search', { accountId: selectedAccount, query, requestId });
-            if (!p.isConnected || request !== revision || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) return;
+            const response = await cmd('location-search', { accountId: selectedAccount, query, requestId, ...(prepare ? { prepareVideoId: preparationVideoId } : {}) });
+            searching = false;
+            if (!p.isConnected || request !== revision || fingerprint !== currentFingerprint()) return;
             results.replaceChildren();
             for (const candidate of response.candidates) results.append(B(`${candidate.name} · ${candidate.address}`, async () => {
               if (accountId !== selectedAccount || (c.query || c.label || '').trim() !== query) throw new Error('搜索条件已变化，请重新搜索');
               const selectionId = crypto.randomUUID(), selectionRevision = ++revision;
-              const cancelSelection = setInterval(() => { if (!p.isConnected || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) {
+              const cancelSelection = setInterval(() => { if (!p.isConnected || fingerprint !== currentFingerprint()) {
                 clearInterval(cancelSelection); cmd('location-cancel', { accountId: selectedAccount, requestId: selectionId }).catch(() => {});
               } }, 300);
               for (const button of results.querySelectorAll('button')) button.disabled = true;
               try {
                 const selected = await cmd('location-select', { accountId: selectedAccount, query, label: candidate.name, address: candidate.address, requestId: selectionId });
-                if (!p.isConnected || selectionRevision !== revision || fingerprint !== JSON.stringify([accountId, c.label, c.query, c.address])) return;
+                if (!p.isConnected || selectionRevision !== revision || fingerprint !== currentFingerprint()) return;
                 c.label = selected.selected.label; c.address = selected.selected.address; c.query = query; onChange(c);
                 p.replaceChildren(locationControl(c, onChange, forAccount));
               } finally {
@@ -1248,9 +1250,15 @@
               }
             }));
           } catch (error) { if (p.isConnected && request === revision) results.replaceChildren(note(error.message, true)); throw error; }
-          finally { clearInterval(cancel); }
-        }), results,
-        E('p', 'publish-help', '候选直接来自所选账号网页。需先在原账号进入上传后的视频编辑页；不会创建账号、导航或上传占位素材。也可直接填写准确名称与地址，执行时自动核对官方候选。'));
+          finally { searching = false; clearInterval(cancel); }
+
+      }
+      p.append(choice('位置搜索账号', [['', '请选择'], ...data.accounts.filter((a) => a.platformId === 'douyin' && input.accountIds.includes(a.id) && (!forAccount || a.id === forAccount)).map((a) => [a.id, a.name])], accountId,
+        (v) => { accountId = v; revision++; results.replaceChildren(); }),
+        choice('地点查询准备视频', input.videoIds.map((id) => [id, data.videos.find((v) => v.id === id)?.name || id]), preparationVideoId, (v) => { preparationVideoId = v; }),
+        B('读取已打开页面的候选', () => queryLocations(false)),
+        B('上传所选视频并读取地点', () => queryLocations(true), true), results,
+        E('p', 'publish-help', '账号还在首页时，点击蓝色按钮：上传这里明确选择的真实视频，只查询地点，不提交作品。后续同账号、同视频任务可复用上传；不覆盖已经编辑的其他作品。已有编辑页可直接读取候选。'));
       if (data.locations.length)
         p.append(
           choice(
@@ -1497,7 +1505,7 @@
       allowDuplicates = false;
     const controls = [
       note(
-        `将创建 ${preview.rows.filter((r) => !r.cancelled).length} 条任务。自动提交授权以各任务勾选状态为准，未授权任务在填写后暂停。`,
+        `将创建 ${preview.rows.filter((r) => !r.cancelled).length} 条任务：官方定时 ${preview.rows.filter((r) => !r.cancelled && r.nativeSchedule?.at).length} 条；不设置官方定时 ${preview.rows.filter((r) => !r.cancelled && !r.nativeSchedule?.at).length} 条。本地开始时间不会自动写入抖音官方定时。自动提交授权以各任务勾选状态为准，未授权任务在填写后暂停。`,
       ),
       field('批次名称', 'text', name, (v) => (name = v)),
       check(

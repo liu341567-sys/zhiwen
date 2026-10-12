@@ -63,7 +63,8 @@ test('preview and confirmation validate official time before persistence and pre
     const invalid = structuredClone(preview.rows); invalid[0].plannedAt = options.epoch(future);
     await assert.rejects(service.confirm({ ...preview, rows: invalid }), /本地开始时间/);
     assert.equal(service.store.tasks().length, 0);
-    await service.confirm({ ...preview, name: 'Native' });
+    const omitted = structuredClone(preview.rows); delete omitted[0].nativeSchedule;
+    await service.confirm({ ...preview, rows: omitted, name: 'Native' });
     assert.deepEqual(service.store.tasks()[0].nativeSchedule, future);
     assert.equal(service.store.tasks()[0].location.address, 'Road');
     await service.shutdown();

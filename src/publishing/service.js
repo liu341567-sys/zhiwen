@@ -35,6 +35,7 @@ class PublishingService {
     this.getView = getView;
     this.inspectView = inspectView;
     this.optionQueries = new Map();
+    this.optionTrace = onDeveloperTrace;
     this.takeoverView = takeover;
     this.notify = notify;
     this.changed = changed;
@@ -424,7 +425,7 @@ class PublishingService {
         ordinal: i,
         cover: clone(row.cover),
         location: clone(row.location),
-        nativeSchedule: optionConfig.nativeSchedule(row.nativeSchedule),
+        nativeSchedule: optionConfig.nativeSchedule(Object.hasOwn(row, 'nativeSchedule') ? row.nativeSchedule : original.nativeSchedule),
         locked: row.locked === true,
         cancelled: row.cancelled === true,
         autoSubmit: row.autoSubmit === true,
@@ -620,6 +621,10 @@ class PublishingService {
         if (query && query.accountId === input.accountId) query.abort.abort();
         return { cancelled: true };
       }
+      case 'location-status': {
+        const query = this.optionQueries.get(input?.requestId);
+        return query && query.accountId === input.accountId ? { stage: query.progress.stage } : null;
+      }
       case 'draft':
         return this.saveDraft(input);
       case 'confirm':
@@ -644,23 +649,35 @@ class PublishingService {
     await this.scheduler.shutdown();
     this.store.close();
   }
-  async searchLocation({ accountId, query, requestId, label, address }, select = false) {
+  async searchLocation({ accountId, query, requestId, label, address, prepareVideoId }, select = false) {
     if (this.closing) throw new Error('发布中心正在退出');
     if (!this.accounts().some((a) => a.id === accountId && a.platformId === 'douyin')) throw new Error('请选择原抖音账号环境');
     query = text(query, 200); if (!query) throw new Error('请填写位置搜索词');
-    const wc = this.inspectView?.(accountId);
-    if (!wc || wc.isDestroyed()) throw new Error('请先打开此原账号，并进入上传后的视频编辑页');
+    const preparedVideo = prepareVideoId ? this.store.resource(prepareVideoId, 'video') : null;
+    if (prepareVideoId !== undefined && (!preparedVideo || select)) throw new Error('地点准备视频配置无效');
+    let wc = this.inspectView?.(accountId);
+    if ((!wc || wc.isDestroyed()) && !preparedVideo) throw new Error('请打开原账号编辑页，或点击“上传所选视频并读取地点”准备查询');
     const release = this.scheduler.reserveAccount(accountId), abort = new AbortController();
     if (typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/.test(requestId) || this.optionQueries.has(requestId)) { release(); throw new Error('位置搜索请求标识无效'); }
-    const page = new Page(wc, abort.signal), id = requestId;
+    let page; const id = requestId, progress = { stage: '正在连接原账号环境…' };
+    const context = { signal: abort.signal, checkpoint: () => {}, stage: (value) => { progress.stage = value; },
+      log: (message) => { progress.stage = message;
+        try { Promise.resolve(this.optionTrace(accountId, { operation: 'location-query', phase: 'log', message })).catch(() => {}); } catch {} } };
     const done = (async () => {
-      try { await page.connect();
-        if (select) { const chosen = await douyinOptions.setLocation(page, optionConfig.location({ mode: 'specified', label, address, query }), { log: () => {}, checkpoint: () => {} });
+      try {
+        if (preparedVideo) {
+          await media.validate(preparedVideo);
+          wc = await this.getView(accountId, abort.signal);
+        }
+        page = new Page(wc, abort.signal, context.log, (event) => this.optionTrace(accountId, { ...event, optionQuery: true }));
+        await page.connect();
+        if (preparedVideo) await require('./adapters/douyin-preparation').prepare(page, preparedVideo, context);
+        if (select) { const chosen = await douyinOptions.setLocation(page, optionConfig.location({ mode: 'specified', label, address, query }), context);
           await douyinOptions.verify(page, null, chosen); return { accountId, query, selected: chosen }; }
-        return { accountId, query, candidates: await douyinOptions.search(page, query) }; }
-      finally { await douyinOptions.cleanup(page).catch(() => {}); page.detach(); release(); this.optionQueries.delete(id); }
+        return { accountId, query, candidates: await douyinOptions.search(page, query, context) }; }
+      finally { if (page) { await douyinOptions.cleanup(page).catch(() => {}); page.detach(); } release(); this.optionQueries.delete(id); }
     })();
-    this.optionQueries.set(id, { accountId, abort, done });
+    this.optionQueries.set(id, { accountId, abort, done, progress });
     return done;
   }
 }

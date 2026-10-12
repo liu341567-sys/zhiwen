@@ -529,6 +529,14 @@ test('guided recording binds the original account, captures historical redacted 
   const json = JSON.stringify(f.service.report);
   assert.ok(!json.includes('Alice') && !json.includes('token=private'));
   assert.equal(f.service.report.assistance.taskId, f.taskId);
+  f.setTask({ nativeSchedule: { at: '2026-10-14T12:21', timezone: 'Asia/Shanghai' },
+    location: { mode: 'specified', label: 'Private personal address' }, cover: { mode: 'image', path: '/private/cover.png' },
+    checkpoint: { manualOptionsConfirmed: true } });
+  f.service.assistant.refresh();
+  assert.equal(f.service.report.assistance.task.options.nativeSchedule.at, '2026-10-14T12:21');
+  assert.equal(f.service.report.assistance.task.checkpoint.manualOptionsConfirmed, true);
+  assert.ok(!JSON.stringify(f.service.report.assistance.task.options).includes('Private personal address'));
+  assert.ok(!JSON.stringify(f.service.report.assistance.task.options).includes('/private/cover.png'));
   await f.service.trace(f.other, { taskId: f.taskId, phase: 'error' });
   await f.service.trace(f.account, { taskId: randomUUID(), phase: 'error' });
   assert.equal(f.service.report.scripts.length, 0);

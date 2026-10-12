@@ -29,6 +29,8 @@ function probe(input = {}) {
   const toggle = labels.length === 1 ? labels[0] : null, checkbox = toggle?.querySelector('input[type=checkbox],input[type=radio]');
   const fields = [...document.querySelectorAll('input[placeholder="日期和时间"]')].filter(visible);
   const field = fields.length === 1 ? fields[0] : null;
+  const parts = (field?.value || '').trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::00)?$/);
+  const fieldTime = parts ? `${parts[1]}-${parts[2].padStart(2, '0')}-${parts[3].padStart(2, '0')} ${parts[4].padStart(2, '0')}:${parts[5]}` : '';
   const popups = [...document.querySelectorAll('.semi-datepicker-month-grid')].filter(visible);
   const popup = popups.length === 1 ? popups[0] : null;
   const date = normal(popup?.querySelector('.semi-datepicker-switch-date')?.textContent),
@@ -76,7 +78,8 @@ function probe(input = {}) {
         watch.version++; watch.changedAt = Date.now();
       }
     });
-    watch.observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    watch.observer.observe(document.body, { subtree: true, childList: true, characterData: true,
+      attributes: true, attributeFilter: ['hidden', 'aria-busy', 'aria-selected', 'style', 'class'] });
     globalThis.__qiyePOIWatch = watch;
   }
   if (input.action === 'pick-poi') {
@@ -95,7 +98,7 @@ function probe(input = {}) {
   const watch = globalThis.__qiyePOIWatch;
   const guard = globalThis.__qiyePOIGuard;
   return { unavailable: false, scheduled: !!checkbox?.checked, toggle: !!toggle && !checkbox?.disabled,
-    field: !!field, fieldValue: field?.value || '', date, time,
+    field: !!field, fieldEditable: !!field && !field.readOnly && !field.disabled, fieldValue: field?.value || '', fieldTime, date, time,
     month: nav ? `${nav[1]}-${nav[2].padStart(2, '0')}` : null,
     policy: policy ? { hours: Number(policy[1]), days: Number(policy[2]) } : null,
     marked: !!document.querySelector(`[data-qiye-option="${input.action === 'pick-poi' ? 'poi' : input.action === 'wheel' ? 'wheel' : input.action}"]`),
@@ -119,6 +122,29 @@ async function schedule(page, requested, context) {
   const target = config.epoch(expected), now = Date.now();
   if (target < now + s.policy.hours * 3600000 || target > now + s.policy.days * 86400000)
     fail(`官方定时超出此账号范围：${s.policy.hours}小时后至${s.policy.days}天内`);
+  const stableValue = async () => {
+    const after = Date.now() + 800;
+    return until(page, (s, input) => Date.now() >= input.after && !s.month && s.scheduled && s.fieldTime === input.display,
+      { display, after }, 2500);
+  };
+  if (!s.month && s.fieldTime === display) {
+    await stableValue();
+    context.log(`官方定时已核对原页面时间：${display}（北京时间）`);
+    context.checkpoint({ nativeScheduleVerified: expected }); return expected;
+  }
+  if (s.fieldEditable) {
+    context.log('官方定时：按录制中的可编辑输入框填写，等待失焦提交及回读');
+    await page.fill('[data-qiye-option="datetime"]', display);
+    await page.key('Tab'); await page.key('Escape');
+    try {
+      await stableValue();
+      context.log(`官方定时已输入并回读：${display}（北京时间）`);
+      context.checkpoint({ nativeScheduleVerified: expected }); return expected;
+    } catch (error) {
+      page.check();
+      context.log('官方日期输入未保留目标值，改用日历及时间控件核对设置');
+    }
+  }
   await page.click({ selector: '[data-qiye-option="datetime"]' });
   s = await until(page, (s) => !!s.month && !!s.date);
   const month = expected.at.slice(0, 7);
@@ -142,30 +168,50 @@ async function schedule(page, requested, context) {
   }
   await until(page, (s, input) => `${s.date} ${s.time}` === input.display, { display });
   await page.key('Escape');
-  s = await until(page, (s, input) => !s.month && s.scheduled && s.fieldValue.replace('T', ' ').trim() === input.display, { display });
+  s = await until(page, (s, input) => !s.month && s.scheduled && s.fieldTime === input.display, { display });
   context.log(`官方定时已设置并回读：${display}（北京时间）`);
   context.checkpoint({ nativeScheduleVerified: expected });
   return expected;
 }
-async function search(page, query) {
+async function search(page, query, context = {}) {
+  let currentStage = '检查原网页';
+  const stage = (name) => { currentStage = name; context.stage?.(name); context.log?.(`官方位置查询：${name}`); };
+  try {
   page.optionsOwner = randomUUID(); await read(page, { action: 'begin', owner: page.optionsOwner });
   let s = await read(page);
-  if (s.unavailable || !s.poiRoot) fail('请在此原账号上传后的视频编辑页使用官方位置搜索；未导航或上传占位视频');
+  if (s.unavailable || !s.poiRoot) fail('当前网页没有位置控件。请点击“上传所选视频并读取地点”，或先进入原账号上传后的视频编辑页');
+  stage('打开官方搜索框');
   await page.click({ selector: '[data-qiye-poi-root]' });
   await until(page, (s) => s.poiInput);
+  s = await read(page);
+  if (s.query === query && s.candidates.length && !s.loading) {
+    const token = randomUUID(); await read(page, { action: 'watch', token });
+    stage('核对当前搜索词的官方已显示候选');
+    s = await until(page, (s, input) => s.query === input.query && s.candidates.length > 0 && s.watch?.token === input.token && s.watch.quietMs >= 800 && !s.loading, { query, token }, 20000);
+    return s.candidates;
+  }
+  stage('清空旧搜索结果');
   const baseline = randomUUID();
   await read(page, { action: 'watch', token: baseline });
   await page.fill('[data-qiye-poi-input]', '');
   await until(page, (s, input) => s.query === '' && s.watch?.token === input.token && s.watch.quietMs >= 800 && !s.loading, { token: baseline }, 20000);
   const token = randomUUID();
   await read(page, { action: 'watch', token });
+  stage('填写搜索词并等待官方候选');
   await page.fill('[data-qiye-poi-input]', query);
+  await page.key('ArrowRight');
   s = await until(page, (s, input) => s.query === input.query && s.watch?.token === input.token && s.watch.version > 0 && s.watch.quietMs >= 800 && !s.loading, { query, token }, 20000);
   if (!s.candidates.length) fail('官方搜索未返回可识别地点，请调整搜索词');
   return s.candidates;
+  } catch (error) {
+    page.check();
+    let details = '';
+    try { const s = await read(page); details = `；路径 ${new URL(page.wc.getURL()).pathname}，搜索框${s.poiInput ? '有' : '无'}，候选 ${s.candidates?.length || 0} 个，加载${s.loading ? '中' : '未显示进行中'}`; } catch {}
+    fail(`位置查询在“${currentStage}”未完成：${error.message}${details}`);
+  }
 }
 async function setLocation(page, requested, context) {
-  const expected = config.location(requested), candidates = await search(page, expected.query);
+  const expected = config.location(requested), candidates = await search(page, expected.query, context);
   const matches = candidates.filter((c) => c.name === expected.label && (!expected.address || c.address === expected.address));
   if (matches.length !== 1) fail('官方地点候选未唯一匹配名称和地址，请在参数中选择准确候选；未按排序盲选');
   const chosen = matches[0];
@@ -181,7 +227,7 @@ async function setLocation(page, requested, context) {
 async function verify(page, native, poi) {
   const s = await read(page);
   if (s.unavailable) fail('提交前平台选项页面已变化');
-  if (native && (!s.scheduled || s.fieldValue.replace('T', ' ').trim() !== native.at.replace('T', ' ') || config.epoch(native) <= Date.now()))
+  if (native && (!s.scheduled || s.fieldTime !== native.at.replace('T', ' ') || config.epoch(native) <= Date.now()))
     fail('提交前官方定时已变化或过期，未提交');
   if (poi && (s.selected !== poi.label || !s.poiGuard?.valid || s.poiGuard.name !== poi.label || s.poiGuard.address !== poi.address)) fail('提交前官方位置发生变化或无法核实地址，未提交');
 }

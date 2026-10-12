@@ -24,7 +24,7 @@ function fixture(account, settings = {}) {
   <p>支持2小时后及14天内的定时发布。发布后如需修改时间，可前往作品管理修改</p><input id="datetime" placeholder="日期和时间" style="display:none"><button id="submit" disabled>发布</button>
   <script>
     const config=${JSON.stringify(settings)},account=${JSON.stringify(account)};
-    window.submissions=0;window.optionClicks=[];document.addEventListener('click',e=>{if(e.target.closest('[data-qiye-option]'))window.optionClicks.push({marker:e.target.closest('[data-qiye-option]').dataset.qiyeOption,trusted:e.isTrusted});});
+    window.submissions=0;window.uploads=0;window.optionClicks=[];document.addEventListener('click',e=>{if(e.target.closest('[data-qiye-option]'))window.optionClicks.push({marker:e.target.closest('[data-qiye-option]').dataset.qiyeOption,trusted:e.isTrusted});});
     const poi=document.querySelector('#poi'),candidates=document.querySelector('#candidates');
     window.refreshCount=0;window.poiChosen=null;
     function candidateRows(query){
@@ -36,13 +36,13 @@ function fixture(account, settings = {}) {
     poi.onclick=()=>{if(poi.querySelector('input'))return;const input=document.createElement('input');poi.append(input);candidateRows('old');input.oninput=()=>{const value=input.value;setTimeout(()=>{if(poi.contains(input)&&input.value===value)candidateRows(value);},config.delay||150);};};
     let now=new Date(Date.now()+8*3600000), date=now.toISOString().slice(0,10), time='12:20', month=now.toISOString().slice(0,7);
     if(config.previousMonth){let d=new Date(month+'-01T00:00:00Z');d.setUTCMonth(d.getUTCMonth()-1);month=d.toISOString().slice(0,7);}
-    const field=document.querySelector('#datetime');document.querySelector('#schedule').onclick=()=>{field.style.display=document.querySelector('#schedule input').checked?'inline-block':'none';};
-    function update(){field.value=date+' '+time;document.querySelector('.semi-datepicker-switch-date').textContent=date;document.querySelector('.semi-datepicker-switch-time').textContent=time;}
+    const field=document.querySelector('#datetime');field.readOnly=!config.directInput;field.onblur=()=>{const m=field.value.match(/^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2})$/);if(config.directInput&&m&&!config.rejectInput){date=m[1];time=m[2];}update();};document.querySelector('#schedule').onclick=()=>{field.style.display=document.querySelector('#schedule input').checked?'inline-block':'none';};
+    function update(){field.value=config.slashFormat?date.replaceAll('-','/')+' '+time+':00':date+' '+time;const d=document.querySelector('.semi-datepicker-switch-date'),t=document.querySelector('.semi-datepicker-switch-time');if(d)d.textContent=date;if(t)t.textContent=time;}
     function days(){const p=document.querySelector('.semi-datepicker-navigation strong');p.textContent=Number(month.slice(0,4))+'年 '+Number(month.slice(5))+'月';const grid=document.querySelector('#days');grid.replaceChildren();for(let i=1;i<=31;i++){const e=document.createElement('div');e.className='semi-datepicker-day'+(config.disabledDay===i?' semi-datepicker-day-disabled':'');e.textContent=i;e.onclick=()=>{if(!e.classList.contains('semi-datepicker-day-disabled')){date=month+'-'+String(i).padStart(2,'0');update();}};grid.append(e);}}
     function wheel(kind){const w=document.createElement('div');w.className='semi-scrolllist-item-wheel undefined-list-'+kind;w.innerHTML='<div class="semi-scrolllist-list-outer"><ul></ul></div>';const max=kind==='hour'?24:60, current=Number(time.split(':')[kind==='hour'?0:1]);for(let cycle=0;cycle<3;cycle++)for(let i=0;i<max;i++){const e=document.createElement('li');e.textContent=String(i).padStart(2,'0')+(kind==='hour'?'时':'分');if(cycle===1&&i===current)e.className='semi-scrolllist-item-selected';e.onclick=()=>setTimeout(()=>{let values=time.split(':');values[kind==='hour'?0:1]=String(i).padStart(2,'0');time=values.join(':');w.querySelectorAll('li').forEach(li=>li.classList.remove('semi-scrolllist-item-selected'));e.classList.add('semi-scrolllist-item-selected');update();},kind==='minute'?900:50);w.querySelector('ul').append(e);}document.querySelector('#wheels').append(w);w.firstChild.scrollTop=(max+current)*25-22;}
     field.onclick=()=>{if(document.querySelector('.semi-datepicker-month-grid'))return;const p=document.createElement('div');p.className='semi-datepicker-month-grid';p.innerHTML='<div class="semi-datepicker-navigation"><button id="left"><span class="semi-icons-chevron_left">←</span></button><strong></strong><button id="right"><span class="semi-icons-chevron_right">→</span></button></div><div id="days"></div><button class="semi-datepicker-switch-date"></button><button class="semi-datepicker-switch-time"></button><div id="wheels"></div>';document.body.append(p);for(const [id,delta]of[['left',-1],['right',1]])p.querySelector('#'+id).onclick=()=>{const d=new Date(month+'-01T00:00:00Z');d.setUTCMonth(d.getUTCMonth()+delta);month=d.toISOString().slice(0,7);days();};p.querySelector('.semi-datepicker-switch-time').onclick=()=>{if(!document.querySelector('#wheels').children.length){wheel('hour');wheel('minute');}};days();update();};
     document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelector('.semi-datepicker-month-grid')?.remove();});
-    document.querySelector('#upload').onchange=e=>{document.querySelector('#status').textContent='上传完成 '+e.target.files[0].name;document.querySelector('textarea').style.display='block';document.querySelector('#submit').disabled=false;};
+    document.querySelector('#upload').onchange=e=>{window.uploads++;history.replaceState({},'', '/creator-micro/content/post/video');document.querySelector('#status').textContent='上传完成 '+e.target.files[0].name;document.querySelector('textarea').style.display='block';document.querySelector('#submit').disabled=false;};
     document.querySelector('#submit').onclick=()=>{window.submissions++;const e=document.createElement('div');e.setAttribute('role','alert');e.textContent='发布成功';document.body.append(e);};
   </script>`;
 }
@@ -51,7 +51,7 @@ async function run(scale) {
   try {
     const store=new ProfileStore(dir),a=store.create({name:'A',platformId:'douyin'}),b=store.create({name:'B',platformId:'douyin'});
     app=await _electron.launch({chromiumSandbox:true,args:[...(process.platform==='linux'?['--disable-setuid-sandbox']:[]),`--force-device-scale-factor=${scale}`,path.join(root,'tests/electron-launch.cjs')],cwd:root,env:{...process.env,QIYE_DATA_DIR:dir,QIYE_PUBLISH_FIXTURE:'1'}});
-    await app.context().route('https://creator.douyin.com/**',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:'<h1>fixture</h1>'}));
+    await app.context().route('https://creator.douyin.com/**',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:new URL(r.request().url()).pathname.endsWith('/content/upload')?fixture('B',{directInput:true}):'<h1>fixture</h1>'}));
     let shell;await until(()=>{shell=app.windows().find(p=>p.url().endsWith('/renderer/index.html'));return shell;});
     await shell.waitForFunction(()=>!!window.browserAPI && !!window.publishingAPI);
     const command=(name,value)=>shell.evaluate(({name,value})=>publishingAPI.command(name,value),{name,value});
@@ -90,8 +90,8 @@ async function run(scale) {
     await load(b,{disabledDay:Number(expected.at.slice(8,10))});result=await runOptions(b,{nativeSchedule:expected});assert.equal(result.ok,false);assert.match(result.reason,/日期被平台禁用/);
     check(`options-${scale}: current account scheduling range and disabled date stop before submission`);
     await load(b);
-    const videoPath=path.join(dir,'fixture.mp4');fs.writeFileSync(videoPath,Buffer.alloc(2048,1));const stat=fs.statSync(videoPath);
-    const task={id:'native-'+scale,accountId:b.id,accountName:'B',platformId:'douyin',video:{name:'fixture.mp4',path:videoPath,format:'mp4',bytes:stat.size,mtime:stat.mtimeMs,sha256:require('node:crypto').createHash('sha256').update(fs.readFileSync(videoPath)).digest('hex')},title:'Fixture title',topics:'#Topic',cover:{mode:'first'},location:{mode:'specified',label:'示例广场',address:'B市西路2号',query:'广场'},nativeSchedule:expected,autoSubmit:true,checkpoint:{}};
+    const videoPath=path.join(dir,'fixture.mp4');await require('../src/publishing/media').run(require('ffmpeg-static'),['-nostdin','-v','error','-f','lavfi','-i','color=c=blue:s=320x240:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p','-y',videoPath]);const stat=fs.statSync(videoPath);
+    const task={id:'native-'+scale,accountId:b.id,accountName:'B',platformId:'douyin',video:{name:'fixture.mp4',path:videoPath,format:'mp4',bytes:stat.size,mtime:stat.mtimeMs,sha256:require('node:crypto').createHash('sha256').update(fs.readFileSync(videoPath)).digest('hex')},title:'Fixture title',topics:'#Topic',cover:{mode:'first'},location:{mode:'specified',label:'示例广场',address:'B市西路2号',query:'广场'},nativeSchedule:expected,autoSubmit:true,checkpoint:{manualOptionsConfirmed:true}};
     result=await app.evaluate(async(_electron,task)=>globalThis.__publishingFixture(task,{timeoutMs:60000,captureMode:'pending'}),task);
     assert.equal(result.result.status,'submitted',JSON.stringify(result));assert.equal(result.checkpoint.submitIntent,true);assert.deepEqual(result.result.nativeSchedule,expected);assert.equal(result.result.location.address,'B市西路2号');assert.equal(await evaluate(b,'window.submissions'),1);
     assert.ok(result.logs.some(s=>s.includes('官方定时已设置并回读')));
@@ -108,6 +108,53 @@ async function run(scale) {
     await assert.rejects(command('location-search',{accountId:b.id,query:'广场',requestId:require('node:crypto').randomUUID()}),/视频编辑页/);
     assert.equal(await evaluate(b,'location.pathname'),'/creator-micro/content/manage');
     check(`options-${scale}: candidate queries never navigate, upload placeholder videos or create another account browser`);
+    await load(b,{directInput:true,slashFormat:true});
+    result=await runOptions(b,{nativeSchedule:expected});assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.state.fieldTime,expected.at.replace('T',' '));
+    assert.ok(result.logs.some(s=>s.includes('已输入并回读')));
+    await load(b,{directInput:true,rejectInput:true});result=await runOptions(b,{nativeSchedule:expected});assert.equal(result.ok,true,JSON.stringify(result));assert.ok(result.logs.some(s=>s.includes('改用日历')));
+    check(`options-${scale}: recorded editable time input commits on blur, formatted seconds normalize, and rejected input uses verified calendar fallback`);
+    await load(b);
+    await command('location-search',{accountId:b.id,query:'广场',requestId:require('node:crypto').randomUUID()});
+    const cachedCount=await evaluate(b,'window.refreshCount');
+    assert.equal((await command('location-search',{accountId:b.id,query:'广场',requestId:require('node:crypto').randomUUID()})).candidates.length,2);
+    assert.equal(await evaluate(b,'window.refreshCount'),cachedCount);
+    check(`options-${scale}: identical current official query uses stable displayed candidates without requiring another DOM mutation`);
+    const goHome=()=>app.evaluate(async({webContents},id)=>{const wc=webContents.fromId(id);await wc.loadURL('https://creator.douyin.com/creator-micro/home');await wc.executeJavaScript("document.body.innerHTML='<nav><button>作品发布</button></nav>';document.querySelector('button').onclick=()=>location.assign('https://creator.douyin.com/creator-micro/content/upload');void 0;");},ids[b.id]);
+    const imported=await command('import',[videoPath]);assert.equal(imported.added.length,1);const preparedVideo=(await command('state')).videos.find(v=>v.id===imported.added[0]);
+    await goHome();
+    await shell.locator('.publish-table input[type="checkbox"]').first().check();
+    await shell.getByRole('button',{name:'下一步',exact:true}).click();await shell.getByRole('button',{name:'下一步',exact:true}).click();
+    await shell.locator('.publish-account').filter({hasText:'B'}).locator('input').check();
+    await shell.getByRole('button',{name:'下一步',exact:true}).click();
+    await shell.locator('.publish-control textarea').nth(0).fill('Real wizard schedule');await shell.locator('.publish-control textarea').nth(1).fill('#Topic');
+    await shell.getByLabel('发布定位',{exact:true}).selectOption('specified');await shell.getByLabel('官方位置搜索词（留空使用名称）',{exact:true}).fill('广场');
+    await shell.getByRole('button',{name:'上传所选视频并读取地点',exact:true}).click();
+    await shell.getByRole('button',{name:'示例广场 · B市东路1号',exact:true}).waitFor({timeout:45000});
+    assert.equal(await evaluate(b,'window.uploads'),1);assert.equal(await evaluate(b,'window.submissions'),0);
+    await shell.getByRole('button',{name:'示例广场 · B市东路1号',exact:true}).click();
+    await until(()=>shell.getByLabel('完整地点地址（同名地点须填写）',{exact:true}).inputValue().then(v=>v==='B市东路1号'));
+    await shell.getByLabel('官方发布方式',{exact:true}).selectOption('at');await shell.getByLabel('官方发布时间（北京时间）',{exact:true}).fill(expected.at);
+    await shell.getByRole('button',{name:'下一步',exact:true}).click();await shell.getByRole('button',{name:'确认生成并执行',exact:true}).click();
+    await shell.locator('.publish-dialog[open]').getByRole('button',{name:'确认生成并执行',exact:true}).click();
+    await until(async()=>{const tasks=(await command('state')).tasks;return tasks.length===1&&tasks[0].status==='manual';});
+    const created=(await command('state')).tasks[0];assert.equal(created.checkpoint.preparedMediaReused,true,JSON.stringify(created));assert.equal(created.checkpoint.nativeScheduleVerified.at,expected.at);assert.equal(created.nativeSchedule.at,expected.at);assert.equal(await evaluate(b,'window.uploads'),1);assert.equal(await evaluate(b,'window.submissions'),0);
+    await command('tasks',{ids:[created.id],action:'cancel'});
+    check(`options-${scale}: real wizard prepares homepage account, displays official candidates, persists schedule and reuses exact upload while keeping submission review`);
+    await assert.rejects(command('location-search',{accountId:b.id,query:'广场',prepareVideoId:preparedVideo.id,requestId:require('node:crypto').randomUUID()}),/未覆盖/);
+    assert.equal(await evaluate(b,'window.uploads'),1);assert.equal(await evaluate(b,'window.submissions'),0);
+    check(`options-${scale}: explicit query preparation refuses to overwrite an existing manual or task-owned editor`);
+    await goHome();await command('location-search',{accountId:b.id,query:'广场',prepareVideoId:preparedVideo.id,requestId:require('node:crypto').randomUUID()});
+    await evaluate(b,"document.querySelector('#upload').dispatchEvent(new Event('change',{bubbles:true}));void 0;");
+    result=await app.evaluate(async(_electron,task)=>globalThis.__publishingFixture(task,{timeoutMs:20000}),{...task,id:'changed-preparation-'+scale,video:preparedVideo,checkpoint:{},autoSubmit:false});
+    assert.equal(result.result.status,'manual');assert.match(result.result.reason,/无法证明/);assert.equal(result.checkpoint.preparedMediaReused,undefined);
+    check(`options-${scale}: changed prepared file cannot transfer ownership to a task`);
+    const secondPath=path.join(dir,'second.mp4');await require('../src/publishing/media').run(require('ffmpeg-static'),['-nostdin','-v','error','-f','lavfi','-i','color=c=red:s=320x240:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p','-y',secondPath]);
+    const secondImport=await command('import',[secondPath]),secondVideo=(await command('state')).videos.find(v=>v.id===secondImport.added[0]);
+    await goHome();await command('location-search',{accountId:b.id,query:'广场',prepareVideoId:preparedVideo.id,requestId:require('node:crypto').randomUUID()});
+    result=await app.evaluate(async(_electron,task)=>globalThis.__publishingFixture(task,{timeoutMs:30000}),{...task,id:'different-preparation-'+scale,video:secondVideo,checkpoint:{},autoSubmit:false});
+    assert.equal(result.result.status,'manual',JSON.stringify(result));assert.equal(result.checkpoint.filled,true);assert.equal(result.checkpoint.preparedMediaReused,undefined);assert.ok(result.logs.some(s=>s.includes('已打开空白上传页')));
+    assert.equal(await evaluate(b,"document.querySelector('#upload').files[0].name"),'second.mp4');assert.equal(await evaluate(b,'window.submissions'),0);
+    check(`options-${scale}: a different assigned video replaces only verified untouched query preparation through a fresh upload page`);
   }finally{if(app)await app.close().catch(()=>{});fs.rmSync(dir,{recursive:true,force:true});}
 }
 (async()=>{for(const scale of[1,1.25,1.5])await run(scale);console.log(`${checks} publishing options real-window checks passed`);})().catch(error=>{console.error(JSON.stringify({uiFailure:{message:error.message,stack:error.stack}}));process.exitCode=1;});

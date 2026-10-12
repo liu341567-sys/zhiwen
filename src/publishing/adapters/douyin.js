@@ -1,6 +1,7 @@
 'use strict';
 const { Page } = require('./page');
 const options = require('./douyin-options');
+const preparation = require('./douyin-preparation');
 const MANAGEMENT_URL =
   'https://creator.douyin.com/creator-micro/content/manage';
 const stateWhen = (condition) =>
@@ -551,6 +552,7 @@ async function waitUploadState(page, context, phase) {
   });
 }
 async function execute(task, context, { getView, validate, accountStatus }) {
+  context.log(`任务参数检查：官方定时 ${task.nativeSchedule?.at ? task.nativeSchedule.at + '（北京时间）' : '未配置'}；定位 ${task.location?.mode === 'specified' ? '已配置' : '未配置'}；整体人工设置确认 ${task.checkpoint.manualOptionsConfirmed ? '有（不替代官方定时校验）' : '无'}`);
   await validate(task.video);
   context.log('视频路径、可读性和内容摘要检查通过');
   const wc = await getView(task.accountId),
@@ -594,10 +596,29 @@ async function execute(task, context, { getView, validate, accountStatus }) {
       return manual('发布页要求登录或验证，请人工处理');
     accountStatus(task.accountId, 'ready');
     if (state.error) return manual(state.error);
-    const owned = await page.evaluate(
+    const preparedMedia = await page.evaluate(preparation.evidence);
+    if (!(task.checkpoint.uploaded || task.checkpoint.uploadStarted) && preparedMedia?.ready && !preparedMedia.dirty && !preparedMedia.draftTouched && preparedMedia.sha256 !== task.video.sha256) {
+      await page.evaluate(preparation.evidence, { action: 'clear', token: preparedMedia.token });
+      await page.navigate('https://creator.douyin.com/creator-micro/content/upload');
+      await page.wait(() => document.readyState === 'complete', null, 60000);
+      state = await page.evaluate(observe);
+      if (!state.hasUpload && !state.editorSelector) state = await openPublishingPage(page, context, state);
+      if (state.login || state.challenge || state.error || state.ready) return manual('查询准备页无法安全切换到当前任务上传页，请人工检查');
+      context.log('地点查询准备素材与当前任务不同，已打开空白上传页；未提交查询素材');
+    }
+    let owned = await page.evaluate(
       (id) => document.documentElement.dataset.qiyePublishTask === id,
       task.id,
     );
+    if (!owned && !(task.checkpoint.uploaded || task.checkpoint.uploadStarted)) {
+      const prepared = await page.evaluate(preparation.evidence, { action: 'consume', sha256: task.video.sha256 });
+      if (prepared?.consumed) {
+        await page.evaluate((id) => { document.documentElement.dataset.qiyePublishTask = id; }, task.id);
+        context.checkpoint({ uploadStarted: true, preparedMediaReused: true });
+        owned = true;
+        context.log('已核对并接收地点查询时上传的本任务素材，未重复上传');
+      }
+    }
     if (!state.ready) {
       if ((task.checkpoint.uploaded || task.checkpoint.uploadStarted) && !owned)
         return manual(
@@ -709,11 +730,9 @@ async function execute(task, context, { getView, validate, accountStatus }) {
     context.checkpoint({ filled: true });
     context.log('已填写并核对最终标题与整组话题');
     let nativeVerified = null, locationVerified = null;
-    if (!task.checkpoint.manualOptionsConfirmed) {
-      if (task.location.mode === 'specified') locationVerified = await options.setLocation(page, task.location, context);
-      if (task.nativeSchedule && typeof task.nativeSchedule === 'object')
-        nativeVerified = await options.schedule(page, task.nativeSchedule, context);
-    }
+    if (task.location.mode === 'specified') locationVerified = await options.setLocation(page, task.location, context);
+    if (task.nativeSchedule && typeof task.nativeSchedule === 'object')
+      nativeVerified = await options.schedule(page, task.nativeSchedule, context);
     const special =
       task.cover.mode !== 'first' ||
       (task.location.mode !== 'none' && !locationVerified) ||
@@ -804,4 +823,4 @@ async function execute(task, context, { getView, validate, accountStatus }) {
     page.detach();
   }
 }
-module.exports = { descriptor, execute, observe, findEntry };
+module.exports = { descriptor, execute, observe, findEntry, openPublishingPage, waitUploadState };

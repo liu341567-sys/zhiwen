@@ -50,7 +50,10 @@ class PublishingAssistant {
         stateLabel: statuses[t.status], reason: t.result?.reason || '',
         wait: wait ? { message: wait.message, retryAt: wait.retryAt } : null,
         checkpoint: { uploaded: !!t.checkpoint.uploaded, filled: !!t.checkpoint.filled,
-          submitIntent: !!t.checkpoint.submitIntent },
+          submitIntent: !!t.checkpoint.submitIntent, manualOptionsConfirmed: !!t.checkpoint.manualOptionsConfirmed,
+          nativeScheduleVerified: !!t.checkpoint.nativeScheduleVerified, preparedMediaReused: !!t.checkpoint.preparedMediaReused },
+        options: { nativeSchedule: t.nativeSchedule ? { at: t.nativeSchedule.at || null, timezone: t.nativeSchedule.timezone || null } : null,
+          locationMode: t.location?.mode || 'none', coverMode: t.cover?.mode || 'first', autoSubmit: t.autoSubmit === true },
         logs: p.store.logs(t.id).slice(-100).map((l) => ({ time: l.time,
           level: l.level, message: l.message })),
       });

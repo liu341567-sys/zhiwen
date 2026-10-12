@@ -277,7 +277,7 @@ class Page {
     await this.command('Input.insertText', { text });
   }
   async key(key) {
-    const codes = { Escape: 27, Enter: 13, Tab: 9 };
+    const codes = { Escape: 27, Enter: 13, Tab: 9, ArrowRight: 39 };
     if (!Object.hasOwn(codes, key)) throw new Error('不支持的控件按键');
     for (const type of ['keyDown', 'keyUp'])
       await this.command('Input.dispatchKeyEvent', { type, key, code: key, windowsVirtualKeyCode: codes[key] });
