@@ -1488,7 +1488,6 @@ async function run(scale) {
       () => assert.ok(true),
     );
     await shell.locator('[data-publish-page="materials"]').click();
-    await shell.getByText('更多操作', { exact: true }).click();
     await shell
       .getByRole('button', { name: '删除当前筛选记录', exact: true })
       .click();
