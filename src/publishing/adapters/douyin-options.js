@@ -73,7 +73,7 @@ function probe(input = {}) {
     const watch = { token: input.token, version: 0, changedAt: Date.now() };
     watch.observer = new MutationObserver((records) => {
       if (records.some((r) => r.target.parentElement?.closest('[role=option],.semi-select-option-list') ||
-          (r.target.nodeType === 1 && r.target.closest?.('[role=option],.semi-select-option-list')) ||
+          (r.target.nodeType === 1 && r.target.closest?.('[role=option],.semi-select-option-list,.semi-select-dropdown')) ||
           [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1 && (n.matches?.('[role=option]') || n.querySelector?.('[role=option]'))))) {
         watch.version++; watch.changedAt = Date.now();
       }
@@ -179,7 +179,7 @@ async function search(page, query, context = {}) {
   try {
   page.optionsOwner = randomUUID(); await read(page, { action: 'begin', owner: page.optionsOwner });
   let s = await read(page);
-  if (s.unavailable || !s.poiRoot) fail('当前网页没有位置控件。请点击“上传所选视频并读取地点”，或先进入原账号上传后的视频编辑页');
+  if (s.unavailable || !s.poiRoot) fail('上传后的发布页未识别到唯一位置控件，请人工接管检查原网页');
   stage('打开官方搜索框');
   await page.click({ selector: '[data-qiye-poi-root]' });
   await until(page, (s) => s.poiInput);
@@ -201,7 +201,6 @@ async function search(page, query, context = {}) {
   await page.fill('[data-qiye-poi-input]', query);
   await page.key('ArrowRight');
   s = await until(page, (s, input) => s.query === input.query && s.watch?.token === input.token && s.watch.version > 0 && s.watch.quietMs >= 800 && !s.loading, { query, token }, 20000);
-  if (!s.candidates.length) fail('官方搜索未返回可识别地点，请调整搜索词');
   return s.candidates;
   } catch (error) {
     page.check();
@@ -211,18 +210,27 @@ async function search(page, query, context = {}) {
   }
 }
 async function setLocation(page, requested, context) {
-  const expected = config.location(requested), candidates = await search(page, expected.query, context);
-  const matches = candidates.filter((c) => c.name === expected.label && (!expected.address || c.address === expected.address));
-  if (matches.length !== 1) fail('官方地点候选未唯一匹配名称和地址，请在参数中选择准确候选；未按排序盲选');
-  const chosen = matches[0];
+  const configured = config.location(requested);
+  const targets = [{ ...configured, source: 'primary' }, ...(configured.fallback ? [{ ...configured.fallback, mode: 'specified', source: 'fallback' }] : [])];
+  let chosen, expected;
+  const normalize = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+  for (const target of targets) {
+    context.log(`后台搜索${target.source === 'primary' ? '固定' : '备选'}地点，核对名称及完整地址`);
+    const candidates = await search(page, target.query, context);
+    const matches = candidates.filter((c) => normalize(c.name) === normalize(target.label) && (!target.address || normalize(c.address) === normalize(target.address)));
+    if (matches.length === 1) { chosen = matches[0]; expected = target; break; }
+    context.log(`${target.source === 'primary' ? '固定' : '备选'}地点未唯一匹配（准确候选 ${matches.length} 个），未选择其他地点`, 'warning');
+  }
+  if (!chosen) fail('固定地点及已配置备选地点未唯一匹配名称和准确地址，请人工接管选择并核实地点；未提交作品');
   const s = await read(page, { action: 'pick-poi', name: chosen.name, address: chosen.address });
   if (!s.marked) fail('地点候选已变化，请重新搜索');
   await page.click({ selector: '[data-qiye-option="poi"]' });
   await until(page, (s, input) => s.selected === input.name && !s.candidates.length, { name: chosen.name });
   await read(page, { action: 'guard-poi', name: chosen.name, address: chosen.address });
-  context.log(`官方位置已选择并回读：${chosen.name} · ${chosen.address}`);
-  context.checkpoint({ locationVerified: { ...expected, address: chosen.address } });
-  return { ...expected, address: chosen.address };
+  const verified = { mode: 'specified', label: chosen.name, address: chosen.address, query: expected.query, source: expected.source };
+  context.log(`官方位置已选择并回读（${expected.source === 'primary' ? '固定' : '备选'}）：${chosen.name} · ${chosen.address}`);
+  context.checkpoint({ locationVerified: verified });
+  return verified;
 }
 async function verify(page, native, poi) {
   const s = await read(page);

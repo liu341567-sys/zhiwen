@@ -425,7 +425,7 @@ test('registering a future video adapter reuses the matching engine and canonica
     accountIds: ['red-account'],
     title: { mode: 'reuse', values: ['Title'] },
     topics: { mode: 'reuse', values: ['#话题组'] },
-    distribution: { mode: 'all' },
+    distribution: { mode: 'sequence' },
     schedule: { mode: 'now', intervalMinutes: 10 },
     cover: { mode: 'first' },
     location: { mode: 'none' },

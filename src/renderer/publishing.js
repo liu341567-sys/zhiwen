@@ -10,11 +10,9 @@
   };
   const names = {
     video: '视频发布',
-    create: '创建发布任务',
     image: '图文发布',
     article: '文章发布',
     tasks: '任务列表',
-    plan: '发布计划',
     history: '发布记录',
     materials: '视频素材库',
     library: '标题与话题库',
@@ -52,7 +50,7 @@
     accountIds: [],
     title: { mode: 'reuse', scope: 'video', values: [], locks: {} },
     topics: { mode: 'reuse', scope: 'video', values: [], locks: {} },
-    distribution: { mode: 'all' },
+    distribution: { mode: 'sequence' },
     cover: { mode: 'first' },
     location: { mode: 'none' },
     nativeSchedule: null,
@@ -61,7 +59,6 @@
     schedule: {
       mode: 'now',
       intervalMinutes: 10,
-      windows: [{ start: '09:00', end: '11:00', quota: 2 }],
     },
     autoSubmit: false,
     overrides: {},
@@ -146,6 +143,18 @@
     if (title) n.append(E('h2', '', title));
     return n;
   }
+  const expandedSections = new Map();
+  function disclosure(label, key) {
+    const d = E('details', 'publish-advanced');
+    d.append(E('summary', '', label));
+    d.open = expandedSections.get(key) === true;
+    d.addEventListener('toggle', () => expandedSections.set(key, d.open));
+    return d;
+  }
+  function locationText(location) {
+    const identity = (p) => p.label + (p.address ? ' · ' + p.address : '');
+    return identity(location) + (location.fallback ? '\n备选：' + identity(location.fallback) : '');
+  }
   function note(text, warning = false) {
     return E('p', 'publish-notice' + (warning ? ' publish-warning' : ''), text);
   }
@@ -180,7 +189,6 @@
         cover: row.cover,
         location: row.location,
         nativeSchedule: row.nativeSchedule,
-        plannedAt: row.plannedAt,
         autoSubmit: row.autoSubmit,
       });
     } else {
@@ -201,14 +209,12 @@
           'cover',
           'location',
           'nativeSchedule',
-          'plannedAt',
           'autoSubmit',
           'locked',
           'cancelled',
         ])
           if (Object.hasOwn(override, key))
             row[key] = structuredClone(override[key]);
-        row.timeLocked = Object.hasOwn(override, 'plannedAt');
       }
     }
     const order = new Map((input.previewOrder || []).map((key, i) => [key, i]));
@@ -264,7 +270,7 @@
         render = true;
       if (
         ready &&
-        ['video', 'create'].includes(page) &&
+        ['video'].includes(page) &&
         ((step === 0 && previous?.videos.length !== data.videos.length) ||
           (step === 2 &&
             JSON.stringify(
@@ -277,11 +283,15 @@
         const draft = data.drafts.find((d) => d.id === 'current');
         if (draft?.data?.input) {
           input = draft.data.input;
-          step = draft.data.step || 0;
+          const retired = !['sequence', 'single'].includes(input.distribution?.mode) || (input.schedule?.mode && input.schedule.mode !== 'now');
+          input.schedule = { mode: 'now', intervalMinutes: input.schedule?.intervalMinutes ?? 10 };
+          for (const override of Object.values(input.overrides || {})) delete override.plannedAt;
+          if (!['sequence', 'single'].includes(input.distribution?.mode)) input.distribution = { mode: 'sequence' };
+          step = retired ? Math.min(3, draft.data.step || 0) : draft.data.step || 0;
           const saved = data.drafts.find(
             (d) => d.id === `preview:${draft.data.previewId}`,
           );
-          if (saved) {
+          if (saved && !retired) {
             preview = {
               previewId: draft.data.previewId,
               rows: structuredClone(saved.data.rows),
@@ -289,8 +299,8 @@
             hydratePreview();
           }
         }
-        page = names[data.ui.page] ? data.ui.page : 'video';
-        step = Math.min(4, Math.max(0, draft?.data?.step ?? data.ui.step ?? 0));
+        page = data.ui.page === 'plan' ? 'tasks' : names[data.ui.page] ? data.ui.page : 'video';
+        step = Math.min(4, Math.max(0, draft ? step : data.ui.step ?? 0));
         scroll = data.ui.scroll || {};
         ready = true;
         render = true;
@@ -299,7 +309,7 @@
         remember();
         draw();
       } else if (
-        ['tasks', 'plan', 'history'].includes(page) &&
+        ['tasks', 'history'].includes(page) &&
         !document.querySelector('.publish-dialog[open]')
       ) {
         if (updateTaskRows) updateTaskRows();
@@ -337,7 +347,7 @@
       E(
         'p',
         '',
-        page === 'video' || page === 'create'
+        page === 'video'
           ? '导入素材、选择原有账号环境，预览并确认本地发布任务。'
           : '本地保存，与现有账号环境关联。',
       ),
@@ -352,7 +362,7 @@
     );
     head.append(actions);
     root.append(head);
-    if (['video', 'create'].includes(page)) wizard();
+    if (['video'].includes(page)) wizard();
     else {
       const body = E('div', 'publish-body');
       root.append(body);
@@ -362,7 +372,7 @@
             '规划中：本期仅开放抖音视频发布。此页面保留框架，未提供实际发布能力。',
           ),
         );
-      else if (['tasks', 'plan', 'history'].includes(page)) tasks(body);
+      else if (['tasks', 'history'].includes(page)) tasks(body);
       else if (page === 'materials') materials(body, false);
       else if (page === 'library') library(body);
     }
@@ -532,6 +542,7 @@
     operations.append(
       E('span', 'publish-metric', `${data.videos.length} 条本地素材`),
     );
+    operations.append(more);
     body.append(operations);
     const { wrap, body: rows } = table([
       '选择',
@@ -621,7 +632,7 @@
     step = 0;
     selected.clear();
     filters = {};
-    scroll.video = scroll.create = 0;
+    scroll.video = 0;
     saveUI();
   }
   function deleteResources(ids) {
@@ -777,7 +788,7 @@
   function accounts(body) {
     body.append(
       note(
-        '只选择与抖音关联的原有独立环境。未运行网页检查前，登录状态显示“未核实”，不会把“已打开”当作“已登录”。',
+        '选择原有抖音账号。多账号时按顺序分配，每条视频只发一个账号；单账号模式只选一个。已打开不等于已登录，执行时会检查。',
       ),
     );
     const eligible = data.accounts.filter((a) =>
@@ -795,6 +806,7 @@
     toolbar.append(
       search,
       B('全选', () => {
+        if (input.distribution.mode === 'single') throw new Error('此模式只允许选择一个账号');
         input.accountIds = eligible.map((a) => a.id);
         saveSoon();
         fill();
@@ -817,10 +829,11 @@
       )) {
         const l = E('label', 'publish-account'),
           c = E('input');
-        c.type = 'checkbox';
+        c.type = input.distribution.mode === 'single' ? 'radio' : 'checkbox';
+        if (c.type === 'radio') c.name = 'publishing-account';
         c.checked = input.accountIds.includes(a.id);
         c.addEventListener('change', () => {
-          input.accountIds = c.checked
+          input.accountIds = c.checked && input.distribution.mode === 'single' ? [a.id] : c.checked
             ? [...new Set([...input.accountIds, a.id])]
             : input.accountIds.filter((id) => id !== a.id);
           saveSoon();
@@ -899,14 +912,18 @@
         (v) => (config.scope = v),
       ),
     );
+    p.append(grid.firstElementChild);
+    const advanced = disclosure('更多匹配选项 / 文案库', 'matching-' + kind);
+    advanced.append(grid);
     p.append(
-      grid,
       field(
         kind === 'topics' ? '话题组：每行一组，保留整组匹配' : '标题：每行一个',
         'textarea',
         config.values.join('\n'),
         (v) => (config.values = v.split(/\r?\n/)),
       ),
+    );
+    advanced.append(
       B('从文案库选取', () => {
         const resources = data.library
             .filter((r) => r.kind === kind)
@@ -934,6 +951,7 @@
         '固定模式按匹配项顺序绑定并锁定；顺序不足时循环，随机每轮不重复。预览后可单独覆盖并锁定。',
       ),
     );
+    p.append(advanced);
     return p;
   }
   function configuration(body) {
@@ -941,68 +959,21 @@
       matchingConfig('title', '标题配置'),
       matchingConfig('topics', '话题组配置'),
     );
-    const p = panel('视频与账号分发'),
-      modes = [
-        ['all', '全部视频 → 全部账号'],
-        ['sequence', '按视频与账号顺序均分'],
-        ['random', '随机分配（可设置账号配额）'],
-        ['manual', '逐条视频指定账号'],
-      ];
-    p.append(
-      choice('分发方式', modes, input.distribution.mode, (v) => {
-        input.distribution = { mode: v };
-        saveSoon();
-        draw();
-      }),
-    );
-    if (input.distribution.mode === 'random') {
-      p.append(
-        E(
-          'p',
-          'publish-help',
-          '不填配额时均分；填写后总数量必须等于视频数量。',
-        ),
-      );
-      for (const id of input.accountIds) {
-        const a = data.accounts.find((a) => a.id === id);
-        p.append(
-          field(
-            a?.name || id,
-            'number',
-            input.distribution.quotas?.[id] ?? '',
-            (v) => {
-              input.distribution.quotas ||= {};
-              if (v === '') delete input.distribution.quotas[id];
-              else input.distribution.quotas[id] = Number(v);
-            },
-          ),
-        );
-      }
+    const p = panel('视频与账号分配');
+    p.append(choice('分配方式', [['sequence', '一个视频发一个账号'], ['single', '单个账号发布多个视频']], input.distribution.mode, (v) => {
+      input.distribution = { mode: v }; saveSoon(); draw();
+    }));
+    if (input.distribution.mode === 'single') {
+      p.append(choice('发布账号', [['', '请选择一个账号'], ...data.accounts.filter((a) => input.platformIds.includes(a.platformId)).map((a) => [a.id, a.name])], input.accountIds.length === 1 ? input.accountIds[0] : '', (id) => {
+        input.accountIds = id ? [id] : []; saveSoon();
+      }));
     }
-    if (input.distribution.mode === 'manual')
-      for (const id of input.videoIds) {
-        const row = panel(data.videos.find((v) => v.id === id)?.name || id);
-        for (const aid of input.accountIds)
-          row.append(
-            check(
-              data.accounts.find((a) => a.id === aid)?.name || aid,
-              input.distribution.manual?.[id]?.includes(aid),
-              (v) => {
-                input.distribution.manual ||= {};
-                const list = input.distribution.manual[id] || [];
-                input.distribution.manual[id] = v
-                  ? [...new Set([...list, aid])]
-                  : list.filter((a) => a !== aid);
-              },
-            ),
-          );
-        p.append(row);
-      }
+    p.append(E('p', 'publish-help', input.distribution.mode === 'single' ? '全部视频按顺序交给这个账号，每条视频只生成一条任务。' : '视频按排列顺序依次分给所选账号，账号用完后从第一个继续；每条视频只发一个账号。'));
     body.append(p);
     const cover = panel('封面与定位');
     cover.append(
       note(
-        '默认封面沿用平台设置；自定义图片和指定帧仍需人工设置。指定位置在上传后搜索官方候选并核对；官方定时与本地开始执行时间分别设置。',
+        '默认封面沿用平台设置；自定义图片和指定帧仍需人工设置。指定位置在上传后搜索官方候选并核对；发布时间仅使用抖音官方定时。',
         true,
       ),
     );
@@ -1040,89 +1011,23 @@
         });
       }),
     );
-    cover.append(perVideo);
-    cover.append(B('逐账号设置定位', () => {
+    const individual = disclosure('按视频 / 账号单独设置', 'individual-options');
+    individual.append(perVideo);
+    individual.append(B('逐账号设置定位', () => {
       const blocks = input.accountIds.map((id) => { const p = panel(data.accounts.find((a) => a.id === id)?.name || id);
         p.append(locationControl(input.locations[id] || input.location, (value) => { input.locations[id] = value; }, id)); return p; });
       show('逐账号定位', blocks, () => saveSoon());
     }));
+    cover.append(individual);
     body.append(cover);
     const native = panel('抖音官方定时');
     native.append(nativeControl(input.nativeSchedule, (v) => { input.nativeSchedule = v; saveSoon(); }, true));
-    native.append(note('任务先按本地计划上传并提交，作品由抖音按官方时间安排发布。当前录制账号显示2小时后至14天内，执行时会核对账号实际范围及最终时间。审核、上传耗时和上线结果仍由平台决定。'));
+    native.append(note('确认后直接进入上传队列，作品由抖音按官方时间安排发布。当前录制账号显示2小时后至14天内，执行时会核对账号实际范围及最终时间。审核、上传耗时和上线结果仍由平台决定。'));
     body.append(native);
-    const schedule = panel('本地发布时间计划');
-    schedule.append(
-      choice(
-        '执行方式',
-        [
-          ['now', '立即进入队列'],
-          ['at', '指定开始时间'],
-          ['windows', '每天多时段'],
-        ],
-        input.schedule.mode,
-        (v) => {
-          input.schedule.mode = v;
-          saveSoon();
-          draw();
-        },
-      ),
-      field(
-        '同一账号最小发布间隔（分钟）',
-        'number',
-        input.schedule.intervalMinutes,
-        (v) => (input.schedule.intervalMinutes = Number(v)),
-      ),
-    );
-    if (input.schedule.mode === 'at')
-      schedule.append(
-        field(
-          '计划开始执行时间',
-          'datetime-local',
-          input.schedule.at || '',
-          (v) => (input.schedule.at = v),
-        ),
-      );
-    if (input.schedule.mode === 'windows') {
-      (input.schedule.windows ||= []).forEach((w, i) => {
-        const row = E('div', 'publish-grid');
-        row.append(
-          field('时段开始', 'time', w.start, (v) => (w.start = v)),
-          field('时段结束', 'time', w.end, (v) => (w.end = v)),
-          field(
-            '每账号此时段任务数量',
-            'number',
-            w.quota,
-            (v) => (w.quota = Number(v)),
-          ),
-          B('删除时段', () => {
-            input.schedule.windows.splice(i, 1);
-            saveSoon();
-            draw();
-          }),
-        );
-        schedule.append(row);
-      });
-      schedule.append(
-        B('添加时段', () => {
-          input.schedule.windows.push({
-            start: '14:00',
-            end: '17:00',
-            quota: 2,
-          });
-          saveSoon();
-          draw();
-        }),
-      );
-    }
-    schedule.append(
-      E(
-        'p',
-        'publish-help',
-        '需要电脑开机、联网并保持栖页运行；重启时错过计划五分钟以上的任务暂停等待确认。立即队列也遵守同账号最小间隔。',
-      ),
-    );
-    body.append(schedule);
+    const advanced = disclosure('执行选项', 'execution-options');
+    advanced.append(field('同一账号最小提交间隔（分钟）', 'number', input.schedule.intervalMinutes, (v) => { input.schedule.intervalMinutes = Number(v); }),
+      E('p', 'publish-help', '任务确认后直接排队上传。此间隔仅防止同账号连续提交过密，不是本地定时；上传和提交时需要电脑运行并联网。'));
+    body.append(advanced);
     const authorize = panel('提交授权');
     authorize.append(
       check(
@@ -1189,110 +1094,46 @@
     }
     return p;
   }
-  function locationControl(value, onChange, forAccount = null) {
-    const p = E('div'),
-      c = structuredClone(value || { mode: 'none' });
-    p.append(
-      choice(
-        '发布定位',
-        [
-          ['none', '不设置定位'],
-          ['specified', '指定位置（官方搜索）'],
-        ],
-        c.mode,
-        (v) => {
-          c.mode = v;
-          onChange(c);
-          p.replaceChildren(locationControl(c, onChange, forAccount));
-        },
-      ),
-    );
+  function locationControl(value, onChange) {
+    const p = E('div'), c = structuredClone(value || { mode: 'none' });
+    p.append(choice('发布定位', [['none', '不设置定位'], ['specified', '固定地点 / 备选地点']], c.mode, (v) => {
+      c.mode = v; onChange(c); p.replaceChildren(locationControl(c, onChange));
+    }));
     if (c.mode === 'specified') {
-      const f = field('平台位置名称', 'text', c.label || '', (v) => {
-        c.label = v;
-        onChange(c);
-      });
-      p.append(f);
-      p.append(field('官方位置搜索词（留空使用名称）', 'text', c.query || '', (v) => { c.query = v; onChange(c); }),
-        field('完整地点地址（同名地点须填写）', 'text', c.address || '', (v) => { c.address = v; onChange(c); }));
-      let accountId = forAccount || input.accountIds[0] || '', revision = 0;
-      const results = E('div', 'publish-actions');
-      let preparationVideoId = input.videoIds[0] || '';
-      async function queryLocations(prepare = false) {
-        if (prepare && !preparationVideoId) throw new Error('请先选择本次要发布的视频');
-          const request = ++revision, query = (c.query || c.label || '').trim(), selectedAccount = accountId;
-          const currentFingerprint = () => JSON.stringify([accountId, c.label, c.query, c.address, prepare ? preparationVideoId : null]);
-          const fingerprint = currentFingerprint(), requestId = crypto.randomUUID(); let searching = true;
-          const cancel = setInterval(() => { if (!p.isConnected || fingerprint !== currentFingerprint()) {
-            clearInterval(cancel); cmd('location-cancel', { accountId: selectedAccount, requestId }).catch(() => {});
-          } else if (searching) { cmd('location-status', { accountId: selectedAccount, requestId }).then((status) => { if (searching && p.isConnected && request === revision && status?.stage) results.replaceChildren(E('span', 'publish-help', status.stage)); }).catch(() => {}); } }, 300);
-          results.replaceChildren(E('span', 'publish-help', '正在此原账号网页搜索…'));
-          try {
-            const response = await cmd('location-search', { accountId: selectedAccount, query, requestId, ...(prepare ? { prepareVideoId: preparationVideoId } : {}) });
-            searching = false;
-            if (!p.isConnected || request !== revision || fingerprint !== currentFingerprint()) return;
-            results.replaceChildren();
-            for (const candidate of response.candidates) results.append(B(`${candidate.name} · ${candidate.address}`, async () => {
-              if (accountId !== selectedAccount || (c.query || c.label || '').trim() !== query) throw new Error('搜索条件已变化，请重新搜索');
-              const selectionId = crypto.randomUUID(), selectionRevision = ++revision;
-              const cancelSelection = setInterval(() => { if (!p.isConnected || fingerprint !== currentFingerprint()) {
-                clearInterval(cancelSelection); cmd('location-cancel', { accountId: selectedAccount, requestId: selectionId }).catch(() => {});
-              } }, 300);
-              for (const button of results.querySelectorAll('button')) button.disabled = true;
-              try {
-                const selected = await cmd('location-select', { accountId: selectedAccount, query, label: candidate.name, address: candidate.address, requestId: selectionId });
-                if (!p.isConnected || selectionRevision !== revision || fingerprint !== currentFingerprint()) return;
-                c.label = selected.selected.label; c.address = selected.selected.address; c.query = query; onChange(c);
-                p.replaceChildren(locationControl(c, onChange, forAccount));
-              } finally {
-                clearInterval(cancelSelection);
-                for (const button of results.querySelectorAll('button')) button.disabled = false;
-              }
-            }));
-          } catch (error) { if (p.isConnected && request === revision) results.replaceChildren(note(error.message, true)); throw error; }
-          finally { searching = false; clearInterval(cancel); }
-
-      }
-      p.append(choice('位置搜索账号', [['', '请选择'], ...data.accounts.filter((a) => a.platformId === 'douyin' && input.accountIds.includes(a.id) && (!forAccount || a.id === forAccount)).map((a) => [a.id, a.name])], accountId,
-        (v) => { accountId = v; revision++; results.replaceChildren(); }),
-        choice('地点查询准备视频', input.videoIds.map((id) => [id, data.videos.find((v) => v.id === id)?.name || id]), preparationVideoId, (v) => { preparationVideoId = v; }),
-        B('读取已打开页面的候选', () => queryLocations(false)),
-        B('上传所选视频并读取地点', () => queryLocations(true), true), results,
-        E('p', 'publish-help', '账号还在首页时，点击蓝色按钮：上传这里明确选择的真实视频，只查询地点，不提交作品。后续同账号、同视频任务可复用上传；不覆盖已经编辑的其他作品。已有编辑页可直接读取候选。'));
-      if (data.locations.length)
-        p.append(
-          choice(
-            '常用位置',
-            [['', '请选择'], ...data.locations.map((l) => [l.value, l.value])],
-            c.label || '',
-            (v) => {
-              c.label = v;
-              onChange(c);
-              p.replaceChildren(locationControl(c, onChange, forAccount));
-            },
-          ),
-        );
-      p.append(
-        B('保存常用位置', async () => {
-          await cmd('resource-add', {
-            kind: 'location',
-            lines: [c.label || ''],
-          });
-          await refresh();
-          notify('常用定位已保存');
-        }),
-      );
+      const primary = E('div', 'publish-grid');
+      primary.append(field('固定地点名称', 'text', c.label || '', (v) => { c.label = v; delete c.query; onChange(c); }),
+        field('固定地点完整地址', 'text', c.address || '', (v) => { c.address = v; onChange(c); }));
+      const fallback = E('div', 'publish-grid');
+      fallback.append(field('备选地点名称（可选）', 'text', c.fallback?.label || '', (v) => { c.fallback ||= {}; c.fallback.label = v; delete c.fallback.query; onChange(c); }),
+        field('备选地点完整地址（可选）', 'text', c.fallback?.address || '', (v) => { c.fallback ||= {}; c.fallback.address = v; onChange(c); }));
+      p.append(primary, fallback, E('p', 'publish-help', '发布时后台搜索固定地点，未准确匹配再搜索备选地点。按名称和完整地址核对；无法唯一匹配时暂停并提示人工接管。配置时不访问官网或上传视频。'));
     }
     return p;
   }
   function nativeControl(value, onChange, batch = false) {
     const p = E('div'); let c = value ? structuredClone(value) : null;
-    p.append(choice('官方发布方式', [['none', '按本地执行计划发布'], ['at', '抖音官方定时']], c ? 'at' : 'none', (v) => {
-      c = v === 'at' ? (c || { at: '', timezone: 'Asia/Shanghai', intervalMinutes: 10 }) : null;
+    const options = [['none', '立即发布'], ['at', '抖音官方定时'], ...(batch ? [['cycle', '循环定时']] : [])];
+    p.append(choice('官方发布方式', options, c?.mode === 'cycle' ? 'cycle' : c ? 'at' : 'none', (v) => {
+      c = v === 'none' ? null : v === 'cycle' ? { mode: 'cycle', cadence: 'daily', startDate: new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10), times: ['18:00'], weekdays: [1, 2, 3, 4, 5], timezone: 'Asia/Shanghai' }
+        : c && c.mode !== 'cycle' ? c : { at: '', timezone: 'Asia/Shanghai', intervalMinutes: 10 };
       onChange(c); p.replaceChildren(nativeControl(c, onChange, batch));
     }));
-    if (c) p.append(field('官方发布时间（北京时间）', 'datetime-local', c.at || '', (v) => { c.at = v; c.timezone = 'Asia/Shanghai'; onChange(c); }));
-    if (c && batch) p.append(field('同一账号官方定时间隔（分钟）', 'number', c.intervalMinutes ?? 10, (v) => { c.intervalMinutes = Number(v); onChange(c); }));
+    if (c?.mode === 'cycle') {
+      p.append(choice('循环方式', [['daily', '日循环'], ['weekly', '周循环']], c.cadence, (v) => { c.cadence = v; onChange(c); p.replaceChildren(nativeControl(c, onChange, batch)); }),
+        field('循环开始日期（北京时间）', 'date', c.startDate, (v) => { c.startDate = v; onChange(c); }),
+        field('每日发布时间（每行一个 HH:mm）', 'textarea', c.times.join('\n'), (v) => { c.times = v.split(/\r?\n/).map((v) => v.trim()).filter(Boolean); onChange(c); }));
+      if (c.cadence === 'weekly') {
+        const days = E('fieldset', 'publish-weekdays'); days.append(E('legend', '', '每周发布日'));
+        ['一', '二', '三', '四', '五', '六', '日'].forEach((name, index) => days.append(check('周' + name, c.weekdays.includes(index + 1), (selected) => {
+          c.weekdays = selected ? [...new Set([...c.weekdays, index + 1])] : c.weekdays.filter((d) => d !== index + 1); onChange(c);
+        })));
+        p.append(days);
+      }
+      p.append(E('p', 'publish-help', '每个账号按分到的视频数量独立排期，按日期和时间顺序填满所选时段；过去的时段跳过。仅安排本批次视频，不循环重复发布。下一步可预览每条任务的具体官方时间。'));
+    } else if (c) {
+      p.append(field('官方发布时间（北京时间）', 'datetime-local', c.at || '', (v) => { c.at = v; c.timezone = 'Asia/Shanghai'; onChange(c); }));
+      if (batch) p.append(field('同一账号官方定时间隔（分钟）', 'number', c.intervalMinutes ?? 10, (v) => { c.intervalMinutes = Number(v); onChange(c); }));
+    }
     return p;
   }
   function taskPreview(body) {
@@ -1375,7 +1216,6 @@
       '平台 / 账号',
       '标题',
       '完整话题组',
-      '计划开始时间',
       '官方发布时间 / 地点',
       '锁定 / 取消',
       '操作',
@@ -1415,17 +1255,7 @@
           });
           cell(row, c);
         }
-        const time = E('input');
-        time.type = 'datetime-local';
-        time.value = local(r.plannedAt);
-        time.disabled = r.locked;
-        time.addEventListener('change', () => {
-          r.plannedAt = Date.parse(time.value);
-          r.timeLocked = true;
-          rowOverride(r, { plannedAt: r.plannedAt });
-        });
-        cell(row, time);
-        cell(row, E('span', 'publish-help', `${r.nativeSchedule?.at?.replace('T', ' ') || '不启用官方定时'}${r.nativeSchedule ? '（北京时间）' : ''}\n${r.location?.mode === 'specified' ? r.location.label + (r.location.address ? ' · ' + r.location.address : '') : '不设置定位'}`));
+        cell(row, E('span', 'publish-help', `${r.nativeSchedule?.at?.replace('T', ' ') || '不启用官方定时'}${r.nativeSchedule ? '（北京时间）' : ''}\n${r.location?.mode === 'specified' ? locationText(r.location) : '不设置定位'}`));
         const flags = E('div');
         flags.append(
           check('锁定', r.locked, (v) => {
@@ -1480,18 +1310,6 @@
       const i = preview.rows.indexOf(r),
         j = i + delta;
       if (j < 0 || j >= preview.rows.length) return;
-      const other = preview.rows[j];
-      if (
-        !r.timeLocked &&
-        !r.locked &&
-        !other.timeLocked &&
-        !other.locked &&
-        r.accountId === other.accountId
-      ) {
-        [r.plannedAt, other.plannedAt] = [other.plannedAt, r.plannedAt];
-        rowOverride(r, { plannedAt: r.plannedAt });
-        rowOverride(other, { plannedAt: other.plannedAt });
-      }
       [preview.rows[i], preview.rows[j]] = [preview.rows[j], preview.rows[i]];
       input.previewOrder = preview.rows.map((r) => r.key);
       saveSoon();
@@ -1505,7 +1323,7 @@
       allowDuplicates = false;
     const controls = [
       note(
-        `将创建 ${preview.rows.filter((r) => !r.cancelled).length} 条任务：官方定时 ${preview.rows.filter((r) => !r.cancelled && r.nativeSchedule?.at).length} 条；不设置官方定时 ${preview.rows.filter((r) => !r.cancelled && !r.nativeSchedule?.at).length} 条。本地开始时间不会自动写入抖音官方定时。自动提交授权以各任务勾选状态为准，未授权任务在填写后暂停。`,
+        `将创建 ${preview.rows.filter((r) => !r.cancelled).length} 条任务：官方定时 ${preview.rows.filter((r) => !r.cancelled && r.nativeSchedule?.at).length} 条；不设置官方定时 ${preview.rows.filter((r) => !r.cancelled && !r.nativeSchedule?.at).length} 条。任务确认后直接进入队列，发布时间仅使用官方设置。自动提交授权以各任务勾选状态为准，未授权任务在填写后暂停。`,
       ),
       field('批次名称', 'text', name, (v) => (name = v)),
       check(
@@ -1531,7 +1349,7 @@
         );
         await refresh();
         go('tasks');
-        notify('发布任务已生成，按本地计划进入队列');
+        notify('发布任务已生成，已进入执行队列');
       },
       null,
       '确认生成并执行',
@@ -1559,18 +1377,6 @@
         },
       ),
       choice(
-        '平台',
-        [
-          ['', '全部平台'],
-          ['douyin', '抖音'],
-        ],
-        filters.platform || '',
-        (v) => {
-          filters.platform = v;
-          fill();
-        },
-      ),
-      choice(
         '账号',
         [['', '全部账号'], ...data.accounts.map((a) => [a.id, a.name])],
         filters.account || '',
@@ -1585,12 +1391,6 @@
       }),
     );
     body.append(toolbar);
-    if (page === 'plan')
-      body.append(
-        note(
-          '本地计划表示开始执行上传的时间，需要电脑保持开机和联网；平台处理、审核时间不能由本地计划保证。',
-        ),
-      );
     const operations = E('div', 'publish-toolbar');
     operations.append(
       B('全选当前结果', () => {
@@ -1612,6 +1412,9 @@
       );
     operations.append(
       B('删除选中记录', () => deleteTasks([...selected])),
+    );
+    const more = disclosure('更多操作', 'task-operations');
+    more.append(
       B('删除当前筛选记录', () => deleteTasks(visible().map((t) => t.id))),
       B('导出记录', async () => {
         const r = await cmd('export', {
@@ -1636,13 +1439,14 @@
         },
       ),
     );
+    operations.append(more);
     body.append(operations);
     const { wrap, body: rows } = table([
       '选择',
       '视频 / 批次',
       '平台 / 账号',
       '标题 / 话题',
-      '计划时间',
+      '官方发布时间',
       '状态 / 进度',
       '操作',
     ]);
@@ -1658,10 +1462,7 @@
               .includes(q)) &&
           (!filters.status || t.status === filters.status) &&
           (!filters.account || t.accountId === filters.account) &&
-          (!filters.platform || t.platformId === filters.platform) &&
-          (!filters.day || local(t.plannedAt).startsWith(filters.day)) &&
-          (page !== 'plan' ||
-            ['pending', 'paused', 'manual'].includes(t.status)) &&
+          (!filters.day || (t.nativeSchedule?.at || local(t.plannedAt)).startsWith(filters.day)) &&
           (page !== 'history' ||
             [
               'submitted',
@@ -1697,8 +1498,7 @@
         text.append(E('div', '', t.title), E('div', 'muted', t.topics));
         cell(row, text);
         const timing = E('div');
-        timing.append(E('div', '', '开始：' + date(t.plannedAt)));
-        if (t.nativeSchedule?.at) timing.append(E('div', 'muted', '官方：' + t.nativeSchedule.at.replace('T', ' ') + '（北京时间）'));
+        timing.append(E('div', '', t.nativeSchedule?.at ? t.nativeSchedule.at.replace('T', ' ') + '（北京时间）' : '立即发布'));
         cell(row, timing);
         const state = E('div'),
           badge = E('span', 'publish-status', statuses[t.status]);
@@ -1767,7 +1567,7 @@
         E(
           'p',
           'publish-help',
-          `环境 ID：${t.accountId}\n素材：${t.video.path}\n本地计划开始：${date(t.plannedAt)}\n官方发布时间：${t.nativeSchedule?.at?.replace('T', ' ') || '未设置'}${t.nativeSchedule?.at ? '（北京时间）' : ''}\n定位：${t.location?.mode === 'specified' ? t.location.label + ' · ' + (t.location.address || '执行时核对唯一候选') : '不设置'}\n最终标题：${t.title}\n完整话题组：${t.topics}`,
+          `环境 ID：${t.accountId}\n素材：${t.video.path}\n队列时间：${date(t.plannedAt)}\n官方发布时间：${t.nativeSchedule?.at?.replace('T', ' ') || '未设置'}${t.nativeSchedule?.at ? '（北京时间）' : ''}\n定位：${t.location?.mode === 'specified' ? locationText(t.location) + (t.checkpoint.locationVerified ? '\n实际定位：' + locationText(t.checkpoint.locationVerified) : '') : '不设置'}\n最终标题：${t.title}\n完整话题组：${t.topics}`,
         ),
         E(
           'pre',

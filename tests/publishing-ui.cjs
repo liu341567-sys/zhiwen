@@ -178,12 +178,13 @@ async function run(scale) {
         assert.equal(state.accounts[0].login.status, 'unknown');
       },
     );
+    const otherSource = path.join(dir, 'another-wizard-video.mp4');
+    await binary(require('ffmpeg-static'), ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=green:s=320x240:r=10', '-t', '1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', otherSource]);
+    assert.equal((await command('import', [otherSource])).added.length, 1);
+    await until(() => shell.locator('.video-thumb').count().then((n) => n === 2), 'second wizard video');
     // Exercise the actual five-step wizard. Import does not choose videos implicitly
     // when invoked directly; selecting a row is a real UI input.
-    await shell
-      .locator('.publish-table input[type="checkbox"]')
-      .first()
-      .check();
+    for (const box of await shell.locator('.publish-table input[type="checkbox"]').all()) await box.check();
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     assert.equal(await shell.locator('.publish-choice:disabled').count(), 3);
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
@@ -211,7 +212,7 @@ async function run(scale) {
     assert.equal(officialDraft.data.input.nativeSchedule.at, officialAt.replace('12:21', '13:29'));
     assert.equal(officialDraft.data.input.nativeSchedule.timezone, 'Asia/Shanghai');
     await shell.getByLabel('官方发布方式', { exact: true }).selectOption('none');
-    check(`publishing-${scale}: official schedule draft retains interval when datetime changes and can return to local execution mode`, () => assert.ok(true));
+    check(`publishing-${scale}: official schedule draft retains interval when datetime changes and can return to immediate publishing`, () => assert.ok(true));
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     assert.equal(await shell.locator('.publish-table tbody tr').count(), 2);
     await shell
@@ -274,7 +275,7 @@ async function run(scale) {
     await options.getByLabel('封面方式').selectOption('frame');
     await options.getByLabel('指定帧时间（秒）', { exact: true }).fill('0.5');
     await options.getByLabel('发布定位').selectOption('specified');
-    await options.getByLabel('平台位置名称', { exact: true }).fill('上海市');
+    await options.getByLabel('固定地点名称', { exact: true }).fill('上海市');
     await options.getByLabel('官方发布方式', { exact: true }).selectOption('at');
     await options.getByLabel('官方发布时间（北京时间）', { exact: true }).fill(officialAt);
     await options.getByLabel('授权自动提交', { exact: true }).check();
@@ -1242,10 +1243,7 @@ async function run(scale) {
       await shell.locator('.publish-table input:checked').count(),
       0,
     );
-    await shell
-      .locator('.publish-table input[type="checkbox"]')
-      .first()
-      .check();
+    for (const box of (await shell.locator('.publish-table input[type="checkbox"]').all()).slice(0, 2)) await box.check();
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     for (const box of await shell.locator('.publish-account input').all())
@@ -1296,14 +1294,11 @@ async function run(scale) {
           .then(Boolean),
       'import cover selection',
     );
-    await shell.getByLabel('执行方式', { exact: true }).selectOption('at');
+    await shell.getByLabel('官方发布方式', { exact: true }).selectOption('at');
     const future = await shell.evaluate(() => {
-      const d = new Date(Date.now() + 3600000);
-      return new Date(d - d.getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 16);
+      return new Date(Date.now() + 3 * 86400000 + 8 * 3600000).toISOString().slice(0, 16);
     });
-    await shell.getByLabel('计划开始执行时间', { exact: true }).fill(future);
+    await shell.getByLabel('官方发布时间（北京时间）', { exact: true }).fill(future);
     await shell.getByRole('button', { name: '下一步', exact: true }).click();
     await shell
       .getByRole('button', { name: '确认生成并执行', exact: true })
@@ -1371,7 +1366,7 @@ async function run(scale) {
       `publishing-${scale}: cancel preserves draft and explicit clear resets only the unsubmitted wizard`,
       () => assert.ok(true),
     );
-    await shell.locator('[data-publish-page="plan"]').click();
+    await shell.locator('[data-publish-page="tasks"]').click();
     await shell
       .getByPlaceholder('视频、账号、标题或批次搜索')
       .fill('清理测试批次');
@@ -1493,6 +1488,7 @@ async function run(scale) {
       () => assert.ok(true),
     );
     await shell.locator('[data-publish-page="materials"]').click();
+    await shell.getByText('更多操作', { exact: true }).click();
     await shell
       .getByRole('button', { name: '删除当前筛选记录', exact: true })
       .click();

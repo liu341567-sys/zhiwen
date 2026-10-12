@@ -40,24 +40,8 @@
         "planned": true
       },
       {
-        "id": "create",
-        "label": "创建发布任务",
-        "icon": "plus",
-        "group": "发布管理",
-        "publishing": true,
-        "planned": false
-      },
-      {
         "id": "tasks",
         "label": "任务列表",
-        "icon": "clock",
-        "group": "发布管理",
-        "publishing": true,
-        "planned": false
-      },
-      {
-        "id": "plan",
-        "label": "发布计划",
         "icon": "clock",
         "group": "发布管理",
         "publishing": true,

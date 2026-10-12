@@ -6,7 +6,7 @@ on:
     paths:
       - src/publishing/adapters/douyin-options.js
       - src/publishing/adapters/page.js
-      - src/publishing/adapters/douyin-preparation.js
+      - src/publishing/options.js
       - src/publishing/service.js
       - src/renderer/publishing.js
       - tests/publishing-options.cjs

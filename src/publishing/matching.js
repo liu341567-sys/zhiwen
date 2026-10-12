@@ -30,6 +30,10 @@ function distribute(videoIds, accountIds, options = {}, random) {
         add(video, accountIds[i % accountIds.length]),
       );
       break;
+    case 'single':
+      if (accountIds.length !== 1) throw new Error('单个账号发布多个视频时，请只选择一个账号');
+      for (const video of videoIds) add(video, accountIds[0]);
+      break;
     case 'random': {
       const available = shuffle(videoIds, random);
       if (options.quotas && Object.keys(options.quotas).length) {

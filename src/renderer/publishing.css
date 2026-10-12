@@ -142,6 +142,40 @@
   line-height: 1.7;
   color: #69768b;
 }
+.publish-advanced {
+  margin: 14px 0;
+  padding: 12px 14px;
+  background: #f7f9fc;
+  border-radius: 8px;
+}
+.publish-advanced summary {
+  cursor: pointer;
+  color: #3b587b;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 24px;
+}
+.publish-advanced[open] summary {
+  margin-bottom: 12px;
+}
+.publish-advanced:focus-within {
+  outline: 2px solid #a4c5ff;
+  outline-offset: 2px;
+}
+.publish-toolbar > .publish-advanced {
+  margin: 0;
+}
+.publish-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 0;
+  border: 0;
+  font-size: 14px;
+}
+.publish-weekdays legend {
+  margin-bottom: 8px;
+}
 .publish-empty {
   padding: 48px 20px;
   text-align: center;

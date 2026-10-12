@@ -8,8 +8,6 @@ const { PublishingStore } = require('./store'),
   { Scheduler } = require('./scheduler');
 const douyin = require('./adapters/douyin');
 const optionConfig = require('./options');
-const { Page } = require('./adapters/page');
-const douyinOptions = require('./adapters/douyin-options');
 const presets = require('../platform-presets.json');
 const clone = (v) => structuredClone(v);
 const text = (v, max = 1000) => {
@@ -34,8 +32,6 @@ class PublishingService {
     this.profiles = profiles;
     this.getView = getView;
     this.inspectView = inspectView;
-    this.optionQueries = new Map();
-    this.optionTrace = onDeveloperTrace;
     this.takeoverView = takeover;
     this.notify = notify;
     this.changed = changed;
@@ -362,7 +358,16 @@ class PublishingService {
       c.values.forEach((v) => text(v));
       for (const v of Object.values(c.locks || {})) text(v);
     }
-    return clone(input);
+    const normalized = clone(input);
+    normalized.distribution ||= { mode: 'sequence' };
+    normalized.distribution.mode ||= 'sequence';
+    if (!['sequence', 'single'].includes(normalized.distribution.mode)) throw new Error('请选择一个视频发一个账号，或单个账号发布多个视频');
+    if (normalized.distribution.mode === 'single' && normalized.accountIds.length !== 1) throw new Error('单个账号发布多个视频时，请只选择一个账号');
+    // Local scheduling is retired for new tasks. Existing task snapshots are
+    // left untouched; the queue still enforces actual submission spacing.
+    normalized.schedule = { mode: 'now', intervalMinutes: input.schedule?.intervalMinutes ?? 10 };
+    for (const override of Object.values(normalized.overrides || {})) delete override.plannedAt;
+    return normalized;
   }
   preview(input) {
     input = this.validateInput(input);
@@ -371,9 +376,15 @@ class PublishingService {
       this.store.list('video'),
       this.accounts(),
     );
-    rows
-      .filter((row) => !row.cancelled)
-      .forEach((row) => { this.validateCover(row.cover); row.location = optionConfig.location(row.location); row.nativeSchedule = optionConfig.nativeSchedule(row.nativeSchedule); if (row.nativeSchedule && row.plannedAt >= optionConfig.epoch(row.nativeSchedule)) throw new Error('本地开始时间必须早于官方发布时间，请留出上传时间'); });
+    const queuedAt = Date.now();
+    for (const row of rows) {
+      row.plannedAt = queuedAt;
+      if (row.cancelled) continue;
+      this.validateCover(row.cover);
+      row.location = optionConfig.location(row.location);
+      if (row.location.mode === 'specified' && !row.location.address) throw new Error('固定地点请填写完整地址，以便后台准确核对');
+      row.nativeSchedule = optionConfig.nativeSchedule(row.nativeSchedule);
+    }
     const previewId = randomUUID();
     this.store.saveDraft(
       { input, rows, createdAt: Date.now() },
@@ -421,7 +432,7 @@ class PublishingService {
         ...original,
         title: text(row.title),
         topics: text(row.topics),
-        plannedAt: row.plannedAt,
+        plannedAt: Date.now(),
         ordinal: i,
         cover: clone(row.cover),
         location: clone(row.location),
@@ -431,9 +442,8 @@ class PublishingService {
         autoSubmit: row.autoSubmit === true,
         video: clone(video),
       };
+      if (final.some((t) => !t.cancelled && !row.cancelled && t.videoId === original.videoId)) throw new Error('每条视频只能分配一个账号，请重新生成预览');
       if (!t.title && !t.cancelled) throw new Error('任务标题不能为空');
-      if (!Number.isFinite(t.plannedAt) || t.plannedAt < Date.now() - 300000)
-        throw new Error('计划时间已过，请重新配置');
       this.validateCover(t.cover);
       if (t.cover.mode === 'frame')
         t.cover = {
@@ -453,7 +463,8 @@ class PublishingService {
         t.cover = { mode: 'image', ...cover };
       }
       t.location = optionConfig.location(t.location);
-      if (t.nativeSchedule && t.plannedAt >= optionConfig.epoch(t.nativeSchedule)) throw new Error('本地开始时间必须早于官方发布时间');
+      if (!t.cancelled && t.location.mode === 'specified' && !t.location.address) throw new Error('固定地点请填写完整地址，以便后台准确核对');
+      if (t.nativeSchedule && t.plannedAt >= optionConfig.epoch(t.nativeSchedule)) throw new Error('官方发布时间已过期，请重新配置');
       if (
         !t.cancelled &&
         !allowDuplicates &&
@@ -612,19 +623,6 @@ class PublishingService {
         return this.bindAccount(input.id, input.platformId);
       case 'preview':
         return this.preview(input);
-      case 'location-search':
-        return this.searchLocation(input);
-      case 'location-select':
-        return this.searchLocation(input, true);
-      case 'location-cancel': {
-        const query = this.optionQueries.get(input?.requestId);
-        if (query && query.accountId === input.accountId) query.abort.abort();
-        return { cancelled: true };
-      }
-      case 'location-status': {
-        const query = this.optionQueries.get(input?.requestId);
-        return query && query.accountId === input.accountId ? { stage: query.progress.stage } : null;
-      }
       case 'draft':
         return this.saveDraft(input);
       case 'confirm':
@@ -643,42 +641,10 @@ class PublishingService {
   }
   async shutdown() {
     this.closing = true;
-    for (const q of this.optionQueries.values()) q.abort.abort();
-    await Promise.allSettled([...this.optionQueries.values()].map((q) => q.done));
     this.diagnostics.close();
     await this.scheduler.shutdown();
     this.store.close();
   }
-  async searchLocation({ accountId, query, requestId, label, address, prepareVideoId }, select = false) {
-    if (this.closing) throw new Error('发布中心正在退出');
-    if (!this.accounts().some((a) => a.id === accountId && a.platformId === 'douyin')) throw new Error('请选择原抖音账号环境');
-    query = text(query, 200); if (!query) throw new Error('请填写位置搜索词');
-    const preparedVideo = prepareVideoId ? this.store.resource(prepareVideoId, 'video') : null;
-    if (prepareVideoId !== undefined && (!preparedVideo || select)) throw new Error('地点准备视频配置无效');
-    let wc = this.inspectView?.(accountId);
-    if ((!wc || wc.isDestroyed()) && !preparedVideo) throw new Error('请打开原账号编辑页，或点击“上传所选视频并读取地点”准备查询');
-    const release = this.scheduler.reserveAccount(accountId), abort = new AbortController();
-    if (typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/.test(requestId) || this.optionQueries.has(requestId)) { release(); throw new Error('位置搜索请求标识无效'); }
-    let page; const id = requestId, progress = { stage: '正在连接原账号环境…' };
-    const context = { signal: abort.signal, checkpoint: () => {}, stage: (value) => { progress.stage = value; },
-      log: (message) => { progress.stage = message;
-        try { Promise.resolve(this.optionTrace(accountId, { operation: 'location-query', phase: 'log', message })).catch(() => {}); } catch {} } };
-    const done = (async () => {
-      try {
-        if (preparedVideo) {
-          await media.validate(preparedVideo);
-          wc = await this.getView(accountId, abort.signal);
-        }
-        page = new Page(wc, abort.signal, context.log, (event) => this.optionTrace(accountId, { ...event, optionQuery: true }));
-        await page.connect();
-        if (preparedVideo) await require('./adapters/douyin-preparation').prepare(page, preparedVideo, context);
-        if (select) { const chosen = await douyinOptions.setLocation(page, optionConfig.location({ mode: 'specified', label, address, query }), context);
-          await douyinOptions.verify(page, null, chosen); return { accountId, query, selected: chosen }; }
-        return { accountId, query, candidates: await douyinOptions.search(page, query, context) }; }
-      finally { if (page) { await douyinOptions.cleanup(page).catch(() => {}); page.detach(); } release(); this.optionQueries.delete(id); }
-    })();
-    this.optionQueries.set(id, { accountId, abort, done, progress });
-    return done;
-  }
+
 }
 module.exports = { PublishingService };
