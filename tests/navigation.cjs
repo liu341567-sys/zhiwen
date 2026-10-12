@@ -86,7 +86,8 @@ async function run(scale, origin) {
     const scroll = await shell.locator('#profile-list').evaluate(n => n.scrollTop);
     await select('publish');
     await shell.locator('#publishing-module').waitFor({ state: 'visible' });
-    assert.equal(await shell.locator('[data-publish-page]').count(), 9);
+    assert.equal(await shell.locator('[data-publish-page]').count(), 7);
+    assert.equal(await shell.locator('[data-publish-page="create"],[data-publish-page="plan"]').count(), 0);
     assert.equal(await shell.locator('.publish-menu-group').count(), 3);
     assert.equal((await state()).activeId, ids[30]);
     const otherNative = await identity();
