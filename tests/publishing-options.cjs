@@ -149,6 +149,7 @@ async function run(scale) {
     const secondPath=path.join(dir,'second.mp4');await require('../src/publishing/media').run(require('ffmpeg-static'),['-nostdin','-v','error','-f','lavfi','-i','color=c=red:s=320x240:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p','-y',secondPath]);
     assert.equal((await command('import',[secondPath])).added.length,1);
     await goHome();await shell.locator('[data-publish-page="video"]').click();
+    await until(() => shell.locator('.publish-table input[type="checkbox"]').count().then(n => n === 2));
     for (const box of await shell.locator('.publish-table input[type="checkbox"]').all()) await box.check();
     await shell.getByRole('button',{name:'下一步',exact:true}).click();await shell.getByRole('button',{name:'下一步',exact:true}).click();
     await shell.locator('.publish-account').filter({hasText:'B'}).locator('input').check();await shell.getByRole('button',{name:'下一步',exact:true}).click();
