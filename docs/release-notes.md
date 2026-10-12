@@ -8,7 +8,19 @@
 - 查询上传保留原页面中的临时素材证据，后续对应账号和视频任务核对后复用，不重复上传。重新选择文件或编辑草稿会使证据失效；与当前任务视频不同时，仅可把已验证且未被编辑的查询准备页切换为空白上传页。
 - 同一搜索词已有稳定的官方候选时直接核对读取，避免缓存未改变DOM而被误判超时。失败提示包含具体阶段；工具报告新增官方参数、人工确认及核验标记，不包含地点隐私或封面路径。
 
-Windows专项、完整回归及安装包验证进行中。真实已登录抖音仍需用户实机核验，不能用本地网页夹具代替实际平台验收。
+Windows专项、完整回归及实际安装、重启、原账号恢复检查均通过。真实已登录抖音仍需用户实机核验，不能用本地网页夹具代替实际平台验收。
+
+[Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.8/Qiye-Setup-0.3.8-x64.exe) · [解压版 ZIP](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.8/Qiye-0.3.8-x64.zip)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38204955916)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38205890486)均通过，对应 `f6fbe41d5d0e94c5ae94c7c8b691952a282febb0` / `v0.3.8`：143 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、42 项官方选项与后台原生流程专项，以及 81 项开发者工具检查。DPR 1 / 1.25 / 1.5 下验证不同账号的官方候选、完整地址匹配、候选换序和同名保护、日期/月/重复时间滚轮、延迟分钟更新、账号范围与禁用日期、手动干预、取消与监听释放、官方配置草稿及后台上传到提交闭环。新增验证文本日期输入/失焦/回读与日历回退、缓存候选无 DOM 变化、五步向导从首页上传真实查询素材到任务复用、拒绝覆盖人工草稿、素材变化使证据失效，以及任务视频不同时切换空白页上传正确素材。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。网页测试使用本地夹具，不能代替用户已登录抖音账号验收。
+
+发布于 2026-10-12 13:11:43（北京时间）。公开安装包和 ZIP 均已完整下载，大小与 SHA256 对照 GitHub 摘要及校验文件验证；包内版本和代码与验证提交一致，包括官方选项模块，原品牌、媒体工具及许可齐全，不含用户账号或原始录制资料。证据位于 `.cache/release-0.3.8/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-Setup-0.3.8-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.8/Qiye-Setup-0.3.8-x64.exe) | 160736939 | `71a63ef83a28f9da795d1628ea01b3c0efeae786a155b27b7e103a9119a00a1c` |
+| [Qiye-0.3.8-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.8/Qiye-0.3.8-x64.zip) | 217871718 | `3de4d6e0ff028030b42d6fb21272335f27680dbf935513a203d287811be67c80` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.8/SHA256SUMS.txt) | 178 | `96d5f81bc0e5ad44e38af553d4b6b249417941a6a86c5de01f0292e8653c1a96` |
 
 # 栖页 0.3.7 · 抖音官方定时与位置联动
 
