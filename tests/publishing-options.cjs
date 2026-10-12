@@ -63,6 +63,8 @@ async function run(scale) {
     };
     const runOptions=(account,input)=>app.evaluate(async(_electron,{id,input})=>globalThis.__publishingOptionsFixture(id,input),{id:account.id,input});
     const expected={at:new Date(Date.now()+3*86400000+8*3600000).toISOString().slice(0,10)+'T12:21',timezone:'Asia/Shanghai'};
+    await shell.locator('button[data-module="publish"]').click();
+    await until(()=>app.evaluate(({BrowserWindow},id)=>!BrowserWindow.getAllWindows()[0].contentView.children.find(v=>v.webContents?.profileId===id).getVisible(),b.id));
     await load(b,{previousMonth:true});
     let result=await runOptions(b,{nativeSchedule:expected,location:{mode:'specified',label:'示例广场',address:'B市东路1号',query:'广场'}});
     assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.state.fieldValue,expected.at.replace('T',' '));assert.equal(result.state.date, '');assert.equal(result.location.address,'B市东路1号');
@@ -90,10 +92,10 @@ async function run(scale) {
     await load(b);
     const videoPath=path.join(dir,'fixture.mp4');fs.writeFileSync(videoPath,Buffer.alloc(2048,1));const stat=fs.statSync(videoPath);
     const task={id:'native-'+scale,accountId:b.id,accountName:'B',platformId:'douyin',video:{name:'fixture.mp4',path:videoPath,format:'mp4',bytes:stat.size,mtime:stat.mtimeMs,sha256:require('node:crypto').createHash('sha256').update(fs.readFileSync(videoPath)).digest('hex')},title:'Fixture title',topics:'#Topic',cover:{mode:'first'},location:{mode:'specified',label:'示例广场',address:'B市西路2号',query:'广场'},nativeSchedule:expected,autoSubmit:true,checkpoint:{}};
-    result=await app.evaluate(async(_electron,task)=>globalThis.__publishingFixture(task,{timeoutMs:30000}),task);
+    result=await app.evaluate(async(_electron,task)=>globalThis.__publishingFixture(task,{timeoutMs:60000,captureMode:'pending'}),task);
     assert.equal(result.result.status,'submitted',JSON.stringify(result));assert.equal(result.checkpoint.submitIntent,true);assert.deepEqual(result.result.nativeSchedule,expected);assert.equal(result.result.location.address,'B市西路2号');assert.equal(await evaluate(b,'window.submissions'),1);
     assert.ok(result.logs.some(s=>s.includes('官方定时已设置并回读')));
-    check(`options-${scale}: complete upload-caption-POI-native schedule-submit pipeline uses exact options, preserves submission authorization and reports submitted rather than online`);
+    check(`options-${scale}: hidden original browser completes upload-caption-POI-native schedule-submit despite pending frame capture and reports submitted rather than online`);
     await load(b,{delay:4000});const requestId=require('node:crypto').randomUUID();
     const pending=command('location-search',{accountId:b.id,query:'广场',requestId}).then(()=>({ok:true}),e=>({error:e.message}));
     await until(()=>evaluate(b,'!!document.querySelector("[data-qiye-poi-input]")'));
