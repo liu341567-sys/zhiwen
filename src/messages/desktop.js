@@ -13,7 +13,7 @@ async function installMessages({ window, directory, profiles, WebContentsView, g
     changed: () => { if (!window.isDestroyed()) window.webContents.send('messages:changed'); }, reveal,
     notify: (changes, config) => {
       const first = changes[0];
-      const body = changes.length === 1 ? `抖音｜${first.name}：未读计数增加 ${first.increase}，当前 ${first.unread}。增量为估算。`
+      const body = changes.length === 1 ? `抖音｜${first.name}：未读计数增加 ${first.increase}，当前${first.lowerBound ? '至少' : ''} ${first.unread}。增量为估算。`
         : `${changes.length} 个账号的未读计数增加，打开私信汇总查看各账号变化（估算）。`;
       toast(body, 'info', summary);
       let native = false;

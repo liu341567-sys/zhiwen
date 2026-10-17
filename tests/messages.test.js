@@ -112,3 +112,29 @@ test('deselecting an active account aborts only its check and releases its resou
   const f = await fixture(t, { adapters: [{ ...douyin, read: async (id, signal) => { if (id === 'b') return sample(3); begun = true; await new Promise(r => signal.addEventListener('abort',r,{once:true})); return sample(1); } }] });
   const job = f.service.scan(); await tick(); assert(begun); f.service.update({ selectedIds: ['b'] }); await job; assert.equal(f.service.store.get('baselines','a'),null); assert.equal(f.service.active.size,0); assert.equal(f.service.state().summary.unread.messages,3);
 });
+test('partial visible conversation counters never overwrite a reliable total baseline', async t => {
+  const f = await fixture(t); await f.service.scan(); f.counts.a = { status:'partial', unread:4, exact:false, unit:'unknown', conversations:[{key:'a'.repeat(64),unread:4,exact:true,unit:'unknown'}] }; await f.service.scan();
+  const row=f.service.state().rows[0]; assert.equal(row.baseline.unread,8); assert.equal(row.result.unread,4); assert.equal(f.service.state().summary.lowerBounds.unknown,4); assert.equal(f.notifications.length,0);
+});
+test('identified conversation increases are estimates; newly visible conversations are not new arrivals', async t => {
+  const f=await fixture(t); const entry=(key,unread)=>({key:key.repeat(64),unread,exact:true,unit:'unknown'});
+  f.counts.a={status:'partial',unread:3,exact:false,unit:'unknown',conversations:[entry('a',3)]}; await f.service.scan();
+  f.counts.a={status:'partial',unread:10,exact:false,unit:'unknown',conversations:[entry('a',5),entry('b',5)]}; await f.service.scan(); assert.equal(f.notifications[0][0].increase,2); assert.equal(f.notifications[0][0].lowerBound,true); assert.equal(f.notifications[0][0].newMessages,null);
+  assert(!JSON.stringify(f.service.state()).includes('a'.repeat(64)));
+});
+test('anonymous, capped and duplicate conversation rows cannot create false new-message alerts', () => {
+  const { compareConversations }=require('../src/messages/store'); const key='a'.repeat(64), old={[key]:{unread:3,unit:'unknown',checkedAt:1000}};
+  const r=compareConversations(old,[{key:null,unread:100,exact:true},{key,unread:99,exact:false},{key,unread:5,exact:true,unit:'unknown'},{key,unread:5,exact:true,unit:'unknown'}],2000);
+  assert.equal(r.increases.unknown,2); assert.equal(Object.keys(r.ledger).length,1);
+});
+test('changing between total and conversation counters silently rebases to avoid duplicate alerts', async t => {
+  const f=await fixture(t), key='a'.repeat(64); await f.service.scan();
+  f.counts.a={status:'partial',unread:3,exact:false,unit:'messages',conversations:[{key,unread:3,exact:true,unit:'messages'}]}; await f.service.scan();
+  f.counts.a={status:'partial',unread:5,exact:false,unit:'messages',conversations:[{key,unread:5,exact:true,unit:'messages'}]}; await f.service.scan(); assert.equal(f.notifications.length,1);
+  f.counts.a=sample(10); await f.service.scan(); assert.equal(f.notifications.length,1); assert.equal(f.service.state().rows[0].result.first,true);
+  f.counts.a=sample(11); await f.service.scan(); assert.equal(f.notifications.length,2); assert.equal(f.notifications[1][0].increase,1);
+});
+test('auto-resume requires saved running state AND opt-in, without losing baseline', async t => {
+  const dir=temp(), f=await fixture(t,{directory:dir}); f.service.update({autoResume:true}); await f.service.start(); await f.service.shutdown();
+  const g=await fixture(t,{directory:dir}); t.after(()=>fs.rmSync(dir,{recursive:true,force:true})); g.service.initialize(); assert.equal(g.service.running,true); await g.service.scanJob; assert.equal(g.notifications.length,0); await g.service.pause();
+});

@@ -90,9 +90,23 @@ class MessageStore {
 function compareCount(previous, sample, now) {
   if (!Number.isSafeInteger(sample.unread) || sample.unread < 0 || sample.unread > 1000000 || sample.exact === false)
     return { baseline: previous, increase: null, newMessages: null, first: !previous, basis: 'unverified' };
-  const comparable = previous && previous.unit === sample.unit;
+  const comparable = previous && Number.isSafeInteger(previous.unread) && previous.unit === sample.unit;
   return { baseline: { unread: sample.unread, unit: sample.unit, checkedAt: now },
     increase: comparable ? Math.max(0, sample.unread - previous.unread) : 0,
     newMessages: null, first: !comparable, basis: 'count-estimate' };
 }
-module.exports = { MessageStore, defaults, config, compareCount };
+// Only compare an identified conversation to its own earlier reliable count.
+// Newly visible conversations are a baseline, not evidence of a new message.
+function compareConversations(previous = {}, entries = [], now) {
+  const ledger = Object.fromEntries(Object.entries(previous).filter(([,v]) => v.checkedAt > now - 7 * 86400000).slice(-1000));
+  const increases = { messages: 0, conversations: 0, unknown: 0 }; let overlap = 0;
+  const seen = new Set();
+  for (const entry of entries.slice(0, 1000)) {
+    if (!/^[a-f0-9]{64}$/.test(entry.key || '') || seen.has(entry.key) || entry.exact !== true || !Number.isSafeInteger(entry.unread) || entry.unread < 0 || entry.unread > 1000000) continue;
+    seen.add(entry.key); const old = ledger[entry.key], unit = ['messages', 'unknown'].includes(entry.unit) ? entry.unit : 'unknown';
+    if (old && old.unit === unit) { overlap++; increases[unit] += Math.max(0, entry.unread - old.unread); }
+    ledger[entry.key] = { unread: entry.unread, unit, checkedAt: now };
+  }
+  return { ledger: Object.fromEntries(Object.entries(ledger).sort((a,b) => a[1].checkedAt-b[1].checkedAt).slice(-1000)), increases, overlap };
+}
+module.exports = { MessageStore, defaults, config, compareCount, compareConversations };

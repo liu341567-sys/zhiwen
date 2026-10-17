@@ -14,7 +14,11 @@ class MessageBrowser {
     const entry = this.pages.get(id); if (!entry) return;
     this.pages.delete(id); clearTimeout(entry.timer);
     entry.signal?.removeEventListener('abort', entry.abort);
-    if (!entry.view.webContents.isDestroyed()) { entry.view.webContents.stop(); this.window.contentView.removeChildView(entry.view); entry.view.webContents.close(); }
+    if (!entry.view.webContents.isDestroyed()) {
+      try { entry.view.webContents.stop(); } catch {}
+      try { if (!this.window.isDestroyed()) this.window.contentView.removeChildView(entry.view); } catch {}
+      entry.view.webContents.close();
+    }
   }
   async acquire(id, signal, adapter = douyin) {
     if (signal.aborted) throw Object.assign(new Error(), { code: 'aborted' });

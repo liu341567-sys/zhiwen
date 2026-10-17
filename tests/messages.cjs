@@ -55,6 +55,12 @@ async function run(scale) {
     await set(a.id, 'conflict'); const conflict = await command('scan'); assert.equal(conflict.rows.find(r => r.id === a.id).result.status, 'ambiguous'); checks++;
     await set(a.id, 'login'); const login = await command('scan'); assert.equal(login.rows.find(r => r.id === a.id).result.status, 'login_required'); checks++;
     await set(a.id, 0); const zero = await command('scan'); assert.equal(zero.rows.find(r => r.id === a.id).result.unread, 0); checks++;
+    await set(a.id, 'rows'); const partial = await command('scan');
+    check('visible conversation badges are a lower bound, never an invented total', () => { const r=partial.rows.find(r=>r.id===a.id); assert.equal(r.result.status,'partial'); assert.equal(r.result.unread,6); assert.equal(r.result.exact,false); assert.equal(r.baseline.unread,0); assert.equal(partial.summary.lowerBounds.unknown,6); });
+    await set(a.id, 'rowsPlus'); const changedRows = await command('scan');
+    check('stable conversation counts compare locally, without exporting peer IDs', () => { assert.equal(changedRows.rows.find(r=>r.id===a.id).result.increase,2); assert(!JSON.stringify(changedRows).includes('private-key')); assert.equal(changedRows.summary.increases.unknown,2); });
+    await set(a.id, 'completeRows'); const complete = await command('scan');
+    check('full mounted list requires explicit ARIA completeness before summing as total', () => { const r=complete.rows.find(r=>r.id===a.id); assert.equal(r.result.exact,true); assert.equal(r.result.unread,6); assert.equal(complete.summary.unread.unknown,6); });
     await shell.locator('#sidebar-toggle').click(); await shell.locator('[data-module="publish"]').click(); await shell.locator('[data-module="data"]').click();
     const collapsed = await shell.evaluate(() => document.querySelector('.app-shell').classList.contains('sidebar-collapsed')); check('module switching preserves explicit collapsed preference', () => assert(collapsed));
     await shell.locator('#messages-search').fill('抖音'); await command('settings', { intervalSeconds: 60 });

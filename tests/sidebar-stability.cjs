@@ -211,7 +211,7 @@ async function runScale(scale, origin) {
     assert.equal(await preserved(), true);
     check(`sidebar-${scale}: actual creation and its notification do not move the existing list region`, () => assert.ok(true));
     const isolated = await toast.evaluate(() => ({ node: typeof require, management: typeof browserAPI, onlyUI: Object.keys(toastAPI).sort() }));
-    check(`sidebar-${scale}: the local notification surface has no Node or account-management bridge`, () => assert.deepEqual(isolated, { node: 'undefined', management: 'undefined', onlyUI: ['onMessage', 'resized'] }));
+    check(`sidebar-${scale}: the local notification surface has no Node or account-management bridge`, () => assert.deepEqual(isolated, { node: 'undefined', management: 'undefined', onlyUI: ['activate', 'onMessage', 'resized'] }));
     return { scale, actualDpr: viewport.dpr, viewport, workArea, checks: checks - beforeChecks, fixtureProfiles: 50 };
   } finally {
     if (app) await app.close();

@@ -1,5 +1,6 @@
 'use strict';
 // Confirmed by the user: opening this list does not read a conversation.
+const { createHmac } = require('node:crypto');
 const launchUrl = 'https://creator.douyin.com/creator-micro/data/following/chat';
 function allowed(value) {
   try { const u = new URL(value); return u.origin === 'https://creator.douyin.com' && u.pathname.replace(/\/$/, '') === '/creator-micro/data/following/chat' && !u.search && !u.hash && !u.username && !u.password; } catch { return false; }
@@ -47,12 +48,37 @@ function observe() {
     }
     for (const value of new Set(values)) { const n = Number(value.replace('+', '')); if (Number.isSafeInteger(n) && n <= 1000000) sources.push({ unread: n, exact: !value.endsWith('+'), unit }); }
   }
+
+  // Conversation badges are only a lower bound unless ARIA proves the whole
+  // list is mounted. Never traverse into a conversation or collect its text.
+  const rowSelector = '[role="listitem"],[class*="conversation-item" i],[class*="conversationItem"],[class*="session-item" i],[class*="sessionItem"],[class*="chat-item" i],[class*="chatItem"],[data-conversation-id],[data-session-id]';
+  const conversationRows = [...document.querySelectorAll(rowSelector)].filter(visible).slice(0, 1000);
+  const entries = [], counted = new Set();
+  for (const badge of [...document.querySelectorAll('[class*="badge" i],[class*="unread" i],[data-unread-count],[aria-label]')].slice(0, 5000).filter(visible)) {
+    const row = badge.closest(rowSelector); if (!row || counted.has(row)) continue;
+    const aria = (badge.getAttribute('aria-label') || '').trim();
+    const label = /^(\d+\+?)\s*条未读(?:消息)?$/.exec(aria);
+    const value = label?.[1] || badge.getAttribute('data-unread-count') || (badge.textContent || '').trim();
+    if (!/^\d+\+?$/.test(value) || Number(value.replace('+','')) > 1000000) continue;
+    if (!label && !/badge|unread/i.test(typeof badge.className === 'string' ? badge.className : '') && !badge.hasAttribute('data-unread-count')) continue;
+    const candidates = [...row.querySelectorAll('[class*="badge" i],[class*="unread" i],[data-unread-count]')].filter(visible).map(n => (n.getAttribute('data-unread-count') || n.textContent || '').trim()).filter(v => /^\d+\+?$/.test(v));
+    if (new Set(candidates).size > 1) continue;
+    counted.add(row);
+    const identity = ['data-conversation-id','data-session-id','data-conversation-key'].map(k => row.getAttribute(k)).find(v => typeof v === 'string' && /^[\w:/.=-]{1,200}$/.test(v)) || null;
+    entries.push({ identity, unread: Number(value.replace('+','')), exact: !value.endsWith('+'), unit: label ? 'messages' : 'unknown' });
+  }
+  const list = conversationRows[0]?.closest('[role="list"]');
+  const size = Number(list?.getAttribute('aria-setsize') || conversationRows[0]?.getAttribute('aria-setsize'));
+  const complete = Number.isSafeInteger(size) && size > 0 && size === conversationRows.length && conversationRows.every((r,i) => Number(r.getAttribute('aria-posinset')) === i+1);
+  const conversation = { entries, visibleConversations: conversationRows.length, complete };
+
   const counts = new Set(sources.map(r => `${r.unread}:${r.exact}`));
   if (counts.size > 1) return { status: 'ambiguous', diagnostic };
-  if (sources.length) return { status: 'success', ...(sources.find(r => r.unit !== 'unknown') || sources[0]), diagnostic };
+  if (sources.length) return { status: 'success', ...(sources.find(r => r.unit !== 'unknown') || sources[0]), conversation, diagnostic };
+  if (entries.length) return { status: complete && entries.every(e => e.exact) ? 'success' : 'partial', unread: entries.reduce((n,e) => n+e.unread, 0), exact: complete && entries.every(e => e.exact), unit: entries.every(e => e.unit === 'messages') ? 'messages' : 'unknown', conversation, diagnostic };
   return { status: 'unrecognized', diagnostic };
 }
-async function read(wc, signal, timeoutMs = 8000) {
+async function read(wc, signal, { timeoutMs = 8000, identitySalt, environmentId } = {}) {
   if (!wc || wc.isDestroyed()) return { status: 'closed' };
   const before = wc.getURL(); if (!allowed(before)) return { status: /login|passport/.test(before) ? 'login_required' : 'wrong_page' };
   let timer, abort;
@@ -73,8 +99,11 @@ async function read(wc, signal, timeoutMs = 8000) {
     ]);
     if (signal.aborted) return { status: 'aborted' };
     if (wc.isDestroyed() || wc.getURL() !== before) return { status: 'page_changed' };
-    if (!sample || !['success', 'loading', 'verification', 'login_required', 'unrecognized', 'ambiguous'].includes(sample.status)) return { status: 'unrecognized' };
-    return { ...sample, jumpUrl: launchUrl };
+    if (!sample || !['success', 'partial', 'loading', 'verification', 'login_required', 'unrecognized', 'ambiguous'].includes(sample.status)) return { status: 'unrecognized' };
+    const conversations = (sample.conversation?.entries || []).map(e => ({ key: e.identity && identitySalt && environmentId ? createHmac('sha256', identitySalt).update(environmentId + ':' + e.identity).digest('hex') : null,
+      unread: e.unread, exact: e.exact, unit: e.unit }));
+    const { conversation, ...publicSample } = sample;
+    return { ...publicSample, conversations, visibleConversations: conversation?.visibleConversations || 0, completeList: conversation?.complete === true, jumpUrl: launchUrl };
   } catch (error) { return { status: signal.aborted ? 'aborted' : error.code === 'timeout' ? 'timeout' : 'page_changed' }; }
   finally { clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort); }
 }

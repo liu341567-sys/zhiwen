@@ -13,7 +13,7 @@
     <div class="messages-options"><label>巡检间隔 <select id="messages-interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="120">2 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option><option value="3600">1 小时</option></select></label><label>并发账号 <select id="messages-concurrency"><option>1</option><option>2</option><option>3</option><option>4</option></select></label><label><input id="messages-sound" type="checkbox">提示音（系统音量）</label><label><input id="messages-system" type="checkbox">Windows 通知</label><label><input id="messages-resume" type="checkbox">重启后继续监测</label></div>
     <p id="messages-cycle" class="messages-muted"></p></section>
     <div id="messages-stats" class="messages-stats"></div>
-    <div class="messages-notice">首次巡检建立基线，不提醒既有未读。当前适配读取官网明确的私信总数；“数量增加”是估算，不能证明准确新增条数。无法识别及 99+ 等上限计数均不会当作零。抖音入口已确认，计数识别仍需实际账号核验；其他平台待适配。</div>
+    <div class="messages-notice">首次巡检建立基线，不提醒既有未读。优先读取官网明确总数；只有会话旁的数字时，统计已加载会话的下界。“数量增加”是估算，不能证明准确新增条数。未确认列表完整时不会当作总数；无法识别及 99+ 等上限计数不会当作零。抖音入口已确认，计数识别仍需实际账号核验；其他平台待适配。</div>
     <section class="messages-accounts" aria-label="账号私信列表"><div class="messages-filters"><input id="messages-search" type="search" placeholder="搜索账号名称" aria-label="搜索账号名称"><select id="messages-platform" aria-label="筛选平台"><option value="">全部平台</option></select><select id="messages-filter" aria-label="筛选状态"><option value="all">全部状态</option><option value="unread">存在未读</option><option value="error">巡检异常</option><option value="monitored">正在监测的账号</option><option value="unsupported">暂未支持</option></select><select id="messages-sort" aria-label="排序"><option value="order">原账号顺序</option><option value="unread">未读优先</option><option value="name">账号名称</option><option value="time">最近检测</option></select><button id="messages-all" class="button button-secondary" type="button">监测全部支持账号</button><button id="messages-none" class="text-button" type="button">取消全部</button></div>
     <div class="messages-table-scroll"><table class="messages-table"><thead><tr><th>监测</th><th>平台 / 账号</th><th>当前未读</th><th>本次变化（估算）</th><th>最近检测</th><th>状态</th><th>操作</th></tr></thead><tbody id="messages-rows"></tbody></table><p id="messages-empty" class="messages-empty" hidden>没有符合条件的账号。请先在“我的环境”创建抖音预设环境，或调整筛选条件。自定义网址不会自动推断平台。</p></div></section>
     <details class="messages-history"><summary>最近的未读变化提醒</summary><div id="messages-alerts"></div></details>
@@ -58,7 +58,7 @@
   function renderRows() {
     if (!state) return;
     const q = $('search').value.trim().toLocaleLowerCase(), platform = $('platform').value, filter = $('filter').value;
-    const errors = row => row.monitored && !['success', 'busy', 'paused'].includes(row.result.status);
+    const errors = row => row.monitored && !['success', 'partial', 'busy', 'paused'].includes(row.result.status);
     const visible = state.rows.filter(row => (!q || row.name.toLocaleLowerCase().includes(q)) && (!platform || row.platformId === platform)
       && (filter === 'all' || filter === 'unread' && row.result.unread > 0 || filter === 'error' && errors(row) || filter === 'monitored' && row.monitored || filter === 'unsupported' && !row.supported));
     const sort = $('sort').value;
@@ -70,12 +70,12 @@
       if (logo.dataset.platform !== (row.platformId || 'custom')) { logo.dataset.platform = row.platformId || 'custom'; if (preset) { const img = document.createElement('img'); img.src = preset.iconResource; img.alt = ''; img.draggable = false; logo.replaceChildren(img); } else text(logo, '环'); }
       c[0].firstElementChild.checked = row.monitored; c[0].firstElementChild.disabled = !row.supported; c[0].firstElementChild.setAttribute('aria-label', `监测 ${row.name}`);
       text(c[1].querySelector('strong'), row.name); text(c[1].querySelector('small'), preset?.displayName || '自定义环境');
-      text(c[2], row.result.unread === null || row.result.unread === undefined ? '待核实' : `${row.result.unread}${row.result.exact ? '' : '+'}${unit(row.result.unit)}`);
+      text(c[2], row.result.unread === null || row.result.unread === undefined ? '待核实' : `${row.result.exact ? '' : '至少 '}${row.result.unread}${unit(row.result.unit)}`);
       c[2].title = row.baseline ? `上次可靠基线：${row.baseline.unread}${unit(row.baseline.unit)}，${time(row.baseline.checkedAt)}；不代表当前数量` : '';
       text(c[3], row.result.first ? '首次基线' : row.result.increase === null || row.result.increase === undefined ? '待核实' : row.result.increase > 0 ? `计数 +${row.result.increase}（估算）` : '未观察到增加');
       text(c[4], time(row.result.checkedAt));
-      text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '尚未巡检' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '待核实');
-      c[5].title = row.description || ''; text(c[5].lastElementChild, row.result.retryAt > Date.now() ? `重试：${time(row.result.retryAt)}` : '');
+      text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.status === 'partial' ? '已加载会话 / 总数待核实' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '尚未巡检' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '待核实');
+      c[5].title = (row.description || '') + (row.result.visibleConversations ? `；已识别 ${row.result.visibleConversations} 个已加载会话` : ''); text(c[5].lastElementChild, row.result.retryAt > Date.now() ? `重试：${time(row.result.retryAt)}` : '');
       const buttons = c[6].querySelectorAll('button'); buttons[0].disabled = !row.supported || row.checking; buttons[1].disabled = !row.monitored || state.checking;
     }
     const valid = new Set(state.rows.map(r => r.id)); for (const [id, node] of nodes) if (!valid.has(id)) { node.remove(); nodes.delete(id); }
@@ -87,23 +87,30 @@
   }
   function render() {
     if (!state) return;
-    if (!initialized) {
-      initialized = true;
-      try { const saved = JSON.parse(localStorage.getItem('qiye-messages-filters')); for (const id of filters) if (typeof saved?.[id] === 'string') $(id).value = saved[id]; } catch {}
-    }
     $('start').disabled = state.running || state.checking; $('pause').disabled = !state.running && !state.checking; $('scan').disabled = state.checking;
     text($('status'), state.checking ? `巡检中 ${state.cycle?.done || 0} / ${state.cycle?.total || 0}` : state.running ? '持续监测中' : '已暂停');
     text($('cycle'), `纳入监测 ${state.summary.monitored} 个账号 · 最近完成：${time(state.cycle?.completedAt)}${state.nextAt ? ' · 下次巡检：' + time(state.nextAt) : ''}`);
     if (document.activeElement !== $('interval')) $('interval').value = state.config.intervalSeconds;
     if (document.activeElement !== $('concurrency')) $('concurrency').value = state.config.concurrency;
     $('sound').checked = state.config.sound; $('system').checked = state.config.systemNotifications; $('resume').checked = state.config.autoResume;
-    const values = [state.summary.monitored, state.summary.success, state.summary.reliableAccounts ? state.summary.unreadAccounts : '待核实', state.summary.reliableAccounts ? units(state.summary.unread) : '待核实', '待核实', state.summary.anomalies];
-    [...$('stats').children].forEach((c,i) => { text(c.children[1], values[i]); text(c.children[2], i === 3 ? `可靠读数 ${state.summary.reliableAccounts} 个账号；单位分别统计` : i === 4 ? `未读计数增加：${units(state.summary.increases)}（估算）` : ''); });
+    const combined = Object.fromEntries(Object.keys(state.summary.unread).map(u => [u, state.summary.unread[u] + (state.summary.lowerBounds?.[u] || 0)]));
+    const incomplete = state.summary.monitored > state.summary.reliableAccounts;
+    const knownPositive = Object.values(combined).some(n => n > 0);
+    const values = [state.summary.monitored, state.summary.success, state.summary.observedAccounts && (!incomplete || knownPositive) ? `${incomplete ? '至少 ' : ''}${state.summary.unreadAccounts}` : '待核实', state.summary.observedAccounts && (!incomplete || knownPositive) ? `${incomplete ? '至少 ' : ''}${units(combined)}` : '待核实', '待核实', state.summary.anomalies];
+    [...$('stats').children].forEach((c,i) => { text(c.children[1], values[i]); text(c.children[2], i === 3 ? `完整计数 ${state.summary.reliableAccounts} 个；部分计数 ${state.summary.partialAccounts} 个，完整总数待核实` : i === 4 ? `未读计数增加：${units(state.summary.increases)}（估算）` : ''); });
     const platform = $('platform'), current = platform.value;
-    for (const id of new Set(state.rows.map(r => r.platformId).filter(Boolean))) if (![...platform.options].some(o => o.value === id)) { const option = document.createElement('option'); option.value = id; option.textContent = presets.find(p => p.id === id)?.displayName || id; platform.append(option); }
+    for (const id of new Set(state.rows.map(r => r.platformId).filter(Boolean))) {
+      let option = [...platform.options].find(o => o.value === id);
+      if (!option) { option = document.createElement('option'); option.value = id; platform.append(option); }
+      text(option, presets.find(p => p.id === id)?.displayName || id);
+    }
     platform.value = current;
+    if (!initialized) {
+      initialized = true;
+      try { const saved = JSON.parse(localStorage.getItem('qiye-messages-filters')); for (const id of filters) if (typeof saved?.[id] === 'string') $(id).value = saved[id]; } catch {}
+    }
     const alerts = $('alerts'); alerts.replaceChildren();
-    for (const alert of state.alerts) { const p = document.createElement('p'); p.textContent = `${time(alert.time)} · ${alert.name} · 计数增加 ${alert.increase}${unit(alert.unit)}，当前 ${alert.unread}${unit(alert.unit)}（估算）`; alerts.append(p); }
+    for (const alert of state.alerts) { const p = document.createElement('p'); p.textContent = `${time(alert.time)} · ${alert.name} · 计数增加 ${alert.increase}${unit(alert.unit)}，当前${alert.lowerBound ? '至少' : ''} ${alert.unread}${unit(alert.unit)}（估算）`; alerts.append(p); }
     if (!state.alerts.length) text(alerts, '尚无未读计数增加提醒。首次基线不会产生提醒。');
     renderRows();
   }
