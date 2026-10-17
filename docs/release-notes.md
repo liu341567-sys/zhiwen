@@ -9,3 +9,15 @@
 **验证边界：**用户确认了创作者私信入口及“不点会话不会清零”。自动化测试使用合成网页验证架构、只读控制和异常处理；尚无该用户已登录抖音页面的DOM，官方计数识别标记为实页待核验。若显示“待核实”，可在该行“详情”导出不含消息正文与凭据的诊断文件。
 
 [Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.12/Qiye-Setup-0.3.12-x64.exe) · [ZIP 解压版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.12/Qiye-0.3.12-x64.zip) · [使用、开源选型与数据说明](https://github.com/liu341567-sys/zhiwen/blob/main/docs/private-messages.md)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/39023032010)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/39023251027)均通过，对应 `26b51ae5eff069bf6f5f083590e0208b68369972` / `v0.3.12`：181项单元、语法、78项私信巡检窗口检查，以及原有23项隔离、16项登录兼容性、357项窗口UI、51项列表稳定性、45项导航、81项开发者工具、96项发布和57项发布选项检查。100%、125%、150%缩放均通过。实际NSIS安装、桌面/任务栏图标、原账号恢复、正常退出与重启通过；安装后的私信数据库与ESM队列加载也通过。
+
+抖音官方列表入口与不点击会话不清零的边界由用户确认；真实已登录抖音DOM及未读识别仍待用户账号核验。合成网页测试证明隔离、状态、只读控制和交互，不证明真实平台已经验收。只有会话数字时，列表未确认完整就显示下界；新增数量为计数变化估算，不作为精确新消息数。
+
+发布于2026-10-17 18:13:28（北京时间）。两个公开二进制文件均已完整下载，核对GitHub摘要与SHA256SUMS；ZIP全部文件CRC通过，包内全部src源文件与标签一致（文本规范化Windows行尾），原始品牌素材、媒体工具、p-queue版本及MIT许可均已核实。未打包用户账号配置、私信数据库或录制资料。
+
+| 文件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.12-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.12/Qiye-0.3.12-x64.zip) | 217903750 | `5c7155fc02abd4cc6d9dcbc4f7aced3272e06f69c0e895b1b3085f6dac3a905f` |
+| [Qiye-Setup-0.3.12-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.12/Qiye-Setup-0.3.12-x64.exe) | 160763024 | `43c10684583241fc3f3e622e46b090016caea2d6b2a0b51b1056b4dbd56513a5` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.12/SHA256SUMS.txt) | 180 | `1289a5b024a4f1afd40a9bfd3a36f664109fc890003c2885ef64eaf5121e09b8` |
