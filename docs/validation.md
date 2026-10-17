@@ -1,3 +1,17 @@
+# 0.4.0 原账号实时发布工作台验证
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/39001495555)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/39001634492)均通过，对应 `2d9b234e824654ea31b5cc5f5fa2409639085bcf` / `v0.4.0`：178 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项原发布专项、57 项官方选项与高级向导、39 项实时工作台及 81 项开发者工具检查。100%、125%、150% 缩放下验证选择文件立即上传、双账号原实例与真实输入、文案即时回读、非 ARIA / ARIA 官方话题候选与过期选择保护、批量填写与锁定、固定底部操作、正式确认只提交不重传不重填、单账号异常及其他账号独立提交。实际 NSIS 安装、启动、退出、重启、原账号恢复与卸载通过。网页检查使用本地夹具，不能代替已登录抖音账号验收。
+
+发布于 2026-10-17 12:36:16（北京时间）。公开安装包与 ZIP 已完整下载，对照 GitHub 摘要和 SHA256SUMS 验证，ZIP 全部文件 CRC 通过；包内工作台、实时适配器和原运行时代码与验证提交一致。原品牌、媒体工具和许可齐全，不含用户环境清单、录制资料或登录数据。证据保存于 `.cache/release-0.4.0/ci-verification.json` 与 `verification.json`。
+
+发布构建首次尝试在侧栏测试的窗口发现阶段超时，未生成发布附件。未修改代码或减少检查，在干净 Windows 运行器重新执行全部构建检查后通过。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.4.0-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/Qiye-0.4.0-x64.zip) | 217896895 | `907cb6eb21bb319342e58abde1e46c6ec80300447f8616957e1774f879767434` |
+| [Qiye-Setup-0.4.0-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/Qiye-Setup-0.4.0-x64.exe) | 160756484 | `e0f4ff5bc66824fc8c8a2d61d73009de35f5b139b9b38c4cdba3ccf9ca8f5a03` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/SHA256SUMS.txt) | 178 | `4c87df1d8b25dfaf8794f1b7f4c318c49a01021a4cc988603817e5b368fed778` |
+
 # 0.3.11 地点输入框交互验证
 
 Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38997055851)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38997373975)均通过，对应 `f496cc824a6bcc1b1f4da8000ee2a958cc0ed559` / `v0.3.11`：151 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、57 项官方选项及简化向导专项，以及 81 项开发者工具检查。100%、125%、150% 缩放下验证地点文字区域的真实点击、悬停不返回场景、已打开输入框复用、重复目标及遮挡停止、准确地址匹配、固定/备选回退、官方定时和原账号后台上传至提交流程；实际 NSIS 安装、启动、退出、重启、原账号恢复及卸载通过。本地网页夹具不能代替用户已登录抖音账号验收。

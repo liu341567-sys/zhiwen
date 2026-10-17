@@ -6,7 +6,17 @@
 - 异常显示在对应账号的人工操作栏目，支持原页面接管与重新检查。候选变化、页面刷新、配置变化会使旧核验失效；本地草稿保留，重启后重新核验。
 - 本期工作台仅提供视频、标题和话题；旧封面、定位、官方定时等配置仍可从高级发布向导进入。账号环境、登录数据、素材库、任务记录与导航偏好保持原机制。
 
-验证范围以本节后续发布记录为准。本地原生网页夹具不能代替已登录抖音账号实机验收。
+[Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/Qiye-Setup-0.4.0-x64.exe) · [解压版 ZIP](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/Qiye-0.4.0-x64.zip)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/39001495555)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/39001634492)均通过，对应 `2d9b234e824654ea31b5cc5f5fa2409639085bcf` / `v0.4.0`：178 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项原发布专项、57 项官方选项与高级向导、39 项实时工作台及 81 项开发者工具检查。100%、125%、150% 缩放下验证选择文件立即上传、双账号原实例与真实输入、文案即时回读、非 ARIA / ARIA 官方话题候选与过期选择保护、批量填写与锁定、固定底部操作、正式确认只提交不重传不重填、单账号异常及其他账号独立提交。实际 NSIS 安装、启动、退出、重启、原账号恢复与卸载通过。网页检查使用本地夹具，不能代替已登录抖音账号验收。
+
+发布于 2026-10-17 12:36:16（北京时间）。公开安装包与 ZIP 已完整下载，对照 GitHub 摘要和 SHA256SUMS 验证，ZIP 全部文件 CRC 通过；包内工作台、实时适配器和原运行时代码与验证提交一致。原品牌、媒体工具和许可齐全，不含用户环境清单、录制资料或登录数据。证据保存于 `.cache/release-0.4.0/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.4.0-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/Qiye-0.4.0-x64.zip) | 217896895 | `907cb6eb21bb319342e58abde1e46c6ec80300447f8616957e1774f879767434` |
+| [Qiye-Setup-0.4.0-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/Qiye-Setup-0.4.0-x64.exe) | 160756484 | `e0f4ff5bc66824fc8c8a2d61d73009de35f5b139b9b38c4cdba3ccf9ca8f5a03` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.4.0/SHA256SUMS.txt) | 178 | `4c87df1d8b25dfaf8794f1b7f4c318c49a01021a4cc988603817e5b368fed778` |
 
 # 栖页 0.3.11 · 地点输入框点击修复
 
