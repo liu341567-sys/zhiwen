@@ -50,6 +50,12 @@ class MessageService {
     for (const [id, controller] of this.controllers) { const profile = this.profiles().find(p => p.id === id); if (!profile || !this.selected(profile)) controller.abort(); }
     if (this.running && !this.scanJob) this.schedule(); this.changed(); return this.state();
   }
+  select(id, selected) {
+    if (typeof selected !== 'boolean' || !this.profiles().some(p => p.id === id && this.adapters.has(p.platformId))) throw new Error('监测账号选择无效');
+    const ids = new Set(this.config.selectedIds === null ? this.profiles().filter(p => this.adapters.has(p.platformId)).map(p => p.id) : this.config.selectedIds);
+    if (selected) ids.add(id); else ids.delete(id);
+    return this.update({ selectedIds: [...ids] });
+  }
   schedule() {
     clearTimeout(this.timer); this.timer = null; this.nextAt = null;
     if (!this.running || this.closed) return;

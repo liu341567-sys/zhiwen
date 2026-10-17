@@ -68,6 +68,9 @@ async function run(scale) {
     const measure = await shell.evaluate(() => { const root = document.getElementById('messages-module').getBoundingClientRect(); return { width:innerWidth, height:innerHeight, dpr:devicePixelRatio, right:root.right, documentOverflow:document.documentElement.scrollWidth>innerWidth, tableScroll:document.querySelector('.messages-table-scroll').scrollWidth }; });
     check('responsive summary stays in viewport at selected display scale', () => { assert(!measure.documentOverflow); assert(measure.right <= measure.width + 1); });
     fs.mkdirSync(output, { recursive: true }); await shell.screenshot({ path: path.join(output, `messages-${scale}.png`) });
+    await shell.evaluate(ids => { for (const id of ids) document.querySelector(`#messages-rows tr[data-environment-id="${id}"] input`).click(); }, [a.id,b.id]);
+    await until(() => command('state').then(s => s.config.selectedIds?.length === 0), 'rapid per-account deselection');
+    const selected = await command('state'); check('rapid checkbox changes do not lose the previous account selection update', () => assert.deepEqual(selected.config.selectedIds,[]));
     await command('settings', { selectedIds: [b.id], intervalSeconds: 120 }); await command('start'); await command('pause');
     const stopped = await app.evaluate(({ BrowserWindow }) => ({ pages:BrowserWindow.getAllWindows()[0].contentView.children.filter(v=>v.webContents?.messageProfileId).length, active:globalThis.__messageFixture.service.active.size, timer:!!globalThis.__messageFixture.service.timer }));
     check('pause releases background pages, listeners and local timer', () => assert.deepEqual(stopped, { pages:0, active:0, timer:false }));

@@ -51,7 +51,7 @@ function observe() {
 
   // Conversation badges are only a lower bound unless ARIA proves the whole
   // list is mounted. Never traverse into a conversation or collect its text.
-  const rowSelector = '[role="listitem"],[class*="conversation-item" i],[class*="conversationItem"],[class*="session-item" i],[class*="sessionItem"],[class*="chat-item" i],[class*="chatItem"],[data-conversation-id],[data-session-id]';
+  const rowSelector = '[role="listitem"],[class*="conversation-item" i],[class*="conversationItem"],[class*="session-item" i],[class*="sessionItem"],[class*="chat-item" i],[class*="chatItem"],[data-conversation-id],[data-session-id],[class*="session" i][class*="item" i],[class*="conversation" i][class*="item" i],[class*="chat" i][class*="item" i],[class*="im-list-item" i]';
   const conversationRows = [...document.querySelectorAll(rowSelector)].filter(visible).slice(0, 1000);
   const entries = [], counted = new Set();
   for (const badge of [...document.querySelectorAll('[class*="badge" i],[class*="unread" i],[data-unread-count],[aria-label]')].slice(0, 5000).filter(visible)) {
@@ -69,7 +69,7 @@ function observe() {
   }
   const list = conversationRows[0]?.closest('[role="list"]');
   const size = Number(list?.getAttribute('aria-setsize') || conversationRows[0]?.getAttribute('aria-setsize'));
-  const complete = Number.isSafeInteger(size) && size > 0 && size === conversationRows.length && conversationRows.every((r,i) => Number(r.getAttribute('aria-posinset')) === i+1);
+  const complete = list?.getAttribute('aria-busy') === 'false' && Number.isSafeInteger(size) && size > 0 && size === conversationRows.length && conversationRows.every((r,i) => Number(r.getAttribute('aria-posinset')) === i+1);
   const conversation = { entries, visibleConversations: conversationRows.length, complete };
 
   const counts = new Set(sources.map(r => `${r.unread}:${r.exact}`));

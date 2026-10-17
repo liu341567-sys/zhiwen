@@ -28,6 +28,7 @@ async function installMessages({ window, directory, profiles, WebContentsView, g
     if (window.isDestroyed() || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('此页面无权访问私信监测');
     switch (command) {
       case 'state': return service.state();
+      case 'select': return service.select(input?.id, input?.selected);
       case 'settings': return service.update(input);
       case 'start': return service.start();
       case 'pause': return service.pause();

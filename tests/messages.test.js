@@ -138,3 +138,7 @@ test('auto-resume requires saved running state AND opt-in, without losing baseli
   const dir=temp(), f=await fixture(t,{directory:dir}); f.service.update({autoResume:true}); await f.service.start(); await f.service.shutdown();
   const g=await fixture(t,{directory:dir}); t.after(()=>fs.rmSync(dir,{recursive:true,force:true})); g.service.initialize(); assert.equal(g.service.running,true); await g.service.scanJob; assert.equal(g.notifications.length,0); await g.service.pause();
 });
+test('per-account selection is atomic across rapid independent updates', async t => {
+  const f=await fixture(t); f.service.select('a',false); f.service.select('b',false); assert.deepEqual(f.service.config.selectedIds,[]);
+  f.service.select('a',true); assert.deepEqual(f.service.config.selectedIds,['a']); assert.throws(()=>f.service.select('c',true));
+});

@@ -48,7 +48,7 @@
     tr.innerHTML = '<td><input type="checkbox"></td><td><div class="messages-account"><span class="messages-logo"></span><div><strong></strong><small></small></div></div></td><td></td><td></td><td></td><td><span class="messages-state"></span><small></small></td><td><div class="messages-row-actions"><button class="text-button">查看消息</button><button class="text-button">重新巡检</button><button class="text-button">详情</button></div></td>';
     const cells = tr.children, checkbox = cells[0].firstElementChild;
     checkbox.setAttribute('aria-label', `监测 ${row.name}`);
-    checkbox.onchange = () => { const ids = new Set(state.rows.filter(r => r.monitored).map(r => r.id)); if (checkbox.checked) ids.add(row.id); else ids.delete(row.id); run('settings', { selectedIds: [...ids] }); };
+    checkbox.onchange = () => run('select', { id: row.id, selected: checkbox.checked });
     const buttons = cells[6].querySelectorAll('button');
     buttons[0].onclick = () => run('open', row.id); buttons[1].onclick = () => run('scan', { ids: [row.id] });
     buttons[2].onclick = async () => { const data = await run('diagnostics', row.id); if (!data) return; diagnosticId = row.id;
