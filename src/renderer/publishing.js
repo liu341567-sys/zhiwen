@@ -33,6 +33,7 @@
     data?.platforms.find((p) => p.id === id)?.iconResource ||
     '../assets/qiye.png';
   let updateTaskRows = null;
+  let videoMode = 'workbench', workbench = null;
   let data = null,
     page = 'video',
     step = 0,
@@ -233,7 +234,7 @@
     );
   }
   function saveUI() {
-    cmd('ui', { page, step, scroll }).catch(() => {});
+    cmd('ui', { page, step, scroll, videoMode }).catch(() => {});
   }
   function remember() {
     const body = root.querySelector('.publish-body');
@@ -271,6 +272,7 @@
       if (
         ready &&
         ['video'].includes(page) &&
+        videoMode === 'advanced' &&
         ((step === 0 && previous?.videos.length !== data.videos.length) ||
           (step === 2 &&
             JSON.stringify(
@@ -300,14 +302,19 @@
           }
         }
         page = data.ui.page === 'plan' ? 'tasks' : names[data.ui.page] ? data.ui.page : 'video';
+        videoMode = data.ui.videoMode === 'advanced' ? 'advanced' : 'workbench';
         step = Math.min(4, Math.max(0, draft ? step : data.ui.step ?? 0));
         scroll = data.ui.scroll || {};
         ready = true;
         render = true;
       }
-      if (render) {
+      if (render && page === 'video' && videoMode === 'workbench' && root.querySelector('.publish-workbench-host')) {
+        workbench?.update(data);
+      } else if (render) {
         remember();
         draw();
+      } else if (page === 'video' && videoMode === 'workbench') {
+        workbench?.update(data);
       } else if (
         ['tasks', 'history'].includes(page) &&
         !document.querySelector('.publish-dialog[open]')
@@ -339,6 +346,9 @@
   function draw() {
     if (!data) return;
     updateTaskRows = null;
+    workbench?.leave();
+    const useWorkbench = page === 'video' && videoMode === 'workbench';
+    root.classList.toggle('publishing-workbench-mode', useWorkbench);
     root.replaceChildren();
     const head = E('header', 'publish-header'),
       copy = E('div');
@@ -348,12 +358,17 @@
         'p',
         '',
         page === 'video'
-          ? '导入素材、选择原有账号环境，预览并确认本地发布任务。'
+          ? useWorkbench ? '填写即同步原账号官网，核验完成后正式发布。' : '高级发布向导：保留已有配置与任务流程。'
           : '本地保存，与现有账号环境关联。',
       ),
     );
     head.append(copy);
     const actions = E('div', 'publish-actions');
+    if (page === 'video') actions.append(B(useWorkbench ? '高级发布向导' : '返回发布工作台', () => {
+      videoMode = useWorkbench ? 'advanced' : 'workbench';
+      saveUI();
+      draw();
+    }));
     actions.append(
       B('备份数据', async () => {
         const r = await cmd('backup');
@@ -362,7 +377,11 @@
     );
     head.append(actions);
     root.append(head);
-    if (['video'].includes(page)) wizard();
+    if (useWorkbench) {
+      const host = E('div', 'publish-workbench-host');
+      root.append(host);
+      workbench.mount(host, data);
+    } else if (['video'].includes(page)) wizard();
     else {
       const body = E('div', 'publish-body');
       root.append(body);
@@ -377,8 +396,8 @@
       else if (page === 'library') library(body);
     }
     const body = root.querySelector('.publish-body');
-    body.scrollTop = scroll[page] || 0;
-    body.addEventListener(
+    if (body) body.scrollTop = scroll[page] || 0;
+    body?.addEventListener(
       'scroll',
       () => {
         scroll[page] = body.scrollTop;
@@ -1969,11 +1988,14 @@
           t.accountId === event.detail &&
           ['running', 'manual', 'paused', 'unverified'].includes(t.status),
       );
-      if (t) await runAction([t.id], 'takeover');
+      const entry = data.workbench?.entries?.find(e => e.accountId === event.detail && !e.taskId);
+      if (entry) await cmd('workbench-takeover', { entryId: entry.id });
+      else if (t) await runAction([t.id], 'takeover');
     }),
   );
   api?.onTakeover(() => {
     closeDialogs();
+    workbench?.leave();
     window.publishingNavigateEnvironment?.();
   });
   window.browserAPI?.onState((snapshot) => {
@@ -1985,6 +2007,7 @@
     refreshTimer = setTimeout(() => refresh(), 100);
   });
   window.addEventListener('pagehide', () => {
+    workbench?.leave();
     clearTimeout(draftTimer);
     cmd('draft', { input, step, previewId: preview?.previewId }).catch(
       () => {},
@@ -1993,5 +2016,9 @@
   });
   // The service is installed after account restoration; the ready event retries
   // initial state without rebuilding the environment sidebar.
+  workbench = window.createPublishingWorkbench({ cmd, notify,
+    legacy: () => { videoMode = 'advanced'; saveUI(); draw(); },
+    onChange: () => refresh(),
+  });
   refresh();
 })();

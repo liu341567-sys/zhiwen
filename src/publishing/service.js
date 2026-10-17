@@ -8,6 +8,7 @@ const { PublishingStore } = require('./store'),
   { Scheduler } = require('./scheduler');
 const douyin = require('./adapters/douyin');
 const optionConfig = require('./options');
+const { Workbench } = require('./workbench');
 const presets = require('../platform-presets.json');
 const clone = (v) => structuredClone(v);
 const text = (v, max = 1000) => {
@@ -35,6 +36,9 @@ class PublishingService {
     this.takeoverView = takeover;
     this.notify = notify;
     this.changed = changed;
+    this.traceWorkbench = (accountId, event) => {
+      try { Promise.resolve(onDeveloperTrace(accountId, { operation: 'workbench-live', ...event })).catch(() => {}); } catch {}
+    };
     this.importing = false;
     this.adapters = new Map(
       [douyin].map((adapter) => [adapter.descriptor.id, adapter]),
@@ -56,7 +60,9 @@ class PublishingService {
         const adapter = this.adapters.get(task.platformId);
         if (!adapter) throw new Error('当前平台没有执行适配器');
         changed();
-        const result = await adapter.execute(task, { ...context,
+        const result = task.workflow === 'workbench'
+          ? await this.workbench.submit(task, context)
+          : await adapter.execute(task, { ...context,
           trace: event => { try { Promise.resolve(onDeveloperTrace(task.accountId, { taskId: task.id, ...event })).catch(() => {}); } catch {} }
         }, {
           getView: (id) => getView(id, context.signal),
@@ -85,6 +91,7 @@ class PublishingService {
         Promise.resolve(onDeveloperTrace(task.accountId, { taskId: id, operation: 'task-log', phase: level === 'error' ? 'error' : 'log', message })).catch(() => {});
       } catch { /* Optional monitoring must tolerate an already deleted task. */ }
     };
+    this.workbench = new Workbench(this);
   }
   accounts() {
     const bindings = this.store.setting('accountBindings', {});
@@ -154,6 +161,7 @@ class PublishingService {
           '../assets/qiye.png',
       })),
       ui: this.store.setting('ui', { page: 'video', step: 0, scroll: {} }),
+      workbench: this.workbench.state(),
     };
   }
   async importFiles(files) {
@@ -515,6 +523,8 @@ class PublishingService {
           });
           await this.scheduler.resume(id);
         } else if (action === 'authorize') {
+          if (task.workflow === 'workbench')
+            throw new Error('实时发布任务请通过工作台的正式发布按钮确认');
           if (task.status !== 'manual' || !confirmed)
             throw new Error('请明确授权此任务提交');
           this.store.setTask(id, {
@@ -591,6 +601,21 @@ class PublishingService {
   }
   async dispatch(command, input) {
     switch (command) {
+      case 'workbench-draft':
+        return this.workbench.save(input);
+      case 'workbench-sync':
+      case 'workbench-prepare':
+        return this.workbench.sync(input);
+      case 'workbench-pick':
+        return this.workbench.pick(input);
+      case 'workbench-retry':
+        return this.workbench.retry(input);
+      case 'workbench-takeover':
+        return this.workbench.takeover(input);
+      case 'workbench-publish':
+        return this.workbench.publish(input);
+      case 'workbench-new':
+        return this.workbench.clear(input);
       case 'diagnostic-state':
         return this.diagnostics.state(input);
       case 'diagnostic-start':
@@ -643,6 +668,7 @@ class PublishingService {
     this.closing = true;
     this.diagnostics.close();
     await this.scheduler.shutdown();
+    await this.workbench.shutdown();
     this.store.close();
   }
 

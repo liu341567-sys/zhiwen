@@ -11,7 +11,7 @@ if ($OptionsOnly) {
 $testExitCode = $LASTEXITCODE
 if ($testExitCode -eq 0) {
   $summaries = (Get-Content -LiteralPath $logPath | Where-Object {
-    $_ -match '^\{"publishingLayout":|^\d+ publishing (options )?real-window checks passed'
+    $_ -match '^\{"publishingLayout":|^\{"publishingWorkbenchLayout":|^\d+ publishing (options |workbench )?real-window checks passed'
   }) -join "`n"
   if ($env:GITHUB_STEP_SUMMARY) {
     @('### Windows publishing fixtures', '', '```text', $summaries, '```') |

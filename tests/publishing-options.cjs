@@ -71,6 +71,7 @@ async function run(scale) {
     const runOptions=(account,input)=>app.evaluate(async(_electron,{id,input})=>globalThis.__publishingOptionsFixture(id,input),{id:account.id,input});
     const expected={at:new Date(Date.now()+3*86400000+8*3600000).toISOString().slice(0,10)+'T12:21',timezone:'Asia/Shanghai'};
     await shell.locator('button[data-module="publish"]').click();
+    await shell.getByRole('button', { name: '高级发布向导', exact: true }).click();
     await until(()=>app.evaluate(({BrowserWindow},id)=>!BrowserWindow.getAllWindows()[0].contentView.children.find(v=>v.webContents?.profileId===id).getVisible(),b.id));
     await load(b,{previousMonth:true});
     let result=await runOptions(b,{nativeSchedule:expected,location:{mode:'specified',label:'示例广场',address:'B市东路1号',query:'广场'}});
