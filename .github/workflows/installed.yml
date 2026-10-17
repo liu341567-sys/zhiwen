@@ -1,0 +1,23 @@
+name: Windows targeted installed application verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installed:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run setup:electron
+      - name: Build Windows installer from the selected revision
+        shell: pwsh
+        run: ./.github/scripts/build-windows.ps1 -Target nsis
+      - name: Verify installed application, message engine and restart
+        shell: pwsh
+        run: ./.github/scripts/test-installer.ps1
