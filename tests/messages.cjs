@@ -64,6 +64,8 @@ async function run(scale) {
     check('full mounted list requires explicit ARIA completeness before summing as total', () => { const r=complete.rows.find(r=>r.id===a.id); assert.equal(r.result.exact,true); assert.equal(r.result.unread,6); assert.equal(complete.summary.unread.unknown,6); });
     await set(a.id, 'nestedRows'); const nested = await command('scan');
     check('nested badges from the supplied diagnostic are counted once per repeated avatar row, excluding navigation and generic numbers', () => { const r=nested.rows.find(r=>r.id===a.id); assert.equal(r.result.status,'partial'); assert.equal(r.result.unread,24); assert.equal(r.result.exact,false); });
+    await set(a.id, 'selectedRow'); const selectedRow = await command('scan');
+    check('selected-state class modifiers do not hide one conversation from the count', () => { assert.equal(selectedRow.rows.find(r=>r.id===a.id).result.unread,5); });
     await set(a.id, 'nestedSingle'); const single = await command('scan');
     check('single renamed conversation in an explicit chat list is recognised', () => { assert.equal(single.rows.find(r=>r.id===a.id).result.unread,4); });
     await set(a.id, 'renamedRows'); const renamed = await command('scan');

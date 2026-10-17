@@ -16,6 +16,7 @@ session.fromPartition = (...args) => {
       if (!u.pathname.endsWith('/chat')) return new Response('<!doctype html><title>Editing</title><input id="editing" value="untouched"><script>window.ready=true;window.originalToken=crypto.randomUUID();</script>', { headers: { 'content-type': 'text/html' } });
       const adaptiveRows = (values, wrap = 'div class=\"x_43ab\"') => `<section class="chat-list">${values.map(v => `<${wrap}><span class="avatar">A</span><span class="semi-badge"><span class="semi-badge-count">${v}</span></span></${wrap.split(' ')[0]}>`).join('')}</section>`;
       const body = value === 'nestedRows' ? `<nav><span class="badge">99</span></nav>${adaptiveRows([4,1,16,1,2])}<div><span class="badge">200</span></div>`
+        : value === 'selectedRow' ? adaptiveRows([4,1]).replace('class="x_43ab"','class="x_43ab selected"')
         : value === 'nestedSingle' ? adaptiveRows([4])
         : value === 'renamedRows' ? adaptiveRows([4,1], 'article class="obfuscated"').replace('chat-list','unknown-container')
         : value === 'unrelatedCards' ? '<section><div><span class="badge">4</span></div><div><span class="badge">16</span></div></section>'

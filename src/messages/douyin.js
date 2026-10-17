@@ -71,7 +71,7 @@ function observe() {
     for (let row = badge.parentElement, depth = 0; row && row !== document.body && depth < 7; row = row.parentElement, depth++) {
       if (row.closest(excluded)) return null;
       if (!row.querySelector(avatarSelector) || badges.filter(n => row.contains(n)).length !== 1) continue;
-      const peers = [...(row.parentElement?.children || [])].filter(n => n.tagName === row.tagName && n.className === row.className && visible(n) && n.querySelector(avatarSelector));
+      const peers = [...(row.parentElement?.children || [])].filter(n => n.tagName === row.tagName && (n.className === row.className || [...row.classList].some(c => n.classList.contains(c))) && visible(n) && n.querySelector(avatarSelector));
       if (peers.length >= 2) return row;
       // A single conversation still qualifies when its container explicitly
       // identifies itself as a chat/session/conversation list, not a sidebar.

@@ -93,7 +93,7 @@ test('restart retains reliable baseline and does not repeat last alert; auto res
   const g = await fixture(t, { directory: dir }); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); g.counts.a = sample(10); g.service.initialize(); assert.equal(g.service.running, false); await g.service.scan(); assert.equal(g.notifications.length, 0);
 });
 test('diagnostics exclude supplied DOM text, credentials and arbitrary attributes', async t => {
-  const f = await fixture(t); f.counts.a = { status: 'unrecognized', diagnostic: { text: 'secret body', cookie: 'secret token', nodes: [{ tag: 'button', role: 'button', kind: 'private-message-navigation', password: 'secret' }] } }; await f.service.scan(); assert(!JSON.stringify(f.service.diagnostics('a')).includes('secret'));
+  const f = await fixture(t); f.counts.a = { status: 'unrecognized', diagnostic: { text: 'secret body', cookie: 'secret token', badges: [{ numeric:'4', excluded:false, matchedRow:true, cookie:'secret', ancestors:[{tag:'div',avatar:true,siblings:2,knownRow:false,text:'secret contact'}] }], nodes: [{ tag: 'button', role: 'button', kind: 'private-message-navigation', password: 'secret' }] } }; await f.service.scan(); assert(!JSON.stringify(f.service.diagnostics('a')).includes('secret'));
 });
 test('a shared read lease blocks publishing but never counts as a UI-hiding publishing lease', () => {
   const scheduler = new Scheduler({ store: { tasks: () => [], setting: () => null }, execute: async () => {} });
