@@ -4,7 +4,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
 const defaults = () => ({ intervalSeconds: 120, concurrency: 2, sound: true, systemNotifications: true,
-  autoResume: false, enabled: false, selectedIds: null });
+  autoResume: false, enabled: false, selectedIds: null, platformOverrides: {} });
 function config(input, previous = defaults()) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('监测设置无效');
   const next = { ...previous };
@@ -17,10 +17,12 @@ function config(input, previous = defaults()) {
       if (!Number.isInteger(value) || value < 30 || value > 3600) throw new Error('巡检间隔须为 30–3600 秒');
     } else if (key === 'concurrency') {
       if (!Number.isInteger(value) || value < 1 || value > 4) throw new Error('同时巡检数量须为 1–4');
+    } else if (key === 'platformOverrides') {
+      if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 500 || Object.entries(value).some(([id, platform]) => !/^[a-zA-Z0-9_-]{1,160}$/.test(id) || platform !== 'douyin')) throw new Error('监测平台配置无效');
     } else if (value !== null && (!Array.isArray(value) || value.length > 500 || value.some(id => typeof id !== 'string' || !id || id.length > 160))) {
       throw new Error('监测账号选择无效');
     }
-    next[key] = key === 'selectedIds' && value ? [...new Set(value)] : value;
+    next[key] = key === 'platformOverrides' ? { ...value } : key === 'selectedIds' && value ? [...new Set(value)] : value;
   }
   return next;
 }

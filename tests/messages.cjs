@@ -12,6 +12,7 @@ async function run(scale) {
   const store = new ProfileStore(directory), a = store.create({ name: '抖音 A', platformId: 'douyin', startUrl: home }), b = store.create({ name: '抖音 B', platformId: 'douyin', startUrl: home });
   const c = store.create({ name: '知乎未适配', platformId: 'zhihu', startUrl: 'https://www.zhihu.com/' });
   store.touchUrl(a.id, home); store.touchUrl(b.id, home);
+  const legacy = store.create({name:'旧自定义账号',startUrl:home});
   let app, shell;
   async function launch() {
     app = await _electron.launch({ chromiumSandbox: true, args: [...(process.platform === 'linux' ? ['--disable-setuid-sandbox'] : []), `--force-device-scale-factor=${scale}`, path.join(root, 'tests/electron-launch.cjs')], cwd: root, env: { ...process.env, QIYE_DATA_DIR: directory, QIYE_MESSAGES_FIXTURE: '1' } });
@@ -68,6 +69,10 @@ async function run(scale) {
     const measure = await shell.evaluate(() => { const root = document.getElementById('messages-module').getBoundingClientRect(); return { width:innerWidth, height:innerHeight, dpr:devicePixelRatio, right:root.right, documentOverflow:document.documentElement.scrollWidth>innerWidth, tableScroll:document.querySelector('.messages-table-scroll').scrollWidth }; });
     check('responsive summary stays in viewport at selected display scale', () => { assert(!measure.documentOverflow); assert(measure.right <= measure.width + 1); });
     fs.mkdirSync(output, { recursive: true }); await shell.screenshot({ path: path.join(output, `messages-${scale}.png`) });
+    await command('platform',{id:legacy.id,platformId:'douyin'}); await set(legacy.id,2); const linked = await command('scan');
+    const unchangedLegacy = await shell.evaluate(id=>browserAPI.getState().then(s=>s.profiles.find(p=>p.id===id)),legacy.id);
+    check('legacy custom environments can monitor without changing original platform or URL',()=>{assert.equal(linked.rows.find(r=>r.id===legacy.id).result.unread,2);assert.equal(unchangedLegacy.platformId,null);assert.equal(unchangedLegacy.startUrl,legacy.startUrl);});
+    await command('platform',{id:legacy.id,platformId:null});
     await shell.evaluate(ids => { for (const id of ids) document.querySelector(`#messages-rows tr[data-environment-id="${id}"] input`).click(); }, [a.id,b.id]);
     await until(() => command('state').then(s => s.config.selectedIds?.length === 0), 'rapid per-account deselection');
     const selected = await command('state'); check('rapid checkbox changes do not lose the previous account selection update', () => assert.deepEqual(selected.config.selectedIds,[]));

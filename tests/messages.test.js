@@ -142,3 +142,8 @@ test('per-account selection is atomic across rapid independent updates', async t
   const f=await fixture(t); f.service.select('a',false); f.service.select('b',false); assert.deepEqual(f.service.config.selectedIds,[]);
   f.service.select('a',true); assert.deepEqual(f.service.config.selectedIds,['a']); assert.throws(()=>f.service.select('c',true));
 });
+test('legacy custom environment adapter association never mutates original profile data', async t => {
+  const raw=[{id:'legacy',name:'旧账号',platformId:null,startUrl:'https://www.douyin.com',lastUrl:'https://creator.douyin.com/creator-micro/home'}], before=JSON.stringify(raw);
+  const f=await fixture(t,{profiles:()=>raw}); f.service.assignPlatform('legacy','douyin'); assert.equal(f.service.state().rows[0].supported,true); assert.equal(JSON.stringify(raw),before);
+  assert.equal(f.service.state().rows[0].platformId,'douyin'); f.service.assignPlatform('legacy',null); assert.equal(f.service.state().rows[0].supported,false); assert.equal(JSON.stringify(raw),before);
+});

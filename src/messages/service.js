@@ -24,14 +24,22 @@ class MessageService {
     this.controllers = new Map(); this.jobs = new Map(); this.active = new Set();
   }
   initialize() { if (this.config.enabled && this.config.autoResume) this.start().catch(() => {}); return this.state(); }
+  accountProfiles() { return this.profiles().map(p => ({ ...p, originalPlatformId: p.platformId || null, platformId: p.platformId || this.config.platformOverrides[p.id] || null })); }
+  assignPlatform(id, platformId) {
+    const profile = this.profiles().find(p => p.id === id);
+    if (!profile || profile.platformId || ![null, 'douyin'].includes(platformId)) throw new Error('仅自定义环境可设置单独的巡检平台');
+    const overrides = { ...this.config.platformOverrides };
+    if (platformId) overrides[id] = platformId; else delete overrides[id];
+    return this.update({ platformOverrides: overrides });
+  }
   selected(profile) { return this.adapters.has(profile.platformId) && (this.config.selectedIds === null || this.config.selectedIds.includes(profile.id)); }
   state() {
-    const rows = this.profiles().map(p => {
+    const rows = this.accountProfiles().map(p => {
       const adapter = this.adapters.get(p.platformId), monitored = this.selected(p), stored = this.store.get('results', p.id);
       const result = !adapter || !monitored ? { status: !adapter ? 'unsupported' : 'disabled', unread: null, increase: null }
         : stored?.platformId === p.platformId ? stored : { status: 'paused', unread: null, increase: null };
       return { id: p.id, name: p.name, platformId: p.platformId || null, platformName: adapter?.name || '', supported: !!adapter, monitored,
-        platformVerified: adapter?.verified === true, result, description: descriptions[result.status], checking: this.active.has(p.id),
+        platformVerified: adapter?.verified === true, customEnvironment: !p.originalPlatformId, result, description: descriptions[result.status], checking: this.active.has(p.id),
         baseline: (() => { const b = this.store.get('baselines', p.id); return Number.isSafeInteger(b?.unread) ? { unread: b.unread, unit: b.unit, checkedAt: b.checkedAt } : null; })() };
     });
     const monitored = rows.filter(r => r.monitored), fresh = monitored.filter(r => ['success', 'partial'].includes(r.result.status));
@@ -47,12 +55,12 @@ class MessageService {
     if (this.closed) throw new Error('私信监测已关闭');
     if (Object.hasOwn(input || {}, 'enabled')) throw new Error('请使用开始或暂停按钮');
     this.config = this.store.settings(input); this.queue.concurrency = this.config.concurrency;
-    for (const [id, controller] of this.controllers) { const profile = this.profiles().find(p => p.id === id); if (!profile || !this.selected(profile)) controller.abort(); }
+    for (const [id, controller] of this.controllers) { const profile = this.accountProfiles().find(p => p.id === id); if (!profile || !this.selected(profile)) controller.abort(); }
     if (this.running && !this.scanJob) this.schedule(); this.changed(); return this.state();
   }
   select(id, selected) {
-    if (typeof selected !== 'boolean' || !this.profiles().some(p => p.id === id && this.adapters.has(p.platformId))) throw new Error('监测账号选择无效');
-    const ids = new Set(this.config.selectedIds === null ? this.profiles().filter(p => this.adapters.has(p.platformId)).map(p => p.id) : this.config.selectedIds);
+    if (typeof selected !== 'boolean' || !this.accountProfiles().some(p => p.id === id && this.adapters.has(p.platformId))) throw new Error('监测账号选择无效');
+    const ids = new Set(this.config.selectedIds === null ? this.accountProfiles().filter(p => this.adapters.has(p.platformId)).map(p => p.id) : this.config.selectedIds);
     if (selected) ids.add(id); else ids.delete(id);
     return this.update({ selectedIds: [...ids] });
   }
@@ -78,14 +86,14 @@ class MessageService {
     if (this.scanJob) return this.scanJob;
     if (ids !== undefined && (!Array.isArray(ids) || ids.length > 500 || ids.some(id => typeof id !== 'string'))) throw new Error('巡检账号选择无效');
     clearTimeout(this.timer); this.timer = null; this.nextAt = null;
-    const profiles = this.profiles(); this.store.prune(profiles.map(p => p.id));
+    const profiles = this.accountProfiles(); this.store.prune(profiles.map(p => p.id));
     const selected = profiles.filter(p => this.selected(p) && (!ids || ids.includes(p.id)));
     const controller = this.controller = new AbortController(), changes = [];
     const cycle = this.cycle = { id: randomUUID(), startedAt: this.now(), completedAt: null, total: selected.length, done: 0, success: 0, errors: 0, increases: { messages: 0, conversations: 0, unknown: 0 } };
     this.scanJob = (async () => {
       for (const profile of selected) {
         const job = this.queue.add(async () => {
-          if (controller.signal.aborted || !this.profiles().some(p => p.id === profile.id) || !this.selected(profile)) return;
+          if (controller.signal.aborted || !this.accountProfiles().some(p => p.id === profile.id) || !this.selected(profile)) return;
           const previous = this.store.get('results', profile.id);
           if (!force && previous?.retryAt > this.now()) { cycle.done++; return; }
           const local = new AbortController(); this.controllers.set(profile.id, local); this.active.add(profile.id); this.changed();
@@ -102,7 +110,7 @@ class MessageService {
               }
             }
             if (local.signal.aborted || result.status === 'aborted') return;
-            if (!this.profiles().some(p => p.id === profile.id && p.platformId === profile.platformId)) return;
+            if (!this.accountProfiles().some(p => p.id === profile.id && p.platformId === profile.platformId)) return;
             this.saveSample(profile, result, previous, cycle, changes);
           } finally {
             try { this.releaseView(profile.id); } catch { cycle.errors++; }
@@ -153,7 +161,7 @@ class MessageService {
     if (['success', 'partial'].includes(status)) cycle.success++; else if (status !== 'busy') cycle.errors++;
   }
   async open(id) {
-    const profile = this.profiles().find(p => p.id === id), adapter = this.adapters.get(profile?.platformId);
+    const profile = this.accountProfiles().find(p => p.id === id), adapter = this.adapters.get(profile?.platformId);
     if (!adapter) throw new Error('此账号平台暂未支持私信跳转');
     await this.cancelAccount(id);
     if (this.isBusy(id)) throw new Error('此账号正在发布或录制，请完成后查看消息');
