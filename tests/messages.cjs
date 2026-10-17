@@ -71,7 +71,7 @@ async function run(scale) {
     fs.mkdirSync(output, { recursive: true }); await shell.screenshot({ path: path.join(output, `messages-${scale}.png`) });
     await command('platform',{id:legacy.id,platformId:'douyin'}); await set(legacy.id,2); const linked = await command('scan');
     const unchangedLegacy = await shell.evaluate(id=>browserAPI.getState().then(s=>s.profiles.find(p=>p.id===id)),legacy.id);
-    check('legacy custom environments can monitor without changing original platform or URL',()=>{assert.equal(linked.rows.find(r=>r.id===legacy.id).result.unread,2);assert.equal(unchangedLegacy.platformId,null);assert.equal(unchangedLegacy.startUrl,legacy.startUrl);});
+    check('legacy custom environments can monitor without changing original platform or URL',()=>{assert.equal(linked.rows.find(r=>r.id===legacy.id).result.unread,2);assert.equal(unchangedLegacy.platformId,legacy.platformId);assert.equal(Object.hasOwn(unchangedLegacy,'platformId'),Object.hasOwn(legacy,'platformId')); assert.equal(unchangedLegacy.startUrl,legacy.startUrl);});
     await command('platform',{id:legacy.id,platformId:null});
     await shell.evaluate(ids => { for (const id of ids) document.querySelector(`#messages-rows tr[data-environment-id="${id}"] input`).click(); }, [a.id,b.id]);
     await until(() => command('state').then(s => s.config.selectedIds?.length === 0), 'rapid per-account deselection');
