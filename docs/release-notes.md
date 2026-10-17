@@ -5,6 +5,18 @@
 - 保留固定/备选地点名称与完整地址的唯一匹配、提交前回读、取消清理及人工干预保护。其他导航、发布参数、账号会话和自动提交授权规则不变。
 - 回归使用与录制一致的选择文字、清除图标及相邻下拉框结构，注入悬停不返回场景，检查真实点击与准确地址选择；真实登录账号的网页仍需实机验收。用户录制文件仅在本地分析，不随安装包发布。
 
+[Windows 安装版](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/Qiye-Setup-0.3.11-x64.exe) · [解压版 ZIP](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/Qiye-0.3.11-x64.zip)
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38997055851)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38997373975)均通过，对应 `f496cc824a6bcc1b1f4da8000ee2a958cc0ed559` / `v0.3.11`：151 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、57 项官方选项及简化向导专项，以及 81 项开发者工具检查。100%、125%、150% 缩放下验证地点文字区域的真实点击、悬停不返回场景、已打开输入框复用、重复目标及遮挡停止、准确地址匹配、固定/备选回退、官方定时和原账号后台上传至提交流程；实际 NSIS 安装、启动、退出、重启、原账号恢复及卸载通过。本地网页夹具不能代替用户已登录抖音账号验收。
+
+发布于 2026-10-17 11:17:02（北京时间）。公开安装包与 ZIP 均完整下载并核对 GitHub 摘要、SHA256SUMS、包内运行时代码、原品牌及媒体工具资源；ZIP 全部文件 CRC 检查通过。原账号、录制文件及地点隐私未打包。证据保存于 `.cache/release-0.3.11/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.11-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/Qiye-0.3.11-x64.zip) | 217870491 | `c0ed47419ed2f273d95c1b429227b7a4d322a9c6b2b624c3b64eef424fc6a1af` |
+| [Qiye-Setup-0.3.11-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/Qiye-Setup-0.3.11-x64.exe) | 160735785 | `30bedd49ff6f641011d078920250da4c5c497c1b35d056512c2b9208ed3513ea` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/SHA256SUMS.txt) | 180 | `cbd148476c079b59cc81873988457b6f42dfbd8371e610aafef31a5a3c8007c4` |
+
 # 栖页 0.3.10 · 简化发布配置与官方循环定时
 
 - 移除配置页官网实时候选、查询账号/准备视频、预上传及查询进度接口。固定地点和备选地点由脚本上传后后台搜索、按名称及完整地址唯一核对，无法准确匹配则提示人工接管；实际选择和来源保留在日志/记录。

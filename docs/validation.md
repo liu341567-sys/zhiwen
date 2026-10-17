@@ -1,3 +1,15 @@
+# 0.3.11 地点输入框交互验证
+
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38997055851)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38997373975)均通过，对应 `f496cc824a6bcc1b1f4da8000ee2a958cc0ed559` / `v0.3.11`：151 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、57 项官方选项及简化向导专项，以及 81 项开发者工具检查。100%、125%、150% 缩放下验证地点文字区域的真实点击、悬停不返回场景、已打开输入框复用、重复目标及遮挡停止、准确地址匹配、固定/备选回退、官方定时和原账号后台上传至提交流程；实际 NSIS 安装、启动、退出、重启、原账号恢复及卸载通过。本地网页夹具不能代替用户已登录抖音账号验收。
+
+发布于 2026-10-17 11:17:02（北京时间）。公开安装包与 ZIP 均完整下载并核对 GitHub 摘要、SHA256SUMS、包内运行时代码、原品牌及媒体工具资源；ZIP 全部文件 CRC 检查通过。原账号、录制文件及地点隐私未打包。证据保存于 `.cache/release-0.3.11/ci-verification.json` 与 `verification.json`。
+
+| 附件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| [Qiye-0.3.11-x64.zip](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/Qiye-0.3.11-x64.zip) | 217870491 | `c0ed47419ed2f273d95c1b429227b7a4d322a9c6b2b624c3b64eef424fc6a1af` |
+| [Qiye-Setup-0.3.11-x64.exe](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/Qiye-Setup-0.3.11-x64.exe) | 160735785 | `30bedd49ff6f641011d078920250da4c5c497c1b35d056512c2b9208ed3513ea` |
+| [SHA256SUMS.txt](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.11/SHA256SUMS.txt) | 180 | `cbd148476c079b59cc81873988457b6f42dfbd8371e610aafef31a5a3c8007c4` |
+
 # 0.3.10 简化配置与官方日/周循环排期验证
 
 Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38233748564)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/38233896493)均通过，对应 `c5c7440e6cf9f1d2a1b494080de90ceb7546c259` / `v0.3.10`：149 项单元、语法、23 项隔离、16 项登录兼容性及原生 DPAPI、357 项既有窗口 UI、51 项列表、45 项导航、96 项发布专项、45 项官方选项及简化向导专项，以及 81 项开发者工具检查。DPR 1 / 1.25 / 1.5 下验证原账号后台搜索、固定/备选名称与完整地址核对、空结果回退、未匹配转人工、取消清理、原生官方时间范围及回读、从首页开始的完整简化向导，以及单账号多视频周循环展开/保存/执行。单元验证日循环、周循环、跨月年、过去时段跳过、账号独立时钟、输入校验、无本地定时新任务及重启后的不可变快照。实际 NSIS 安装、启动、退出、重启、原账号恢复、媒体工具、SQLite 及卸载检查通过。网页测试使用本地夹具，不能代替用户已登录抖音账号验收。
