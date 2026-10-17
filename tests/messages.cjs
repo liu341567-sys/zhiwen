@@ -44,7 +44,7 @@ async function run(scale) {
     await set(a.id, 11); await set(b.id, 5); const second = await command('scan');
     const notified = await app.evaluate(() => globalThis.__messageFixture.notifications);
     check('multi-account increases produce one aggregate estimated alert', () => { assert.equal(notified.length, 1); assert.equal(notified[0].length, 2); assert.equal(second.summary.increases.messages, 5); });
-    await shell.waitForFunction(() => document.querySelector('#messages-stats').textContent.includes('待核实'));
+    await shell.waitForFunction(() => document.querySelector('#messages-stats').children.length === 3);
     const retainedNodes = await shell.evaluate(() => window.messageRow === document.querySelector('#messages-rows tr') && window.messageLogo === window.messageRow.querySelector('img'));
     check('row and loaded image nodes stay stable across scans', () => assert(retainedNodes));
     await command('scan'); assert.equal(await app.evaluate(() => globalThis.__messageFixture.notifications.length), 1); checks++;
@@ -62,6 +62,16 @@ async function run(scale) {
     check('stable conversation counts compare locally, without exporting peer IDs', () => { assert.equal(changedRows.rows.find(r=>r.id===a.id).result.increase,2); assert(!JSON.stringify(changedRows).includes('private-key')); assert.equal(changedRows.summary.increases.unknown,2); });
     await set(a.id, 'completeRows'); const complete = await command('scan');
     check('full mounted list requires explicit ARIA completeness before summing as total', () => { const r=complete.rows.find(r=>r.id===a.id); assert.equal(r.result.exact,true); assert.equal(r.result.unread,6); assert.equal(complete.summary.unread.unknown,6); });
+    await set(a.id, 'nestedRows'); const nested = await command('scan');
+    check('nested badges from the supplied diagnostic are counted once per repeated avatar row, excluding navigation and generic numbers', () => { const r=nested.rows.find(r=>r.id===a.id); assert.equal(r.result.status,'partial'); assert.equal(r.result.unread,24); assert.equal(r.result.exact,false); });
+    await set(a.id, 'nestedSingle'); const single = await command('scan');
+    check('single renamed conversation in an explicit chat list is recognised', () => { assert.equal(single.rows.find(r=>r.id===a.id).result.unread,4); });
+    await set(a.id, 'renamedRows'); const renamed = await command('scan');
+    check('repeated avatar rows survive renamed containers and non-div row tags', () => { assert.equal(renamed.rows.find(r=>r.id===a.id).result.unread,5); });
+    await set(a.id, 'unrelatedCards'); const unrelated = await command('scan');
+    check('numeric cards without conversation evidence are never reported as private messages', () => { assert.equal(unrelated.rows.find(r=>r.id===a.id).result.status,'unrecognized'); });
+    const simple = await shell.evaluate(() => ({advanced:document.querySelector('.messages-advanced').open,visibleActions:[...document.querySelectorAll('.messages-buttons > button')].filter(n=>!n.hidden).map(n=>n.id),stats:document.getElementById('messages-stats').children.length}));
+    check('first-time UI exposes only a monitor switch and refresh, with advanced settings collapsed', () => { assert.equal(simple.advanced,false); assert.equal(simple.stats,3); assert.deepEqual(simple.visibleActions,['messages-start','messages-scan']); });
     await shell.locator('#sidebar-toggle').click(); await shell.locator('[data-module="publish"]').click(); await shell.locator('[data-module="data"]').click();
     const collapsed = await shell.evaluate(() => document.querySelector('.app-shell').classList.contains('sidebar-collapsed')); check('module switching preserves explicit collapsed preference', () => assert(collapsed));
     await shell.locator('#messages-search').fill('抖音'); await command('settings', { intervalSeconds: 60 });

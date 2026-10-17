@@ -6,7 +6,7 @@ const douyin = require('./douyin');
 const descriptions = {
   partial: '仅统计已加载会话，完整总数待核实；不会进入会话',
   success: '已读取官网未读计数；增量为数量变化估算', closed: '环境不存在或已关闭', wrong_page: '官方列表发生跳转，未读取其他页面',
-  unrecognized: '未识别到明确的私信总数，不能视为零', ambiguous: '多个私信计数不一致，待核实',
+  unrecognized: '暂未识别到会话未读角标，请打开消息页查看或发送诊断', ambiguous: '多个私信计数不一致，待核实',
   login_required: '账号需要重新登录', verification: '平台要求安全验证', loading: '官网页面正在加载',
   timeout: '官方列表加载或读取超时', load_error: '官方私信列表加载失败', session_error: '原账号会话无法恢复', page_changed: '巡检期间页面发生变化',
   busy: '账号正在发布或录制，本次等待', unsupported: '平台暂未支持', disabled: '未纳入监测', paused: '尚未巡检',
@@ -153,6 +153,7 @@ class MessageService {
       if (exact || Object.keys(conversation.ledger).length) this.store.put('baselines', profile.id, { ...(exact ? count.baseline : baseline || { unread: null, unit: 'unknown', checkedAt: null }), platformId: profile.platformId, lastMethod: method || baseline?.lastMethod, conversationCounts: conversation.ledger });
       this.store.put('results', profile.id, saved);
       if (!['success', 'partial', 'busy'].includes(status)) this.store.diagnostic(profile.id, { status, locator: result.diagnostic?.locator || 'official-message-list', candidates: result.diagnostic?.candidates || 0,
+        badges: (result.diagnostic?.badges || []).slice(0, 24).map(b => ({ numeric: /^\d+\+?$/.test(b.numeric || '') ? b.numeric : null, excluded: b.excluded === true, matchedRow: b.matchedRow === true, ancestors: (b.ancestors || []).slice(0,5).map(n => ({ tag: ['div','span','li','ul','section','a'].includes(n.tag) ? n.tag : 'other', avatar: n.avatar === true, siblings: Number.isSafeInteger(n.siblings) ? Math.max(0, Math.min(n.siblings,1000)) : 0, knownRow: n.knownRow === true })) })),
         structure: (result.diagnostic?.structure || []).slice(0, 40).map(n => ({ tag: ['iframe', 'button', 'span', 'div', 'a', 'li'].includes(n.tag) ? n.tag : 'other', role: ['tab', 'navigation', 'status'].includes(n.role) ? n.role : null, kind: ['iframe', 'unread', 'badge', 'navigation'].includes(n.kind) ? n.kind : 'unknown', numeric: /^\d+\+?$/.test(n.numeric || '') ? n.numeric : null, label: ['全部消息', '未读消息', '私信', '消息', '未读', '全部'].includes(n.label) ? n.label : null })),
         nodes: (result.diagnostic?.nodes || []).slice(0, 12).map(n => ({ tag: String(n.tag).replace(/[^a-z0-9-]/g, '').slice(0, 30), role: ['tab', 'button', 'navigation'].includes(n.role) ? n.role : null, kind: ['explicit-unread-total', 'unread-tab', 'private-message-navigation'].includes(n.kind) ? n.kind : 'unknown' })) }, now);
       if (change) this.store.recordAlert(change, now);

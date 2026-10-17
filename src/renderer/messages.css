@@ -32,3 +32,27 @@
 @media(max-width:700px) { .messages-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }.messages-heading h1{font-size:23px}.messages-controls{padding:14px}.messages-buttons{gap:8px}.messages-buttons #messages-status{margin-left:0}.messages-local{display:none} }
 
 .messages-heading-actions { display:flex; align-items:center; gap:10px; }
+/* Daily use: one monitoring switch, compact account list, optional settings. */
+#messages-module [hidden] { display:none!important; }
+.messages-heading { margin-bottom:18px; }
+.messages-stats { grid-template-columns:repeat(3,minmax(0,1fr)); margin:16px 0; }
+.messages-stats > div { padding:12px 16px; }
+.messages-stats strong { font-size:24px; margin:2px 0; }
+.messages-controls { padding:14px 16px; }
+.messages-controls .messages-muted { margin-top:8px; }
+.messages-table { min-width:540px; }
+.messages-table th:nth-child(4), .messages-table td:nth-child(4), .messages-table th:nth-child(5), .messages-table td:nth-child(5) { display:none; }
+.messages-account { min-width:125px; }
+.messages-account strong { max-width:180px; }
+.messages-table th, .messages-table td { padding:12px 10px; }
+.messages-row-more summary { cursor:pointer; color:#526b89; font-size:12px; padding:4px; }
+.messages-row-more > div { display:flex; flex-direction:column; align-items:flex-start; }
+.messages-row-actions { align-items:baseline; gap:12px; }
+.messages-advanced { margin-top:18px; padding:14px 16px; background:#fff; border-radius:10px; border:1px solid #e5e9f0; }
+.messages-advanced > summary { cursor:pointer; color:#526078; }
+.messages-help { padding:10px 2px 0; }
+@media(max-width:700px) {
+  .messages-stats { grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  .messages-stats > div { padding:10px; }.messages-stats span,.messages-stats small {font-size:12px;}
+  .messages-account strong { max-width:125px; }.messages-table { min-width:500px; }
+}

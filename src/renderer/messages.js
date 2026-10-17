@@ -8,18 +8,18 @@
   const unit = value => value === 'messages' ? '条' : value === 'conversations' ? '个会话' : '（官网计数）';
   const units = values => Object.entries(values || {}).filter(([,n]) => n > 0).map(([u,n]) => `${n}${unit(u)}`).join(' / ') || '0';
   const feedback = (message, type = 'success') => window.publishingNotify?.(message, type);
-  root.innerHTML = `<header class="messages-heading"><div><h1>私信汇总</h1><p>同一账号会话，只读巡检官方列表；消息处理仍在官网完成。</p></div><div class="messages-heading-actions"><span class="messages-local">本地监测</span><button id="messages-backup" class="button button-secondary" type="button">备份数据</button></div></header>
-    <section class="messages-controls" aria-label="私信监测控制"><div class="messages-buttons"><button id="messages-start" class="button button-primary" type="button">开始实时监测</button><button id="messages-pause" class="button button-secondary" type="button">暂停监测</button><button id="messages-scan" class="button button-secondary" type="button">立即巡检</button><span id="messages-status" role="status">正在读取设置…</span></div>
-    <div class="messages-options"><label>巡检间隔 <select id="messages-interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="120">2 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option><option value="3600">1 小时</option></select></label><label>并发账号 <select id="messages-concurrency"><option>1</option><option>2</option><option>3</option><option>4</option></select></label><label><input id="messages-sound" type="checkbox">提示音（系统音量）</label><label><input id="messages-system" type="checkbox">Windows 通知</label><label><input id="messages-resume" type="checkbox">重启后继续监测</label></div>
-    <p id="messages-cycle" class="messages-muted"></p></section>
+  root.innerHTML = `<header class="messages-heading"><div><h1>私信汇总</h1><p>勾选账号，开启监测。有未读时，点击“查看消息”到官网处理。</p></div></header>
+    <section class="messages-controls" aria-label="私信监测控制"><div class="messages-buttons"><button id="messages-start" class="button button-primary" type="button">开始监测</button><button id="messages-pause" class="button button-secondary" type="button" hidden>暂停监测</button><button id="messages-scan" class="button button-secondary" type="button">刷新一次</button><span id="messages-status" role="status">正在读取账号…</span></div><p id="messages-cycle" class="messages-muted"></p></section>
     <div id="messages-stats" class="messages-stats"></div>
-    <div class="messages-notice">首次巡检建立基线，不提醒既有未读。优先读取官网明确总数；只有会话旁的数字时，统计已加载会话的下界。“数量增加”是估算，不能证明准确新增条数。未确认列表完整时不会当作总数；无法识别及 99+ 等上限计数不会当作零。抖音入口已确认，计数识别仍需实际账号核验；其他平台待适配。</div>
-    <section class="messages-accounts" aria-label="账号私信列表"><div class="messages-filters"><input id="messages-search" type="search" placeholder="搜索账号名称" aria-label="搜索账号名称"><select id="messages-platform" aria-label="筛选平台"><option value="">全部平台</option></select><select id="messages-filter" aria-label="筛选状态"><option value="all">全部状态</option><option value="unread">存在未读</option><option value="error">巡检异常</option><option value="monitored">正在监测的账号</option><option value="unsupported">暂未支持</option></select><select id="messages-sort" aria-label="排序"><option value="order">原账号顺序</option><option value="unread">未读优先</option><option value="name">账号名称</option><option value="time">最近检测</option></select><button id="messages-all" class="button button-secondary" type="button">监测全部支持账号</button><button id="messages-none" class="text-button" type="button">取消全部</button></div>
-    <div class="messages-table-scroll"><table class="messages-table"><thead><tr><th>监测</th><th>平台 / 账号</th><th>当前未读</th><th>本次变化（估算）</th><th>最近检测</th><th>状态</th><th>操作</th></tr></thead><tbody id="messages-rows"></tbody></table><p id="messages-empty" class="messages-empty" hidden>没有符合条件的账号。请调整筛选，或在“我的环境”创建账号。已有自定义环境可点击“用于抖音监测”，不必重建或更改原绑定。</p></div></section>
-    <details class="messages-history"><summary>最近的未读变化提醒</summary><div id="messages-alerts"></div></details>
-    <p class="messages-muted">电脑需保持开机、联网，栖页需持续运行。巡检不会发送、回复或点击会话；“查看消息”会在对应账号中打开官方私信列表。关闭监测会释放后台页面。</p>
-    <dialog id="messages-details" class="modal messages-details"><div class="messages-details-heading"><h2>巡检状态与脱敏诊断</h2><button id="messages-details-close" class="icon-button" aria-label="关闭诊断">×</button></div><p id="messages-details-description"></p><pre id="messages-diagnostic"></pre><div class="modal-actions"><button id="messages-export" class="button button-primary">导出诊断</button></div></dialog>`;
-  const labels = ['已纳入监测', '本次读取成功', '存在未读的账号', '当前未读合计', '本次新增 / 数量变化', '巡检异常账号'];
+    <section class="messages-accounts" aria-label="账号私信列表"><div class="messages-filters"><input id="messages-search" type="search" placeholder="搜索账号" aria-label="搜索账号名称"><select id="messages-filter" aria-label="筛选状态"><option value="all">全部账号</option><option value="unread">只看有未读</option><option value="error">需要处理</option><option value="monitored">已勾选</option><option value="unsupported">暂未支持</option></select></div>
+    <div class="messages-table-scroll"><table class="messages-table"><thead><tr><th>监测</th><th>账号</th><th>未读</th><th>本次变化（估算）</th><th>最近检测</th><th>状态</th><th>操作</th></tr></thead><tbody id="messages-rows"></tbody></table><p id="messages-empty" class="messages-empty" hidden>没有找到账号。请调整筛选，或先在“我的环境”添加账号。</p></div></section>
+    <p class="messages-muted messages-help">只查看未读角标，不打开具体会话。首次监测不提醒旧消息；只有已加载的会话时显示“至少”，不能识别时显示“未能识别”，不会误报为 0。当前支持抖音。</p>
+    <details class="messages-advanced"><summary>更多设置与使用说明</summary><div class="messages-options"><label>检查频率 <select id="messages-interval"><option value="30">30 秒</option><option value="60">1 分钟</option><option value="120">2 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option><option value="1800">30 分钟</option><option value="3600">1 小时</option></select></label><label>同时检查账号数 <select id="messages-concurrency"><option>1</option><option>2</option><option>3</option><option>4</option></select></label><label><input id="messages-sound" type="checkbox">提示音</label><label><input id="messages-system" type="checkbox">Windows 通知</label><label><input id="messages-resume" type="checkbox">下次启动继续监测</label></div>
+    <div class="messages-options"><select id="messages-platform" aria-label="筛选平台"><option value="">全部平台</option></select><select id="messages-sort" aria-label="排序"><option value="order">原账号顺序</option><option value="unread">未读优先</option><option value="name">账号名称</option><option value="time">最近检测</option></select><button id="messages-all" class="text-button" type="button">勾选全部抖音账号</button><button id="messages-none" class="text-button" type="button">取消全部</button><button id="messages-backup" class="text-button" type="button">备份监测数据</button></div>
+    <p class="messages-muted">电脑需保持开机、联网，栖页需持续运行。没有平台标识的旧环境，可在账号行点击“这是抖音账号”加入监测，不改变原环境配置。新消息提醒来自可靠计数的变化估算；无法取得稳定会话标识时，仅展示已发现的未读数量，不推断新增。</p>
+    <details class="messages-history"><summary>查看最近提醒</summary><div id="messages-alerts"></div></details></details>
+    <dialog id="messages-details" class="modal messages-details"><div class="messages-details-heading"><h2>账号检查详情</h2><button id="messages-details-close" class="icon-button" aria-label="关闭诊断">×</button></div><p id="messages-details-description"></p><p class="messages-muted">仍然无法识别？点击“保存诊断文件”，把保存的 JSON 文件发给我排查。</p><details><summary>查看技术信息</summary><pre id="messages-diagnostic"></pre></details><div class="modal-actions"><button id="messages-export" class="button button-primary">保存诊断文件</button></div></dialog>`;
+  const labels = ['已勾选账号', '发现未读的账号', '需要处理的账号'];
   for (const label of labels) { const card = document.createElement('div'); card.innerHTML = '<span></span><strong></strong><small></small>'; text(card.children[0], label); $('stats').append(card); }
   let diagnosticId;
   $('backup').onclick = () => run('backup').then(r => { if (r?.saved) feedback('私信监测数据已备份'); });
@@ -45,12 +45,12 @@
   for (const id of filters) $(id).addEventListener(id === 'search' ? 'input' : 'change', () => { try { localStorage.setItem('qiye-messages-filters', JSON.stringify(Object.fromEntries(filters.map(id => [id, $(id).value])))); } catch {} renderRows(); });
   function createRow(row) {
     const tr = document.createElement('tr'); tr.dataset.environmentId = row.id;
-    tr.innerHTML = '<td><input type="checkbox"></td><td><div class="messages-account"><span class="messages-logo"></span><div><strong></strong><small></small></div></div></td><td></td><td></td><td></td><td><span class="messages-state"></span><small></small></td><td><div class="messages-row-actions"><button class="text-button">查看消息</button><button class="text-button">重新巡检</button><button class="text-button">详情</button><button class="text-button messages-platform-link">用于抖音监测</button></div></td>';
+    tr.innerHTML = '<td><input type="checkbox"></td><td><div class="messages-account"><span class="messages-logo"></span><div><strong></strong><small></small></div></div></td><td></td><td></td><td></td><td><span class="messages-state"></span><small></small></td><td><div class="messages-row-actions"><button class="text-button">查看消息</button><details class="messages-row-more"><summary aria-label="更多账号操作">更多</summary><div><button class="text-button">重新检查</button><button class="text-button">检查详情 / 诊断</button><button class="text-button messages-platform-link">取消抖音关联</button></div></details></div></td>';
     const cells = tr.children, checkbox = cells[0].firstElementChild;
     checkbox.setAttribute('aria-label', `监测 ${row.name}`);
     checkbox.onchange = () => run('select', { id: row.id, selected: checkbox.checked });
     const buttons = cells[6].querySelectorAll('button');
-    buttons[0].onclick = () => run('open', row.id); buttons[1].onclick = () => run('scan', { ids: [row.id] });
+    buttons[0].onclick = () => { const current = state.rows.find(r => r.id === row.id); return current?.customEnvironment && !current.supported ? run('platform', { id: row.id, platformId: 'douyin' }) : run('open', row.id); }; buttons[1].onclick = () => run('scan', { ids: [row.id] });
     buttons[3].title = '仅设置私信巡检平台，不修改原环境网址、平台绑定或左侧图标';
     buttons[3].onclick = () => run('platform', { id: row.id, platformId: state.rows.find(r => r.id === row.id)?.platformId ? null : 'douyin' });
     buttons[2].onclick = async () => { const data = await run('diagnostics', row.id); if (!data) return; diagnosticId = row.id;
@@ -72,13 +72,13 @@
       if (logo.dataset.platform !== (row.platformId || 'custom')) { logo.dataset.platform = row.platformId || 'custom'; if (preset) { const img = document.createElement('img'); img.src = preset.iconResource; img.alt = ''; img.draggable = false; logo.replaceChildren(img); } else text(logo, '环'); }
       c[0].firstElementChild.checked = row.monitored; c[0].firstElementChild.disabled = !row.supported; c[0].firstElementChild.setAttribute('aria-label', `监测 ${row.name}`);
       text(c[1].querySelector('strong'), row.name); text(c[1].querySelector('small'), preset?.displayName || '自定义环境');
-      text(c[2], row.result.unread === null || row.result.unread === undefined ? '待核实' : `${row.result.exact ? '' : '至少 '}${row.result.unread}${unit(row.result.unit)}`);
+      text(c[2], row.result.unread === null || row.result.unread === undefined ? (row.result.status === 'unrecognized' ? '未能识别' : '—') : `${row.result.exact ? '' : '至少 '}${row.result.unread}${unit(row.result.unit)}`);
       c[2].title = row.baseline ? `上次可靠基线：${row.baseline.unread}${unit(row.baseline.unit)}，${time(row.baseline.checkedAt)}；不代表当前数量` : '';
       text(c[3], row.result.first ? '首次基线' : row.result.increase === null || row.result.increase === undefined ? '待核实' : row.result.increase > 0 ? `计数 +${row.result.increase}（估算）` : '未观察到增加');
       text(c[4], time(row.result.checkedAt));
-      text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.status === 'partial' ? '已加载会话 / 总数待核实' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '尚未巡检' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '待核实');
+      text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.status === 'partial' ? '已发现会话未读' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '等待检查' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '请查看详情');
       c[5].title = (row.description || '') + (row.result.visibleConversations ? `；已识别 ${row.result.visibleConversations} 个已加载会话` : ''); text(c[5].lastElementChild, row.result.retryAt > Date.now() ? `重试：${time(row.result.retryAt)}` : '');
-      const buttons = c[6].querySelectorAll('button'); buttons[0].disabled = !row.supported || row.checking; buttons[1].disabled = !row.monitored || state.checking; buttons[3].hidden = !row.customEnvironment; text(buttons[3], row.platformId ? '取消巡检关联' : '用于抖音监测');
+      const buttons = c[6].querySelectorAll('button'); buttons[0].disabled = (!row.supported && !row.customEnvironment) || row.checking; text(buttons[0], row.customEnvironment && !row.supported ? '这是抖音账号' : '查看消息'); buttons[1].disabled = !row.monitored || state.checking; buttons[3].hidden = !row.customEnvironment || !row.platformId; text(buttons[3], '取消抖音关联');
     }
     const valid = new Set(state.rows.map(r => r.id)); for (const [id, node] of nodes) if (!valid.has(id)) { node.remove(); nodes.delete(id); }
     const body = $('rows'); let previous = null;
@@ -89,17 +89,15 @@
   }
   function render() {
     if (!state) return;
-    $('start').disabled = state.running || state.checking; $('pause').disabled = !state.running && !state.checking; $('scan').disabled = state.checking;
-    text($('status'), state.checking ? `巡检中 ${state.cycle?.done || 0} / ${state.cycle?.total || 0}` : state.running ? '持续监测中' : '已暂停');
-    text($('cycle'), `纳入监测 ${state.summary.monitored} 个账号 · 最近完成：${time(state.cycle?.completedAt)}${state.nextAt ? ' · 下次巡检：' + time(state.nextAt) : ''}`);
+    $('start').hidden = state.running || state.checking; $('pause').hidden = !state.running && !state.checking; $('start').disabled = state.running || state.checking || !state.summary.monitored; $('pause').disabled = !state.running && !state.checking; $('scan').disabled = state.checking;
+    text($('status'), !state.summary.monitored ? '先勾选要监测的抖音账号' : state.checking ? `检查中 ${state.cycle?.done || 0} / ${state.cycle?.total || 0}` : state.running ? '持续监测中' : '已暂停');
+    text($('cycle'), state.cycle?.completedAt ? `最近更新 ${time(state.cycle.completedAt)}${state.nextAt ? ' · 下次自动检查 ' + time(state.nextAt) : ''}` : '默认勾选抖音账号，点击“开始监测”即可。');
     if (document.activeElement !== $('interval')) $('interval').value = state.config.intervalSeconds;
     if (document.activeElement !== $('concurrency')) $('concurrency').value = state.config.concurrency;
     $('sound').checked = state.config.sound; $('system').checked = state.config.systemNotifications; $('resume').checked = state.config.autoResume;
-    const combined = Object.fromEntries(Object.keys(state.summary.unread).map(u => [u, state.summary.unread[u] + (state.summary.lowerBounds?.[u] || 0)]));
-    const incomplete = state.summary.monitored > state.summary.reliableAccounts;
-    const knownPositive = Object.values(combined).some(n => n > 0);
-    const values = [state.summary.monitored, state.summary.success, state.summary.observedAccounts && (!incomplete || knownPositive) ? `${incomplete ? '至少 ' : ''}${state.summary.unreadAccounts}` : '待核实', state.summary.observedAccounts && (!incomplete || knownPositive) ? `${incomplete ? '至少 ' : ''}${units(combined)}` : '待核实', '待核实', state.summary.anomalies];
-    [...$('stats').children].forEach((c,i) => { text(c.children[1], values[i]); text(c.children[2], i === 3 ? `完整计数 ${state.summary.reliableAccounts} 个；部分计数 ${state.summary.partialAccounts} 个，完整总数待核实` : i === 4 ? `未读计数增加：${units(state.summary.increases)}（估算）` : ''); });
+    const needsAttention = state.rows.filter(r => r.monitored && !['success','partial','paused','busy'].includes(r.result.status)).length;
+    const values = [state.summary.monitored, state.summary.observedAccounts ? state.summary.unreadAccounts : '—', needsAttention];
+    [...$('stats').children].forEach((c,i) => { text(c.children[1], values[i]); text(c.children[2], i === 1 ? '按已读取的会话统计' : i === 2 && needsAttention ? '登录或检查详情后重试' : ''); });
     const platform = $('platform'), current = platform.value;
     for (const id of new Set(state.rows.map(r => r.platformId).filter(Boolean))) {
       let option = [...platform.options].find(o => o.value === id);

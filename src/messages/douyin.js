@@ -11,7 +11,7 @@ const jumpUrl = () => launchUrl;
 // cookies, storage, message text, names, peer IDs or request/response bodies.
 function observe() {
   const visible = node => { const r = node.getBoundingClientRect(), s = getComputedStyle(node); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden'; };
-  const diagnostic = { locator: 'private-message-total-or-navigation-counter', candidates: 0, nodes: [], structure: [] };
+  const diagnostic = { locator: 'private-message-or-conversation-counter-v2', candidates: 0, nodes: [], structure: [] };
   if (!document.body || document.readyState === 'loading') return { status: 'loading', diagnostic };
   const gates = [...document.querySelectorAll('[role="dialog"],[class*="captcha"],[id*="captcha"]')].slice(0, 30).filter(visible);
   if (gates.some(n => /安全验证|滑块|请完成验证|二次验证/.test(n.textContent.slice(0, 500)))) return { status: 'verification', diagnostic };
@@ -49,24 +49,58 @@ function observe() {
     for (const value of new Set(values)) { const n = Number(value.replace('+', '')); if (Number.isSafeInteger(n) && n <= 1000000) sources.push({ unread: n, exact: !value.endsWith('+'), unit }); }
   }
 
-  // Conversation badges are only a lower bound unless ARIA proves the whole
-  // list is mounted. Never traverse into a conversation or collect its text.
-  const rowSelector = '[role="listitem"],[class*="conversation-item" i],[class*="conversationItem"],[class*="session-item" i],[class*="sessionItem"],[class*="chat-item" i],[class*="chatItem"],[data-conversation-id],[data-session-id],[class*="session" i][class*="item" i],[class*="conversation" i][class*="item" i],[class*="chat" i][class*="item" i],[class*="im-list-item" i]';
-  const conversationRows = [...document.querySelectorAll(rowSelector)].filter(visible).slice(0, 1000);
-  const entries = [], counted = new Set();
-  for (const badge of [...document.querySelectorAll('[class*="badge" i],[class*="unread" i],[data-unread-count],[aria-label]')].slice(0, 5000).filter(visible)) {
-    const row = badge.closest(rowSelector); if (!row || counted.has(row)) continue;
-    const aria = (badge.getAttribute('aria-label') || '').trim();
-    const label = /^(\d+\+?)\s*条未读(?:消息)?$/.exec(aria);
+  // UI libraries wrap one count in several badge spans. Canonicalise the
+  // innermost numeric badge first; never add a wrapper and its child twice.
+  const badgeSelector = '[class*="badge" i],[class*="unread" i],[data-unread-count],[aria-label]';
+  const valueOf = badge => {
+    const label = /^(\d+\+?)\s*条未读(?:消息)?$/.exec((badge.getAttribute('aria-label') || '').trim());
     const value = label?.[1] || badge.getAttribute('data-unread-count') || (badge.textContent || '').trim();
-    if (!/^\d+\+?$/.test(value) || Number(value.replace('+','')) > 1000000) continue;
-    if (!label && !/badge|unread/i.test(typeof badge.className === 'string' ? badge.className : '') && !badge.hasAttribute('data-unread-count')) continue;
-    const candidates = [...row.querySelectorAll('[class*="badge" i],[class*="unread" i],[data-unread-count]')].filter(visible).map(n => (n.getAttribute('data-unread-count') || n.textContent || '').trim()).filter(v => /^\d+\+?$/.test(v));
-    if (new Set(candidates).size > 1) continue;
-    counted.add(row);
+    if (!/^\d+\+?$/.test(value) || Number(value.replace('+','')) > 1000000) return null;
+    if (!label && !/badge|unread/i.test(typeof badge.className === 'string' ? badge.className : '') && !badge.hasAttribute('data-unread-count')) return null;
+    return { value, unit: label ? 'messages' : 'unknown' };
+  };
+  const rawBadges = [...document.querySelectorAll(badgeSelector)].slice(0, 5000).filter(n => visible(n) && valueOf(n));
+  const badges = rawBadges.filter(n => !rawBadges.some(child => child !== n && n.contains(child)));
+  const rowSelector = '[role="listitem"],[class*="conversation-item" i],[class*="conversationItem"],[class*="session-item" i],[class*="sessionItem"],[class*="chat-item" i],[class*="chatItem"],[data-conversation-id],[data-session-id],[class*="session" i][class*="item" i],[class*="conversation" i][class*="item" i],[class*="chat" i][class*="item" i],[class*="im-list-item" i]';
+  const excluded = 'nav,header,aside,[role="navigation"],[role="tablist"],[role="tab"],[role="menu"]';
+  const avatarSelector = 'img,[class*="avatar" i]';
+  // Hashed/renamed row classes are common. A conservative fallback requires a
+  // repeated sibling structure, an avatar per row and a single badge cluster.
+  // Generic navigation counters and unrelated number cards never qualify.
+  const structuralRow = badge => {
+    for (let row = badge.parentElement, depth = 0; row && row !== document.body && depth < 7; row = row.parentElement, depth++) {
+      if (row.closest(excluded)) return null;
+      if (!row.querySelector(avatarSelector) || badges.filter(n => row.contains(n)).length !== 1) continue;
+      const peers = [...(row.parentElement?.children || [])].filter(n => n.tagName === row.tagName && n.className === row.className && visible(n) && n.querySelector(avatarSelector));
+      if (peers.length >= 2) return row;
+      // A single conversation still qualifies when its container explicitly
+      // identifies itself as a chat/session/conversation list, not a sidebar.
+      const container = row.parentElement;
+      if (container && /(?:conversation|session|chat|im)[-_]?(?:list|List)|(?:list|List)[-_]?(?:conversation|session|chat)/.test(String(container.className))) return row;
+    }
+    return null;
+  };
+  const conversationRows = [...document.querySelectorAll(rowSelector)].filter(n => visible(n) && !n.closest(excluded)).slice(0, 1000);
+  const entries = [], counted = new Set();
+  for (const badge of badges) {
+    if (badge.closest(excluded)) continue;
+    const row = badge.closest(rowSelector) || structuralRow(badge); if (!row || counted.has(row)) continue;
+    const rowBadges = badges.filter(n => row.contains(n));
+    if (rowBadges.length !== 1) continue; // Distinct counters in one row are ambiguous.
+    counted.add(row); if (!conversationRows.includes(row)) conversationRows.push(row);
+    const parsed = valueOf(badge);
     const identity = ['data-conversation-id','data-session-id','data-conversation-key'].map(k => row.getAttribute(k)).find(v => typeof v === 'string' && /^[\w:/.=-]{1,200}$/.test(v)) || null;
-    entries.push({ identity, unread: Number(value.replace('+','')), exact: !value.endsWith('+'), unit: label ? 'messages' : 'unknown' });
+    entries.push({ identity, unread: Number(parsed.value.replace('+','')), exact: !parsed.value.endsWith('+'), unit: parsed.unit });
   }
+  // Export structural facts only, so a failed probe is actionable without
+  // disclosing contacts, messages, arbitrary attributes or authentication data.
+  diagnostic.badges = badges.slice(0, 24).map(badge => {
+    const ancestors = [];
+    for (let n = badge.parentElement, depth = 0; n && n !== document.body && depth < 5; n = n.parentElement, depth++) {
+      ancestors.push({ tag: n.tagName.toLowerCase(), avatar: !!n.querySelector(avatarSelector), siblings: Math.min(n.parentElement?.children.length || 0, 1000), knownRow: n.matches(rowSelector) });
+    }
+    return { numeric: valueOf(badge).value, excluded: !!badge.closest(excluded), matchedRow: !!(badge.closest(rowSelector) || structuralRow(badge)), ancestors };
+  });
   const list = conversationRows[0]?.closest('[role="list"]');
   const size = Number(list?.getAttribute('aria-setsize') || conversationRows[0]?.getAttribute('aria-setsize'));
   const complete = list?.getAttribute('aria-busy') === 'false' && Number.isSafeInteger(size) && size > 0 && size === conversationRows.length && conversationRows.every((r,i) => Number(r.getAttribute('aria-posinset')) === i+1);
