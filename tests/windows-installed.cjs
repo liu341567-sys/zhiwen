@@ -91,6 +91,12 @@ async function launch(executable, dataDirectory) {
     await instance.shell.waitForFunction(() => Boolean(window.browserAPI?.getState));
     await instance.shell.waitForFunction(() => !document.body.classList.contains('navigation-loading') &&
       document.querySelector('button[data-module="environment"]'));
+    await instance.shell.waitForFunction(async () => {
+      try { const state = await window.messagesAPI.command('state'); return !!state.config && Array.isArray(state.rows) && state.summary.newMessages === null; }
+      catch { return false; }
+    }, null, { timeout: 20000 });
+    const messages = await instance.shell.evaluate(() => window.messagesAPI.command('state'));
+    assert.equal(messages.running, false, 'Installed message monitoring must stay paused without explicit auto-resume');
     return instance;
   } catch (error) {
     await cleanupFailedInstance(instance);
