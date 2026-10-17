@@ -45,6 +45,7 @@ class MessageService {
     if (this.closed) throw new Error('私信监测已关闭');
     if (Object.hasOwn(input || {}, 'enabled')) throw new Error('请使用开始或暂停按钮');
     this.config = this.store.settings(input); this.queue.concurrency = this.config.concurrency;
+    for (const [id, controller] of this.controllers) { const profile = this.profiles().find(p => p.id === id); if (!profile || !this.selected(profile)) controller.abort(); }
     if (this.running && !this.scanJob) this.schedule(); this.changed(); return this.state();
   }
   schedule() {
@@ -111,7 +112,9 @@ class MessageService {
     this.changed(); await this.scanJob; return this.state();
   }
   saveSample(profile, result, previous, cycle, changes) {
-    const now = this.now(), status = descriptions[result.status] ? result.status : 'unrecognized';
+    const now = this.now();
+    const validCount = Number.isSafeInteger(result.unread) && result.unread >= 0 && result.unread <= 1000000;
+    const status = descriptions[result.status] && (result.status !== 'success' || validCount) ? result.status : 'unrecognized';
     const exact = status === 'success' && result.exact !== false && Number.isSafeInteger(result.unread) && result.unread >= 0 && result.unread <= 1000000;
     const unit = ['messages', 'conversations', 'unknown'].includes(result.unit) ? result.unit : 'unknown';
     const baseline = this.store.get('baselines', profile.id);

@@ -25,7 +25,8 @@ jobs:
       - name: Install Electron executable
         run: npm run setup:electron
       - name: Test environment store
-        run: npm test
+        shell: pwsh
+        run: ./.github/scripts/test-units.ps1
       - name: Check JavaScript syntax
         run: npm run check
       - name: Test developer tools, recording, privacy and local exports

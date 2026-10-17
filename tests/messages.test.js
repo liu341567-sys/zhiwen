@@ -89,8 +89,8 @@ test('strict official list URL excludes credentials, peer query strings and look
   for (const u of [douyin.launchUrl + '?peer=123', douyin.launchUrl.replace('creator.douyin.com', 'creator.douyin.com.example.com'), 'http://creator.douyin.com/creator-micro/data/following/chat', 'https://user:password@creator.douyin.com/creator-micro/data/following/chat']) assert.equal(douyin.allowed(u), false);
 });
 test('restart retains reliable baseline and does not repeat last alert; auto resume opt-in', async t => {
-  const dir = temp(); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); const f = await fixture(t, { directory: dir }); await f.service.scan(); f.counts.a = sample(10); await f.service.scan(); await f.service.shutdown();
-  const g = await fixture(t, { directory: dir }); g.counts.a = sample(10); g.service.initialize(); assert.equal(g.service.running, false); await g.service.scan(); assert.equal(g.notifications.length, 0);
+  const dir = temp(); const f = await fixture(t, { directory: dir }); await f.service.scan(); f.counts.a = sample(10); await f.service.scan(); await f.service.shutdown();
+  const g = await fixture(t, { directory: dir }); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); g.counts.a = sample(10); g.service.initialize(); assert.equal(g.service.running, false); await g.service.scan(); assert.equal(g.notifications.length, 0);
 });
 test('diagnostics exclude supplied DOM text, credentials and arbitrary attributes', async t => {
   const f = await fixture(t); f.counts.a = { status: 'unrecognized', diagnostic: { text: 'secret body', cookie: 'secret token', nodes: [{ tag: 'button', role: 'button', kind: 'private-message-navigation', password: 'secret' }] } }; await f.service.scan(); assert(!JSON.stringify(f.service.diagnostics('a')).includes('secret'));
@@ -99,4 +99,16 @@ test('a shared read lease blocks publishing but never counts as a UI-hiding publ
   const scheduler = new Scheduler({ store: { tasks: () => [], setting: () => null }, execute: async () => {} });
   const release = scheduler.reserveReadOnly('a'); assert.equal(scheduler.leased('a'), false); assert.throws(() => scheduler.reserveAccount('a'));
   assert.equal(scheduler.waitInfo({ id: 't', accountId: 'a', plannedAt: 0 }).code, 'account-monitoring'); release(); assert.equal(scheduler.waitInfo({ id: 't', accountId: 'a', plannedAt: 0 }).code, 'ready');
+});
+test('SQLite backup is a complete consistent baseline snapshot', () => {
+  const dir = temp(), store = new MessageStore(dir), dest = path.join(dir, 'backup.sqlite'); store.put('baselines', 'a', { unread: 7 }); store.backup(dest);
+  const { DatabaseSync } = require('node:sqlite'), db = new DatabaseSync(dest); assert.equal(JSON.parse(db.prepare('SELECT data FROM baselines WHERE id=?').get('a').data).unread, 7); db.close(); assert.throws(() => store.backup(dest)); store.close(); fs.rmSync(dir, { recursive: true, force: true });
+});
+test('successful status with an invalid numeric value is rejected as unrecognized', async t => {
+  const f = await fixture(t); f.counts.a = sample(-2); await f.service.scan(); const row = f.service.state().rows[0]; assert.equal(row.result.status, 'unrecognized'); assert.equal(row.result.unread, null); assert.equal(row.baseline, null);
+});
+test('deselecting an active account aborts only its check and releases its resources', async t => {
+  let begun = false;
+  const f = await fixture(t, { adapters: [{ ...douyin, read: async (id, signal) => { if (id === 'b') return sample(3); begun = true; await new Promise(r => signal.addEventListener('abort',r,{once:true})); return sample(1); } }] });
+  const job = f.service.scan(); await tick(); assert(begun); f.service.update({ selectedIds: ['b'] }); await job; assert.equal(f.service.store.get('baselines','a'),null); assert.equal(f.service.active.size,0); assert.equal(f.service.state().summary.unread.messages,3);
 });

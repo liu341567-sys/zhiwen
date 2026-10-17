@@ -34,6 +34,7 @@ function observe() {
     const entry = /^(?:我的)?私信(?:消息)?(?:\s*[（(]?\d+\+?[）)]?)?$/.test(label);
     const unreadTab = node.getAttribute('role') === 'tab' && /^未读(?:私信)?\s*[（(]?\d+\+?[）)]?$/.test(label);
     if (!explicit && !entry && !unreadTab) continue;
+    if (!unreadTab && !node.closest('nav,header,aside,[role=navigation],[role=tablist]') && !/^H[123]$/.test(node.tagName)) continue;
     diagnostic.candidates++;
     if (diagnostic.nodes.length < 12) diagnostic.nodes.push({ tag: node.tagName.toLowerCase(), role: node.getAttribute('role') || null, kind: explicit ? 'explicit-unread-total' : unreadTab ? 'unread-tab' : 'private-message-navigation' });
     let values = [], unit = 'unknown';
@@ -63,7 +64,6 @@ async function read(wc, signal, timeoutMs = 8000) {
           if (signal.aborted || wc.isDestroyed()) return { status: 'loading' };
           last = await wc.executeJavaScriptInIsolatedWorld(3102, [{ code: `(${observe.toString()})()` }]);
           if (!['loading', 'unrecognized'].includes(last?.status)) return last;
-          if (last?.diagnostic?.candidates > 0) return last;
           await new Promise(resolve => setTimeout(resolve, 250));
         } while (Date.now() < end);
         return last;
