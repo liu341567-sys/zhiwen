@@ -72,6 +72,7 @@ async function run(scale) {
     check('repeated avatar rows survive renamed containers and non-div row tags', () => { assert.equal(renamed.rows.find(r=>r.id===a.id).result.unread,5); });
     await set(a.id, 'unrelatedCards'); const unrelated = await command('scan');
     check('numeric cards without conversation evidence are never reported as private messages', () => { assert.equal(unrelated.rows.find(r=>r.id===a.id).result.status,'unrecognized'); });
+    await shell.waitForFunction(() => !document.getElementById('messages-start').hidden && !document.getElementById('messages-scan').disabled);
     const simple = await shell.evaluate(() => ({advanced:document.querySelector('.messages-advanced').open,visibleActions:[...document.querySelectorAll('.messages-buttons > button')].filter(n=>!n.hidden).map(n=>n.id),stats:document.getElementById('messages-stats').children.length}));
     check('first-time UI exposes only a monitor switch and refresh, with advanced settings collapsed', () => { assert.equal(simple.advanced,false); assert.equal(simple.stats,3); assert.deepEqual(simple.visibleActions,['messages-start','messages-scan']); });
     await shell.locator('#sidebar-toggle').click(); await shell.locator('[data-module="publish"]').click(); await shell.locator('[data-module="data"]').click();
