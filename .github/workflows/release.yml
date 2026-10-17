@@ -1,6 +1,12 @@
 name: Publish Windows preview release
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag to build and publish'
+        required: true
+        type: string
   push:
     tags: ['v*']
 
@@ -8,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -18,16 +24,20 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - name: Verify tag matches package version
         id: version
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           $manifest = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
           if ($manifest.version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
             throw 'Invalid package version.'
           }
           $expectedTag = 'v' + $manifest.version
-          if ($env:GITHUB_REF_TYPE -cne 'tag' -or $env:GITHUB_REF_NAME -cne $expectedTag) {
+          if (($env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -and $env:GITHUB_REF_TYPE -cne 'tag') -or $env:RELEASE_TAG -cne $expectedTag) {
             throw "Tag must be $expectedTag to match package.json."
           }
           "version=$($manifest.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -125,6 +135,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           name: Windows-release-assets
@@ -134,7 +146,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           $manifest = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
           if ($env:RELEASE_TAG -cne ('v' + $manifest.version)) {
