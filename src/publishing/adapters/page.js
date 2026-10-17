@@ -135,7 +135,7 @@ class Page {
       manual: true,
     });
   }
-  async click(target) {
+  async click(target, { hover = true } = {}) {
     this.currentTarget = { selector: target.selector, text: target.text || null };
     const locate = ({ selector, text }) => {
       const visible = (e) => {
@@ -182,14 +182,24 @@ class Page {
         this.check();
         this.log('后台画面准备未完成，继续依据实时控件状态操作');
       }
-      this.log('控件点击：发送真实悬停并重新检查目标');
-      await this.command('Input.dispatchMouseEvent', {
-        type: 'mouseMoved',
-        ...point,
-        button: 'none',
-      });
+      if (hover) {
+        this.log('控件点击：发送真实悬停');
+        await this.command('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          ...point,
+          button: 'none',
+        });
+      } else {
+        // Text fields which open on click need no preparatory hover. In a
+        // hidden native view Chromium can leave the mouseMoved acknowledgement
+        // pending. Do not send it, time it out and then replay an uncertain
+        // operation; use the normal awaited press/release after a fresh hit test.
+        this.log('控件点击：直接点击输入区域，未发送预先悬停');
+      }
       // Hover may reveal a menu or move a control. Hit-test it again rather
-      // than clicking a stale location or a different element.
+      // than clicking a stale location or a different element. Also recheck
+      // after the surface hint when this particular control needs no hover.
+      this.log('控件点击：重新检查唯一目标与实时遮挡');
       point = await this.evaluate(locate, target);
     }
     if (!point)

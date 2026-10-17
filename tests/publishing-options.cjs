@@ -12,13 +12,15 @@ function fixture(account, settings = {}) {
   return `<!doctype html><meta charset="utf-8"><style>
     body{font:14px sans-serif;margin:24px;min-height:700px}button,label{padding:8px;cursor:pointer}input,textarea{padding:8px}
     #poi{width:min(360px,calc(100vw - 64px));min-height:36px;background:#eef4ff;padding:8px}.semi-select-dropdown{background:white;border:1px solid #888;width:min(360px,calc(100vw - 64px))}
+    .semi-select-selection-wrapper{display:flex;align-items:center;gap:8px}.semi-select-selection-text{display:inline-block;flex:1;min-width:0;padding:8px;cursor:pointer}.semi-select-clear{flex:none;padding:4px}.poi-controls{display:flex;align-items:center;gap:8px}.poi-mode{padding:8px;background:#f5f5f5}.fixture-overlay{position:fixed;inset:0;background:rgba(0,0,0,.02);z-index:9999}
     [role=option]{padding:8px;cursor:pointer}.address-demo{font-size:12px;color:#555}
     .semi-datepicker-month-grid{box-sizing:border-box;position:fixed;top:30px;left:18px;width:min(360px,calc(100vw - 36px));background:white;border:1px solid #888;padding:12px;z-index:10}
     #days{display:grid;grid-template-columns:repeat(7,1fr)}.semi-datepicker-day{padding:5px;cursor:pointer;text-align:center}.semi-datepicker-day-disabled{color:#bbb}
     .semi-datepicker-navigation{display:flex;justify-content:space-between}#wheels{display:flex;gap:30px}.semi-scrolllist-list-outer{height:70px;overflow-y:scroll;width:100px}
     ul{margin:0;padding:0;list-style:none}li{height:25px;line-height:25px;cursor:pointer}.semi-scrolllist-item-selected{background:#eef4ff}
   </style><h1>视频发布</h1><input id="upload" type="file" accept="video/mp4"><div id="status"></div><textarea aria-label="作品描述" style="display:none"></textarea>
-  <div id="poi" class="semi-select semi-select-single semi-select-filterable semi-select-no-arrow"><span class="semi-select-selection-text">输入地理位置</span></div>
+  <div class="poi-controls"><div id="poi" class="semi-select semi-select-single semi-select-filterable semi-select-no-arrow"><div class="semi-select-selection-wrapper"><span class="semi-select-selection-text">输入地理位置</span><span class="semi-select-clear" role="button" aria-label="清除位置">×</span></div></div><div id="poi-mode" class="poi-mode semi-select semi-select-no-arrow" role="combobox">不展示具体位置</div></div>
+  <div id="unrelated-dropdown" class="semi-select semi-select-single semi-select-no-arrow" role="combobox"><span class="semi-select-selection-text">公开可见</span></div>
   <div id="candidates" class="semi-select-dropdown"></div>
   <label><input type="checkbox" checked>立即发布</label><label id="schedule"><input type="checkbox">定时发布</label>
   <p>支持2小时后及14天内的定时发布。发布后如需修改时间，可前往作品管理修改</p><input id="datetime" placeholder="日期和时间" style="display:none"><button id="submit" disabled>发布</button>
@@ -26,14 +28,19 @@ function fixture(account, settings = {}) {
     const config=${JSON.stringify(settings)},account=${JSON.stringify(account)};
     window.submissions=0;window.uploads=0;window.optionClicks=[];document.addEventListener('click',e=>{if(e.target.closest('[data-qiye-option]'))window.optionClicks.push({marker:e.target.closest('[data-qiye-option]').dataset.qiyeOption,trusted:e.isTrusted});});
     const poi=document.querySelector('#poi'),candidates=document.querySelector('#candidates');
-    window.refreshCount=0;window.poiChosen=null;
+    window.refreshCount=0;window.poiChosen=null;window.poiOpenerClicks=[];window.clearClicks=0;window.modeClicks=0;window.unrelatedClicks=0;
+    poi.querySelector('.semi-select-clear').onclick=e=>{e.stopPropagation();window.clearClicks++;};document.querySelector('#poi-mode').onclick=()=>window.modeClicks++;document.querySelector('#unrelated-dropdown').onclick=()=>window.unrelatedClicks++;
     function candidateRows(query){
       candidates.replaceChildren();if(config.empty){const empty=document.createElement('div');empty.textContent='暂无结果';candidates.append(empty);return;}
       const rows=config.queryRows ? (config.queryRows[query] || []) : [{name:'示例广场',address:account+'市东路1号'},{name:'示例广场',address:account+'市西路2号'}];if(!rows.length){const empty=document.createElement('div');empty.textContent='暂无结果';candidates.append(empty);}
       if(++window.refreshCount%2===0)rows.reverse();
       for(const row of rows){const e=document.createElement('div');e.setAttribute('role','option');e.innerHTML='<div class="name-demo"></div><div class="address-demo"></div>';e.firstChild.textContent=row.name;e.lastChild.textContent=row.address;e.onclick=()=>{window.poiChosen=row;poi.querySelector('span').textContent=row.name;poi.querySelector('input')?.remove();candidates.replaceChildren();};candidates.append(e);}
     }
-    poi.onclick=()=>{if(poi.querySelector('input'))return;const input=document.createElement('input');poi.append(input);candidateRows('old');input.oninput=()=>{const value=input.value;setTimeout(()=>{if(poi.contains(input)&&input.value===value)candidateRows(value);},config.delay||150);};};
+    function openPOI(){const input=document.createElement('input');poi.append(input);candidateRows('old');input.oninput=()=>{const value=input.value;setTimeout(()=>{if(poi.contains(input)&&input.value===value)candidateRows(value);},config.delay||150);};}
+    poi.onclick=e=>{window.poiOpenerClicks.push({trusted:e.isTrusted,target:e.target.className});if(poi.querySelector('input')){if(config.toggleOnExisting&&!e.target.matches('input')){poi.querySelector('input').remove();candidates.replaceChildren();}return;}openPOI();};
+    if(config.alreadyOpen)openPOI();
+    if(config.duplicatePOI){const clone=poi.cloneNode(true);clone.id='duplicate-poi';document.querySelector('.poi-controls').after(clone);}
+    if(config.overlay){const overlay=document.createElement('div');overlay.className='fixture-overlay';document.body.append(overlay);}
     let now=new Date(Date.now()+8*3600000), date=now.toISOString().slice(0,10), time='12:20', month=now.toISOString().slice(0,7);
     if(config.previousMonth){let d=new Date(month+'-01T00:00:00Z');d.setUTCMonth(d.getUTCMonth()-1);month=d.toISOString().slice(0,7);}
     const field=document.querySelector('#datetime');field.readOnly=!config.directInput;field.onblur=()=>{const m=field.value.match(/^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2})$/);if(config.directInput&&m&&!config.rejectInput){date=m[1];time=m[2];}update();};document.querySelector('#schedule').onclick=()=>{field.style.display=document.querySelector('#schedule input').checked?'inline-block':'none';};
@@ -71,6 +78,30 @@ async function run(scale) {
     const clicks=await evaluate(b,'window.optionClicks');assert.ok(clicks.length>=7);assert.ok(clicks.every(c=>c.trusted));
     assert.equal(await evaluate(b,'window.submissions'),0);
     check(`options-${scale}: native month/day/hour/minute controls wait for delayed minute model update and read exact official time; POI survives candidate reordering`);
+    await load(b);
+    result=await runOptions(b,{location:{mode:'specified',label:'示例广场',address:'B市东路1号',query:'广场'},pendingPOIOpenerHover:true});
+    assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.openerMouseMoves,0);assert.equal(result.location.address,'B市东路1号');
+    assert.deepEqual(await evaluate(b,'window.poiOpenerClicks'),[{trusted:true,target:'semi-select-selection-text'}]);
+    assert.deepEqual(await evaluate(b,'[window.clearClicks,window.modeClicks,window.unrelatedClicks]'),[0,0,0]);
+    assert.ok((await evaluate(b,'window.optionClicks')).some(c=>c.marker==='poi-open'&&c.trusted));
+    assert.equal(await evaluate(b,'window.submissions'),0);
+    check(`options-${scale}: recorded selection-text opener uses trusted direct click without a mouseMoved acknowledgement and avoids clear, mode and unrelated dropdown controls`);
+    await load(b,{alreadyOpen:true,toggleOnExisting:true});
+    result=await runOptions(b,{location:{mode:'specified',label:'示例广场',address:'B市西路2号',query:'广场'},pendingPOIOpenerHover:true});
+    assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.openerMouseMoves,0);assert.equal(result.location.address,'B市西路2号');
+    assert.deepEqual(await evaluate(b,'window.poiOpenerClicks'),[]);
+    check(`options-${scale}: an already editable official search input is reused without toggling its dropdown closed`);
+    await load(b,{duplicatePOI:true});
+    result=await runOptions(b,{location:{mode:'specified',label:'示例广场',address:'B市东路1号',query:'广场'},pendingPOIOpenerHover:true});
+    assert.equal(result.ok,false);assert.equal(result.manual,true);assert.match(result.reason,/唯一位置控件/);assert.equal(result.openerMouseMoves,0);
+    assert.deepEqual(await evaluate(b,'window.poiOpenerClicks'),[]);assert.equal(await evaluate(b,'window.poiChosen'),null);
+    check(`options-${scale}: ambiguous visible location controls stop before sending pointer input or choosing any address`);
+    await load(b,{overlay:true});
+    result=await runOptions(b,{location:{mode:'specified',label:'示例广场',address:'B市东路1号',query:'广场'},pendingPOIOpenerHover:true});
+    assert.equal(result.ok,false);assert.equal(result.manual,true);assert.match(result.reason,/不可操作/);assert.equal(result.openerMouseMoves,0);
+    assert.deepEqual(await evaluate(b,'window.poiOpenerClicks'),[]);assert.equal(await evaluate(b,'window.poiChosen'),null);
+    assert.equal(await evaluate(b,'window.submissions'),0);
+    check(`options-${scale}: a real overlay still blocks direct POI clicking without selecting or submitting`);
     await load(a);await load(b);
     for(const account of[a,b]){
       const chosen=await runOptions(account,{location:{mode:'specified',label:'示例广场',address:account.name+'市西路2号',query:'广场'}});

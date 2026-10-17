@@ -70,3 +70,25 @@ test('pausing while a hidden frame is pending stops before sending any input', a
   await assert.rejects(pending, /任务已暂停/);
   assert.equal(f.events.length, 0);
 });
+test('a click-only input opener skips hover but rechecks coordinates after the surface hint', async () => {
+  const f = fixture(() => Promise.resolve({}));
+  const originalCommand = f.page.wc.debugger.sendCommand;
+  f.page.wc.debugger.sendCommand = (method, args) => {
+    assert.notEqual(args.type, 'mouseMoved', 'must not dispatch a potentially pending hover');
+    return originalCommand(method, args);
+  };
+  await f.page.click({ selector: '[data-qiye-option="poi-open"]' }, { hover: false });
+  assert.deepEqual(f.events.map(e => e.type), ['mousePressed', 'mouseReleased']);
+  assert.ok(f.events.every(e => e.x === 120 && e.y === 90));
+});
+test('click-only openers still refuse newly obscured targets and respect pause before pressing', async () => {
+  const covered = fixture(() => Promise.resolve({}));
+  covered.setPoints([{ x: 100, y: 84 }, null]);
+  await assert.rejects(covered.page.click({ selector: 'span' }, { hover: false }), /无法唯一识别/);
+  assert.equal(covered.events.length, 0);
+  const paused = fixture(() => new Promise(() => {}));
+  const pending = paused.page.click({ selector: 'span' }, { hover: false });
+  setImmediate(() => paused.controller.abort());
+  await assert.rejects(pending, /任务已暂停/);
+  assert.equal(paused.events.length, 0);
+});

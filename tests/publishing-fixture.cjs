@@ -107,16 +107,35 @@ globalThis.__publishingOptionsFixture = async (accountId, input = {}) => {
   const controller = new AbortController(), page = new Page(view.webContents, controller.signal);
   const logs = [], checkpoint = {}, context = { log: (m) => logs.push(m), checkpoint: (v) => Object.assign(checkpoint, v) };
   const timer = input.abortAfter ? setTimeout(() => controller.abort(), input.abortAfter) : null;
+  const originalSend = view.webContents.debugger.sendCommand;
+  let openerMouseMoves = 0;
+  // Inject an unacknowledged hover consistent with the recorded failure window:
+  // Chromium receives mouseMoved over the POI opener, but never acknowledges it.
+  // The report does not distinguish that from a later page-state timeout.
+  // Scope this seam to
+  // this original account and this fixture invocation; candidate hover remains
+  // real and acknowledged. Production code never imports this test module.
+  if (input.pendingPOIOpenerHover) view.webContents.debugger.sendCommand = async function (method, args) {
+    if (method === 'Input.dispatchMouseEvent' && args.type === 'mouseMoved') {
+      const opener = await view.webContents.executeJavaScript(`(()=>{const e=document.elementFromPoint(${Number(args.x)},${Number(args.y)});return !!e?.closest('#poi')&&!e?.closest('[role="option"]');})()`);
+      if (opener) {
+        openerMouseMoves++;
+        originalSend.call(this, method, args).catch(() => {});
+        return new Promise(() => {});
+      }
+    }
+    return originalSend.call(this, method, args);
+  };
   try {
     await page.connect();
     const location = input.location ? await options.setLocation(page, input.location, context) : null;
     const native = input.nativeSchedule ? await options.schedule(page, input.nativeSchedule, context) : null;
     if (input.intervene) await view.webContents.executeJavaScript(`document.querySelector('[data-qiye-poi-root]').dispatchEvent(new MouseEvent('click',{bubbles:true}));void 0;`);
     await options.verify(page, native, location);
-    return { ok: true, location, native, logs, checkpoint, state: await options.read(page) };
+    return { ok: true, location, native, logs, checkpoint, openerMouseMoves, state: await options.read(page) };
   } catch (error) {
     const layout = await view.webContents.executeJavaScriptInIsolatedWorld(2002, [{ code: `({width:innerWidth,height:innerHeight,targets:[...document.querySelectorAll('[data-qiye-option]')].map(e=>{const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {marker:e.dataset.qiyeOption,rect:{x:r.x,y:r.y,width:r.width,height:r.height},hit:hit?{tag:hit.tagName,id:hit.id,class:hit.className}:null}})})` }]).catch(() => null);
-    return { ok: false, reason: error.message, manual: !!error.manual, logs, checkpoint, layout };
+    return { ok: false, reason: error.message, manual: !!error.manual, logs, checkpoint, openerMouseMoves, layout };
   }
-  finally { clearTimeout(timer); await options.cleanup(page); page.detach(); }
+  finally { clearTimeout(timer); view.webContents.debugger.sendCommand = originalSend; await options.cleanup(page); page.detach(); }
 };

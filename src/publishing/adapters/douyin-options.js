@@ -56,13 +56,18 @@ function probe(input = {}) {
       .map((e) => ({ e, distance: Math.abs(e.getBoundingClientRect().y + e.getBoundingClientRect().height / 2 - (r?.y + r?.height / 2)) })).sort((a, b) => a.distance - b.distance);
     mark(rows.length && Number.isFinite(rows[0].distance) && (!rows[1] || rows[1].distance - rows[0].distance > 1) ? rows[0].e : null, 'wheel');
   }
-  let root = document.querySelector('[data-qiye-poi-root]');
-  if (!root || !visible(root)) {
-    const roots = [...document.querySelectorAll('.semi-select-filterable.semi-select-no-arrow')].filter((e) => visible(e) && e.querySelector('.semi-select-selection-text'));
-    root = roots.length === 1 ? roots[0] : null;
-    if (root) root.setAttribute('data-qiye-poi-root', 'true');
-  }
-  const search = root?.querySelector('input:not([type=hidden])');
+  const roots = [...document.querySelectorAll('.semi-select-filterable.semi-select-no-arrow')].filter((e) => visible(e) && e.querySelector('.semi-select-selection-text'));
+  const root = roots.length === 1 ? roots[0] : null;
+  document.querySelectorAll('[data-qiye-poi-root]').forEach((e) => { if (e !== root) e.removeAttribute('data-qiye-poi-root'); });
+  if (root) root.setAttribute('data-qiye-poi-root', 'true');
+  // The recording opens the selection text, not its clear icon or adjacent
+  // location-type menu. Keep that exact target separate from the search input.
+  const openers = [...(root?.querySelectorAll('.semi-select-selection-text') || [])].filter(visible);
+  mark(openers.length === 1 ? openers[0] : null, 'poi-open');
+  document.querySelectorAll('[data-qiye-poi-input]').forEach((e) => e.removeAttribute('data-qiye-poi-input'));
+  const inputs = [...(root?.querySelectorAll('input:not([type=hidden])') || [])]
+    .filter((e) => visible(e) && !e.disabled && !e.readOnly);
+  const search = inputs.length === 1 ? inputs[0] : null;
   if (search) search.setAttribute('data-qiye-poi-input', 'true');
   const candidates = [...document.querySelectorAll('[role=option]')].filter(visible).map((e) => ({
     e, name: normal(e.querySelector('[class^="name-"],[class*=" name-"]')?.textContent),
@@ -181,7 +186,8 @@ async function search(page, query, context = {}) {
   let s = await read(page);
   if (s.unavailable || !s.poiRoot) fail('上传后的发布页未识别到唯一位置控件，请人工接管检查原网页');
   stage('打开官方搜索框');
-  await page.click({ selector: '[data-qiye-poi-root]' });
+  if (!s.poiInput) await page.click({ selector: '[data-qiye-option="poi-open"]' }, { hover: false });
+  else context.log?.('官方位置搜索框已可编辑，保留当前展开状态');
   await until(page, (s) => s.poiInput);
   s = await read(page);
   if (s.query === query && s.candidates.length && !s.loading) {
