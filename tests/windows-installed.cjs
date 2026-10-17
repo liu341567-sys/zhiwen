@@ -441,7 +441,7 @@ async function main() {
     assert.ok(toastPage, 'The installed package must include the local notification surface');
     await toastPage.waitForFunction(() => document.getElementById('toast-message').textContent === '独立环境创建成功');
     assert.deepEqual(await toastPage.evaluate(() => ({ node: typeof require, manager: typeof browserAPI,
-      methods: Object.keys(toastAPI).sort() })), { node: 'undefined', manager: 'undefined', methods: ['onMessage', 'resized'] });
+      methods: Object.keys(toastAPI).sort() })), { node: 'undefined', manager: 'undefined', methods: ['activate', 'onMessage', 'resized'] });
     assert.equal(await shell.evaluate(() => {
       const list = document.getElementById('profile-list'), old = window.__installedToastLayout;
       return list.clientHeight === old.height && list.getBoundingClientRect().top === old.top &&
