@@ -37,7 +37,10 @@ function probe(input, base) {
   const raw = base.editorText || '';
   const pending = /(?:^|\s)(#[^\s#]+)$/.exec(raw)?.[1] || '';
   const linked = new Set(String(editor?.getAttribute('aria-controls') || editor?.getAttribute('aria-owns') || '').split(/\s+/).filter(Boolean));
-  const roots = [...document.querySelectorAll('[role="listbox"], [class*="suggest" i], [class*="mention" i], [class*="topic-list" i], [class*="topicList"], [class*="hashtag" i]')]
+  // The recorded official popup has no ARIA roles. Use its stable component
+  // prefixes, plus explicit listboxes; static recommended hashtags elsewhere
+  // on the page must never become selectable "official search results".
+  const roots = [...document.querySelectorAll('.mention-suggest-mount-dom,[class^="mention-suggest-"],[class*=" mention-suggest-"],[role="listbox"]')]
     .filter(e => visible(e) && !e.contains(editor) && !editor?.contains(e))
     .filter(e => linked.has(e.id) || (pending && (/#|话题/.test(text(e)) || text(e).includes(pending.slice(1)))));
   const nodes = [];

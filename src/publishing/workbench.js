@@ -144,7 +144,7 @@ class Workbench {
     if (session.abort.signal.aborted) return;
     const revision = this.revisions.get(entry.id) || 1;
     session.desired = { ...structuredClone(entry), revision };
-    if (session.job || session.pending || (session.lastKey === liveKey(entry) && session.state.phase === 'ready')) return;
+    if (session.job || session.pending || (session.lastKey === liveKey(entry) && ['ready', 'syncing'].includes(session.state.phase))) return;
     session.pending = true;
     session.pendingVideo = video;
     session.state = { ...session.state, phase: 'queued', revision, verifiedRevision: null, error: '' };

@@ -284,7 +284,7 @@ async function run(scale) {
     await command('workbench-new', { confirmed: true });
     state = await command('state');
     const nextEntries = accounts.slice(2).map((account, index) => ({
-      id: `exception-${index + 1}`, accountId: account.id, videoId: state.videos.find((video) => video.path === sources[index]).id,
+      id: `exception-${index + 1}`, accountId: account.id, videoId: finalTasks.find(task => task.accountId === accounts[index].id).videoId,
       title: `异常隔离标题 ${index + 1}`, topics: '#正常话题 ', locked: false,
     }));
     await shell.evaluate((id) => browserAPI.openProfile(id), accounts[2].id);
