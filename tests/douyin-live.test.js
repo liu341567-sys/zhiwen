@@ -52,7 +52,7 @@ test('live submit refuses altered caption, account owner, video proof and pendin
     ['owner', f => { f.state.owned = false; }],
     ['video', f => { f.snapshot.video.sha256 = 'different'; }],
     ['token', f => { f.snapshot.liveOwner = 'other-owner'; }],
-    ['pending candidate', f => { f.state.pendingTopics = true; }],
+    ['pending candidate', f => { f.state.pendingTopics = true; f.state.topicPopupOpen = true; }],
     ['newer unsynchronized revision', f => { f.editor.latestRevision++; }],
   ]) await t.test(label, async () => {
     const fixture = editorFixture();
@@ -116,4 +116,32 @@ test('outdated official topic token cannot click a different candidate', async (
 test('live readback normalizes official hashtag inline spacing without confusing different topic names', () => {
   assert.equal(normalize('标题\u200b#话题一#话题二 '), normalize('标题 #话题一 #话题二'));
   assert.notEqual(normalize('#话题一'), normalize('#话题二'));
+});
+
+test('a pending final hashtag blocks submission before the delayed popup appears, while committed official chip text can omit its ending space', async () => {
+  const pending = editorFixture();
+  pending.editor.desired.topics = pending.snapshot.topics = '#示例话题';
+  assert.equal((await pending.editor.inspect()).canSubmit, false);
+  assert.equal((await pending.editor.submit(pending.snapshot)).status, 'manual');
+  const committed = editorFixture();
+  committed.state.editorText = '#示例话题';
+  committed.state.pendingTopics = true;
+  assert.equal((await committed.editor.inspect()).canSubmit, true);
+  assert.equal((await committed.editor.submit(committed.snapshot)).status, 'submitted');
+});
+
+test('official candidate selection accepts a committed chip without DOM whitespace and preserves the local terminator', async () => {
+  const { editor, state } = editorFixture();
+  editor.desired.topics = '#示例';
+  state.editorText = '#示例';
+  state.candidates = [{ id: 'topic-current', label: '#示例话题' }];
+  editor.page.wait = async (_probe, _input, _timeout, options) => {
+    Object.assign(state, { editorText: '#示例话题', pendingTopics: true, topicPopupOpen: false });
+    assert.equal(options.accept(state), true);
+    return state;
+  };
+  const result = await editor.pick({ id: 'topic-current', revision: 1, candidateRevision: 1 });
+  assert.equal(result.topics, '#示例话题 ');
+  assert.equal(result.pendingTopics, false);
+  assert.equal(result.canSubmit, true);
 });

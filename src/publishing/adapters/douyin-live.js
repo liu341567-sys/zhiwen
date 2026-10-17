@@ -134,19 +134,21 @@ class DouyinLiveEditor {
   }
   _public(state) {
     const matched = this._matches(state), split = !!state.titleSelector;
+    const pendingTopics = /(?:^|\s)#[^\s#]+$/.test(this.desired.topics);
     const caption = state.editorText || '';
     let title = split ? state.titleText || '' : '', topics = caption;
     if (!split && caption.startsWith(this.desired.title)) {
       title = this.desired.title;
       topics = caption.slice(title.length).trimStart();
     }
+    if (matched && /\s$/.test(this.desired.topics) && normalize(topics) === normalize(this.desired.topics)) topics = this.desired.topics;
     const verified = !!(state.owned && state.ready && editorUrl(state.url) && matched && this.appliedRevision === this.latestRevision && !state.challenge && !state.login && !state.error);
     return {
       ready: !!(state.ready && state.owned), uploading: !!(this.uploadStarted && !state.ready),
-      owned: !!state.owned, verified, canSubmit: verified && !!state.publishReady && !state.pendingTopics && !state.topicPopupOpen,
+      owned: !!state.owned, verified, canSubmit: verified && !!state.publishReady && !pendingTopics && !state.topicPopupOpen,
       revision: this.latestRevision, appliedRevision: this.appliedRevision,
       title, topics, caption, candidates: state.candidates || [], candidateRevision: state.candidateRevision || 0,
-      pendingTopics: !!state.pendingTopics, login: !!state.login, challenge: !!state.challenge,
+      pendingTopics, login: !!state.login, challenge: !!state.challenge,
       error: state.error || '', url: state.url || this.page?.wc.getURL() || '',
       submitted: !!state.submitted, submitIntent: this.submissionIntent,
     };
@@ -278,13 +280,18 @@ class DouyinLiveEditor {
       await this.page.click({ selector: target.target }, { hover: false });
       const before = normalize(state.editorText);
       state = await this.page.wait(readProbe, { owner: this.token }, 5000, {
-        accept: s => s.owned && !s.challenge && !s.login && (!s.pendingTopics || normalize(s.editorText) !== before),
+        accept: s => s.owned && !s.challenge && !s.login && (!s.pendingTopics || !s.topicPopupOpen || normalize(s.editorText) !== before),
       });
       if (!state.owned || state.challenge || state.login) throw manual('选择话题后页面需要人工检查');
       const split = !!state.titleSelector;
       const actualTopics = split ? state.editorText : state.editorText.startsWith(this.desired.title) ? state.editorText.slice(this.desired.title.length).trimStart() : null;
       if (actualTopics === null) throw manual('选择话题后官方文案结构发生变化，请人工检查');
-      this.desired = { title: split ? state.titleText : this.desired.title, topics: actualTopics };
+      if (!(normalize(actualTopics).match(/#[^\s#]+/g) || []).includes(normalize(choice.label)))
+        throw manual('官网没有保留所选话题，请检查当前候选和文案，未确认该话题');
+      // Selecting an official candidate commits that hashtag. Preserve an
+      // explicit local token terminator even when its noneditable chip omits
+      // trailing whitespace from textContent. No additional native write.
+      this.desired = { title: split ? state.titleText : this.desired.title, topics: actualTopics.trimEnd() ? actualTopics.trimEnd() + ' ' : '' };
       this.log('实时编辑：已在原账号官网选择该话题，并回读实际文案');
       return this._public(state);
     });
@@ -299,7 +306,7 @@ class DouyinLiveEditor {
     if (this.submissionIntent) throw manual('此草稿已经发出提交操作，必须核实官网结果，不会重复点击发布');
     if (normalize(snapshot.title) !== normalize(this.desired.title) || normalize(snapshot.topics) !== normalize(this.desired.topics) || !this._matches(state, snapshot))
       throw manual('官网文案与确认的草稿不一致，请先在表单同步并核验');
-    if (this.appliedRevision !== this.latestRevision || !state.publishReady || state.challenge || state.login || state.error || state.pendingTopics || state.topicPopupOpen)
+    if (this.appliedRevision !== this.latestRevision || !state.publishReady || state.challenge || state.login || state.error || this._public(state).pendingTopics || state.topicPopupOpen)
       throw manual(state.error || '官方页面尚未就绪，或话题仍待确认，请先处理对应表单；未提交');
     return this._public(state);
   }
