@@ -44,3 +44,10 @@ contextBridge.exposeInMainWorld('publishingAPI', {
   onChanged: callback => { const fn=()=>callback(); ipcRenderer.on('publishing:changed',fn); return ()=>ipcRenderer.removeListener('publishing:changed',fn); },
   onTakeover: callback => { const fn=(_event,id)=>callback(id); ipcRenderer.on('publishing:takeover',fn); return ()=>ipcRenderer.removeListener('publishing:takeover',fn); }
 });
+
+contextBridge.exposeInMainWorld('messagesAPI', {
+  command: (name, input) => ipcRenderer.invoke('messages:command', name, input),
+  onChanged: callback => { const fn = () => callback(); ipcRenderer.on('messages:changed', fn); return () => ipcRenderer.removeListener('messages:changed', fn); },
+  onOpened: callback => { const fn = () => callback(); ipcRenderer.on('messages:opened', fn); return () => ipcRenderer.removeListener('messages:opened', fn); },
+  onSummary: callback => { const fn = () => callback(); ipcRenderer.on('messages:summary', fn); return () => ipcRenderer.removeListener('messages:summary', fn); }
+});

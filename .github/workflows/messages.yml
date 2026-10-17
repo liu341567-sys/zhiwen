@@ -1,0 +1,28 @@
+name: Windows read-only private message monitor
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/messages/**
+      - src/renderer/messages.*
+      - tests/messages*
+      - .github/workflows/messages.yml
+      - .github/scripts/test-messages.ps1
+permissions:
+  contents: read
+jobs:
+  messages:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run setup:electron
+      - name: Verify read-only background Sessions and monitoring at three display scales
+        shell: pwsh
+        run: ./.github/scripts/test-messages.ps1

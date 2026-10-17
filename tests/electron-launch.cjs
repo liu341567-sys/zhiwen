@@ -56,4 +56,5 @@ if (process.env.QIYE_DEVELOPER_FIXTURE === '1') {
   DeveloperService.prototype.attach = function (...args) { globalThis.__qiyeTestDeveloper = this; return attach.apply(this, args); };
   globalThis.__qiyeTestPage = require('../src/publishing/adapters/page').Page;
 }
+if (process.env.QIYE_MESSAGES_FIXTURE === '1') require('./messages-fixture.cjs');
 require('../src/main.js');

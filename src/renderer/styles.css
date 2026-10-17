@@ -665,3 +665,6 @@ button, input, textarea, .profile-row, .tab, .profile-card {
 @media (prefers-reduced-motion: reduce) {
   .sidebar-collapsed.sidebar-overlay .sidebar { animation: none; }
 }
+
+.toast-card #toast-message { min-width: 0; overflow-wrap: anywhere; }
+.toast-card #toast-action { flex: 0 0 auto; white-space: nowrap; font-size: 13px; padding: 4px; }

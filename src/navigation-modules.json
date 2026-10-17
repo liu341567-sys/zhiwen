@@ -78,9 +78,15 @@
     "label": "数据中心",
     "shortName": "数据",
     "icon": "chart",
-    "mode": "planned",
+    "mode": "messages",
     "description": "账号与内容数据的管理入口，功能正在规划中。",
     "items": [
+      {
+        "id": "messages",
+        "label": "私信汇总",
+        "icon": "chat",
+        "messages": true
+      },
       {
         "id": "overview",
         "label": "数据总览",

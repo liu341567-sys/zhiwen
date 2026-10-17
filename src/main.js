@@ -14,6 +14,7 @@ const { PublishingService } = require('./publishing/service');
 const { installDesktop } = require('./publishing/desktop');
 const { DeveloperService } = require('./developer/service');
 const { installDeveloperDesktop } = require('./developer/desktop');
+const { installMessages } = require('./messages/desktop');
 
 app.setName('栖页');
 if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
@@ -34,6 +35,8 @@ const blockedVaults = new Set();
 const documentStates = new Map();
 const pendingDocumentRestores = new Map();
 let publisher;
+let messages;
+let toastAction;
 let developer;
 let publishingError;
 let store;
@@ -275,11 +278,13 @@ function getSession(id) {
   const grantedPermissions = new Set();
   ownSession.registerPreloadScript({ type: 'frame', filePath: path.join(__dirname, 'developer/page-preload.js') });
   ownSession.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
+    if (_wc?.messageProfileId) return false;
     let origin;
     try { origin = new URL(requestingOrigin).origin; } catch { return false; }
     return allowedPermissions.has(permission) || grantedPermissions.has(`${origin}:${permission}`);
   });
   ownSession.setPermissionRequestHandler(async (wc, permission, callback, details) => {
+    if (wc?.messageProfileId) return callback(false);
     if (allowedPermissions.has(permission)) return callback(true);
     if (!['media', 'notifications', 'clipboard-read'].includes(permission) || !wc || wc.isDestroyed()) return callback(false);
     let origin;
@@ -303,6 +308,7 @@ function getSession(id) {
     } catch { callback(false); }
   });
   ownSession.on('will-download', async (_event, item, wc) => {
+    if (wc?.messageProfileId) { _event.preventDefault(); return item.cancel(); }
     item.pause();
     try {
       const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(wc) || mainWindow, {
@@ -456,9 +462,10 @@ function publishingChanged() {
   if (quitting || !mainWindow || mainWindow.isDestroyed()) return;
   updateViews(); emitState(); mainWindow.webContents.send('publishing:changed');
 }
-function publishingToast(message, type) {
+function publishingToast(message, type, action = null) {
+  toastAction = action;
   clearTimeout(toastFadeTimer); clearTimeout(toastHideTimer);
-  toastMessage = { message: String(message).slice(0,1000), type: ['success','error'].includes(type)?type:'info', sequence: ++toastSequence, leaving: false };
+  toastMessage = { actionLabel: action ? '查看私信汇总' : '', message: String(message).slice(0,1000), type: ['success','error'].includes(type)?type:'info', sequence: ++toastSequence, leaving: false };
   sendToast(); const sequence = toastSequence;
   toastFadeTimer = setTimeout(() => { if (toastMessage?.sequence === sequence) { toastMessage.leaving = true; sendToast(); } },2500);
   toastHideTimer = setTimeout(() => { if (toastMessage?.sequence === sequence) { toastMessage = null; updateToastView(); } },2700);
@@ -542,6 +549,7 @@ function registerIPC() {
       if (typeof next.message !== 'string' || !next.message.trim() || next.message.length > 1000 || !['success', 'error', 'info'].includes(next.type)) throw new Error('无效的提示内容');
       clearTimeout(toastFadeTimer);
       clearTimeout(toastHideTimer);
+      toastAction = null;
       toastMessage = { message: next.message, type: next.type, sequence: ++toastSequence, leaving: false };
       sendToast();
       const sequence = toastSequence;
@@ -557,6 +565,9 @@ function registerIPC() {
       }, 2700);
     } else updateToastView();
     return true;
+  });
+  ipcMain.on('browser:toast-activate', (event, sequence) => {
+    if (toastView && event.sender === toastView.webContents && event.senderFrame === toastView.webContents.mainFrame && toastMessage?.sequence === sequence && toastAction) { const action = toastAction; toastAction = null; action(); }
   });
   ipcMain.on('browser:toast-size', (event, size) => {
     if (!toastView || event.sender !== toastView.webContents || event.senderFrame !== toastView.webContents.mainFrame ||
@@ -633,6 +644,7 @@ function registerIPC() {
     assertNotLeased(id);
     if (publisher?.store.tasks().some(t => t.accountId === id && ['pending','paused','manual','unverified','submitted','review'].includes(t.status))) throw new Error('此环境仍有关联发布任务，请先取消未提交任务并核实已提交结果。');
     store.get(id);
+    await messages?.cancelAccount(id);
     await closeView(id);
     const ownSession = getSession(id);
     await ownSession.clearStorageData();
@@ -826,6 +838,22 @@ if (!app.requestSingleInstanceLock()) {
         publishingToast(`开发者工具暂不可用：${error.message}；账号环境功能可以继续使用。`, 'error');
       }
 
+      try {
+        messages = await installMessages({ window: mainWindow, directory: app.getPath('userData'), profiles: () => store.getState().profiles,
+          WebContentsView, getSession, restore: id => restores.get(id), blocked: id => blockedVaults.has(id), inspect: id => views.get(id)?.view.webContents,
+          scheduler: () => publisher?.scheduler, debugging: id => developer?.active === id && (developer.inspecting || developer.report?.status === 'recording'),
+          icon: applicationIcon, toast: publishingToast,
+          reveal: async (id, url) => {
+            const pending = mutationQueue.then(async () => { assertNotLeased(id); store.open(id); const entry = await createView(id);
+              uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
+              const wc = entry.view.webContents;
+              if (wc.getURL() !== url) wc.loadURL(url).catch(() => {});
+              mainWindow.webContents.send('messages:opened', id); mainWindow.show(); mainWindow.focus();
+            }); mutationQueue = pending.catch(() => {}); await pending;
+          }
+        });
+      } catch (error) { publishingToast(`私信监测不可用：${error.message}。原账号环境可继续使用。`, 'error'); }
+
     } catch (error) {
       dialog.showErrorBox('无法读取账号环境', `${error.message}\n数据位置：${app.getPath('userData')}\n请先备份原目录，再检查 profiles.json；原有数据未被覆盖。`);
       canQuit = true;
@@ -850,6 +878,7 @@ if (!app.requestSingleInstanceLock()) {
         }
       } catch { /* UI state must not prevent browser data from being flushed. */ }
       if (developer) { try { await developer.close(); } catch { /* Optional debug data must not prevent account data from being flushed. */ } }
+      if (messages) await messages.shutdown();
       if (publisher) await publisher.shutdown();
       await mutationQueue;
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));

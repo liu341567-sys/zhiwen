@@ -24,6 +24,7 @@ class Scheduler {
     this.now = now;
     this.running = new Map();
     this.accounts = new Set();
+    this.readers = new Set();
     this.stopping = false;
     this.timer = null;
   }
@@ -45,10 +46,16 @@ class Scheduler {
     return this.accounts.has(id);
   }
   reserveAccount(id) {
-    if (this.stopping || this.accounts.has(id)) throw new Error('此账号正在执行操作，请稍后搜索位置');
+    if (this.stopping || this.accounts.has(id) || this.readers.has(id)) throw new Error('此账号正在执行操作，请稍后搜索位置');
     this.accounts.add(id);
     let released = false;
     return () => { if (!released) { released = true; this.accounts.delete(id); this.changed(); } };
+  }
+  reserveReadOnly(id) {
+    if (this.stopping || this.accounts.has(id) || this.readers.has(id)) throw new Error('账号正在执行操作');
+    this.readers.add(id);
+    let released = false;
+    return () => { if (!released) { released = true; this.readers.delete(id); } };
   }
   runtime() {
     return {
@@ -94,6 +101,7 @@ class Scheduler {
         null,
         blocked.map((t) => t.id),
       );
+    if (this.readers.has(task.accountId)) return reason('account-monitoring', '等待此账号的只读私信巡检结束');
     if (this.accounts.has(task.accountId))
       return reason(
         'account-busy',

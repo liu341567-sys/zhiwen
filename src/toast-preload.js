@@ -6,5 +6,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 // It has no environment-management or remote-page capability.
 contextBridge.exposeInMainWorld('toastAPI', {
   onMessage: callback => ipcRenderer.on('browser:toast-changed', (_event, message) => callback(message)),
+  activate: sequence => ipcRenderer.send('browser:toast-activate', sequence),
   resized: (sequence, height) => ipcRenderer.send('browser:toast-size', { sequence, height })
 });

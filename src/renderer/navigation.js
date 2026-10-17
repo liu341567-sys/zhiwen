@@ -50,7 +50,8 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       button.type = 'button'; button.className = 'secondary-menu-button';
       const label = document.createElement('span'); label.textContent = entry.label;
       button.append(icon(entry.icon), label);
-      if (entry.developer) {button.addEventListener('click',()=>api.openDeveloperTools().catch(error=>notify(error.message,'error')));}
+      if (entry.messages) { button.classList.add('active'); button.setAttribute('aria-current', 'page'); button.addEventListener('click', async () => { if (overlay) await closeOverlay(); window.dispatchEvent(new Event('messages:visible')); }); }
+      else if (entry.developer) {button.addEventListener('click',()=>api.openDeveloperTools().catch(error=>notify(error.message,'error')));}
       else if (entry.publishing) {
         button.dataset.publishPage=entry.id;
         if(entry.planned){const badge=document.createElement('span');badge.className='planned-badge';badge.textContent='规划中';button.append(badge);}
@@ -116,6 +117,8 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       $('planned-module').hidden = item.mode !== 'planned';
       $('settings-module').hidden = item.mode !== 'settings';
       $('publishing-module').hidden = item.mode !== 'publishing';
+      $('messages-module').hidden = item.mode !== 'messages';
+      if (item.mode === 'messages') window.dispatchEvent(new Event('messages:visible'));
       $('developer-module').hidden = item.mode !== 'developer';
       if(item.mode === 'publishing')window.dispatchEvent(new Event('publishing:visible'));
       if (item.mode === 'planned') {

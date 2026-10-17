@@ -12,6 +12,7 @@
     { name: 'pink', label: '粉色', value: '#ca7181' },
   ];
   const iconPaths = {
+    chat: ['M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z'],
     panel: ['M3 3h18v18H3zM9 3v18'],
     upload: ['M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6'],
     video: ['M3 5h12v14H3zM15 9l6-4v14l-6-4'],
@@ -990,6 +991,8 @@
   $('lease-takeover').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('publishing:takeover-request',{detail:state.activeId})));
   window.publishingNavigateEnvironment = ()=>navigation.select('environment',true);
   window.publishingNotify = notify;
+  window.messagesAPI?.onOpened(() => navigation.environmentAction().catch(error => notify(error.message, 'error')));
+  window.messagesAPI?.onSummary(() => navigation.select('data', true).catch(error => notify(error.message, 'error')));
   api?.onState(applyState);
   render();
   action('getState');
