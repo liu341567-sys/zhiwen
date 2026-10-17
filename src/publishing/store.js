@@ -151,8 +151,8 @@ class PublishingStore {
     if (!r) throw new Error('任务不存在');
     return this.decode(r);
   }
-  addBatch(name, tasks, { clearDrafts = false, transaction = true } = {}) {
-    const insert = () => {
+  addBatch(name, tasks, { clearDrafts = false } = {}) {
+    return this.transaction(() => {
       const id = randomUUID();
       this.db
         .prepare('INSERT INTO batches VALUES(?,?,?)')
@@ -175,8 +175,7 @@ class PublishingStore {
           );
       if (clearDrafts) this.clearDrafts();
       return id;
-    };
-    return transaction ? this.transaction(insert) : insert();
+    });
   }
   setTask(id, patch) {
     const t = this.task(id);

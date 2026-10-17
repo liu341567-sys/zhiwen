@@ -119,7 +119,6 @@ async function run(scale) {
       () => assert.equal(unopened, 0),
     );
     await shell.locator('button[data-module="publish"]').click();
-    await shell.getByRole('button', { name: '高级发布向导', exact: true }).click();
     await shell.locator('.publish-steps').waitFor();
     const imported = await command('import', [source]);
     assert.equal(imported.added.length, 1);
