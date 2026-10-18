@@ -23,14 +23,29 @@ class MessageBrowser {
   async acquire(id, signal, adapter = douyin) {
     if (signal.aborted) throw Object.assign(new Error(), { code: 'aborted' });
     const original = this.inspect(id);
-    if (original && !original.isDestroyed() && adapter.allowed(original.getURL()) && !original.isLoading()) return original;
+    let openConversation = false;
+    if (original && !original.isDestroyed() && adapter.allowed(original.getURL()) && !original.isLoading()) {
+      // A selected conversation may replace/filter the list. Reuse only a
+      // neutral list; otherwise inspect a fresh same-Session background list
+      // without refreshing, closing or changing the user's active chat/draft.
+      let timer, abort;
+      try {
+        const selected = typeof adapter.conversationOpen !== 'function' ? false : await Promise.race([
+          original.executeJavaScriptInIsolatedWorld(3102, [{code:`(${adapter.conversationOpen.toString()})()`}]),
+          new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('coverage timeout')),2000);abort=()=>reject(new Error('aborted'));signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();})
+        ]);
+        if (selected === false) return original;
+        openConversation = selected === true;
+      } catch { if (signal.aborted) throw Object.assign(new Error(),{code:'aborted'}); }
+      finally { clearTimeout(timer); if(abort)signal.removeEventListener('abort',abort); }
+    }
     const ownSession = this.getSession(id); await this.restore(id);
     if (signal.aborted) throw Object.assign(new Error(), { code: 'aborted' });
     if (this.blocked(id)) throw Object.assign(new Error(), { code: 'session_error' });
     if (!this.profiles().some(p => p.id === id)) throw Object.assign(new Error(), { code: 'closed' });
     const view = new this.WebContentsView({ webPreferences: { session: ownSession, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, navigateOnDragDrop: false,
       backgroundThrottling: false, preload: path.join(__dirname, 'readonly-preload.js') } });
-    const wc = view.webContents; wc.messageProfileId = id;
+    const wc = view.webContents; wc.messageProfileId = id; wc.messageConversationOpen = openConversation;
     const entry = { view, signal }; this.pages.set(id, entry);
     this.window.contentView.addChildView(view); view.setBounds({ x: 0, y: 0, width: 1000, height: 740 }); view.setVisible(false);
     wc.setWindowOpenHandler(() => ({ action: 'deny' }));

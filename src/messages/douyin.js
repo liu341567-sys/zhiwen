@@ -7,9 +7,19 @@ function allowed(value) {
 }
 const jumpUrl = () => launchUrl;
 
+// Getter-only check of public composer controls; no draft or message text.
+function conversationOpen() {
+  const visible = node => { const r = node.getBoundingClientRect(), s = getComputedStyle(node); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden'; };
+  const editors = [...document.querySelectorAll('textarea,input:not([type="password"]),[contenteditable="true"],[role="textbox"]')].slice(0,200).filter(visible);
+  const labeledComposer = editors.some(n => /(?:请输入|输入|发送).{0,8}(?:消息|私信|聊天)|发消息/.test([n.getAttribute('placeholder'),n.getAttribute('aria-label'),n.getAttribute('data-placeholder')].filter(Boolean).join(' ')));
+  const history = [...document.querySelectorAll('[role="log"],[class*="message-list" i],[class*="messageList"],[class*="chat-history" i],[class*="chatHistory"],[data-message-id],[data-msg-id]')].slice(0,300).some(visible);
+  const send = [...document.querySelectorAll('button,[role="button"]')].slice(0,200).filter(visible).some(n => /^(?:发送|发送消息)$/.test((n.textContent || '').trim()));
+  return labeledComposer && (history || send) || history && send && editors.some(n => !/搜索|查找/.test(n.getAttribute('placeholder') || n.getAttribute('aria-label') || ''));
+}
+
 // Getter-only isolated-world probe. Never read input values, conversations,
 // cookies, storage, message text, names, peer IDs or request/response bodies.
-function observe() {
+function observe(openConversation) {
   const visible = node => { const r = node.getBoundingClientRect(), s = getComputedStyle(node); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden'; };
   const diagnostic = { locator: 'private-message-or-conversation-counter-v2', candidates: 0, nodes: [], structure: [] };
   if (!document.body || document.readyState === 'loading') return { status: 'loading', diagnostic };
@@ -23,13 +33,7 @@ function observe() {
     numeric: /^\d+\+?$/.test((n.textContent || '').trim()) ? (n.textContent || '').trim() : null,
     label: /^(?:全部消息|未读消息|私信|消息|未读|全部)$/.test((n.getAttribute('aria-label') || '').trim()) ? n.getAttribute('aria-label').trim() : null
   }));
-  // An open composer is a coverage warning, not evidence of unread arrivals.
-  // Inspect public control labels/structure only: never values or chat text.
-  const editors = [...document.querySelectorAll('textarea,input:not([type="password"]),[contenteditable="true"],[role="textbox"]')].slice(0,200).filter(visible);
-  const labeledComposer = editors.some(n => /(?:请输入|输入|发送).{0,8}(?:消息|私信|聊天)|发消息/.test([n.getAttribute('placeholder'),n.getAttribute('aria-label'),n.getAttribute('data-placeholder')].filter(Boolean).join(' ')));
-  const history = [...document.querySelectorAll('[role="log"],[class*="message-list" i],[class*="messageList"],[class*="chat-history" i],[class*="chatHistory"],[data-message-id],[data-msg-id]')].slice(0,300).some(visible);
-  const send = [...document.querySelectorAll('button,[role="button"]')].slice(0,200).filter(visible).some(n => /^(?:发送|发送消息)$/.test((n.textContent || '').trim()));
-  diagnostic.activeConversation = labeledComposer && (history || send) || history && send && editors.some(n => !/搜索|查找/.test(n.getAttribute('placeholder') || n.getAttribute('aria-label') || ''));
+  diagnostic.activeConversation = openConversation();
   const sources = [];
   for (const node of [...document.querySelectorAll('a,button,[role="tab"],[role="button"],[aria-label],h1,h2,h3')].slice(0, 4000)) {
     if (!visible(node)) continue;
@@ -129,7 +133,7 @@ async function read(wc, signal, { timeoutMs = 8000, identitySalt, environmentId 
         let last; const end = Date.now() + timeoutMs - 350;
         do {
           if (signal.aborted || wc.isDestroyed()) return { status: 'loading' };
-          last = await wc.executeJavaScriptInIsolatedWorld(3102, [{ code: `(${observe.toString()})()` }]);
+          last = await wc.executeJavaScriptInIsolatedWorld(3102, [{ code: `(${observe.toString()})(${conversationOpen.toString()})` }]);
           if (!['loading', 'unrecognized'].includes(last?.status)) return last;
           await new Promise(resolve => setTimeout(resolve, 250));
         } while (Date.now() < end);
@@ -144,8 +148,8 @@ async function read(wc, signal, { timeoutMs = 8000, identitySalt, environmentId 
     const conversations = (sample.conversation?.entries || []).map(e => ({ key: e.identity && identitySalt && environmentId ? createHmac('sha256', identitySalt).update(environmentId + ':' + e.identity).digest('hex') : null,
       unread: e.unread, exact: e.exact, unit: e.unit }));
     const { conversation, ...publicSample } = sample;
-    return { ...publicSample, activeConversation: sample.diagnostic?.activeConversation === true, conversations, visibleConversations: conversation?.visibleConversations || 0, completeList: conversation?.complete === true, jumpUrl: launchUrl };
+    return { ...publicSample, activeConversation: sample.diagnostic?.activeConversation === true || wc.messageConversationOpen === true, conversations, visibleConversations: conversation?.visibleConversations || 0, completeList: conversation?.complete === true, jumpUrl: launchUrl };
   } catch (error) { return { status: signal.aborted ? 'aborted' : error.code === 'timeout' ? 'timeout' : 'page_changed' }; }
   finally { clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort); }
 }
-module.exports = { id: 'douyin', name: '抖音', verified: false, capability: 'count-estimate', launchUrl, allowed, jumpUrl, observe, read };
+module.exports = { id: 'douyin', name: '抖音', verified: false, capability: 'count-estimate', launchUrl, allowed, jumpUrl, conversationOpen, observe, read };

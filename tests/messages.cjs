@@ -110,11 +110,14 @@ async function run(scale) {
     const chatPage=app.windows().find(p=>p.url()===chat);await chatPage.waitForFunction(()=>window.ready);
     await chatPage.evaluate(()=>{const log=document.createElement('div');log.setAttribute('role','log');log.innerHTML='<div class="message-row"><span class="avatar">A</span><span class="badge">99</span></div><div class="message-row"><span class="avatar">B</span><span class="badge">100</span></div>';log.append(document.createTextNode('PRIVATE_CHAT_DO_NOT_EXPORT'));document.body.append(log);const input=document.createElement('textarea');input.id='chat-draft';input.placeholder='请输入消息';input.value='PRIVATE_DRAFT_DO_NOT_EXPORT';document.body.append(input);const send=document.createElement('button');send.textContent='发送';send.onclick=()=>window.sent=true;document.body.append(send);window.conversationToken=crypto.randomUUID();});
     const conversationToken=await chatPage.evaluate(()=>window.conversationToken);
+    const chatNativeId=await app.evaluate(({BrowserWindow},id)=>BrowserWindow.getAllWindows()[0].contentView.children.find(v=>v.webContents?.profileId===id).webContents.id,b.id);
     await shell.locator('[data-module="data"]').click(); const conversationCheck=await command('scan');
     check('an open original conversation is flagged as limited coverage while preserving real unread counts',()=>{const r=conversationCheck.rows.find(r=>r.id===b.id);assert.equal(r.result.activeConversation,true);assert.equal(r.result.unread,5);assert.equal(r.result.visibleConversations,0);assert(r.description.includes('自动标为已读'));});
     await shell.locator('#messages-coverage').waitFor({state:'visible'});
     const retainedChat=await chatPage.evaluate(()=>({token:window.conversationToken,draft:document.getElementById('chat-draft').value,sent:!!window.sent}));
     check('read-only conversation detection preserves the page, draft and send state',()=>assert.deepEqual(retainedChat,{token:conversationToken,draft:'PRIVATE_DRAFT_DO_NOT_EXPORT',sent:false}));
+    const latestProbe=await app.evaluate(()=>globalThis.__messageFixture.pages.at(-1));
+    check('a selected conversation uses an independent same-account list instead of the chat DOM',()=>{assert.equal(latestProbe.id,b.id);assert.equal(latestProbe.original,false);assert.notEqual(latestProbe.wc,chatNativeId);});
     const conversationDiagnostic=await command('diagnostics',b.id);
     check('conversation diagnostic provides coverage without exporting chat text or composer values',()=>{assert.equal(conversationDiagnostic.context.activeConversation,true);assert(!JSON.stringify(conversationDiagnostic).includes('DO_NOT_EXPORT'));});
     await app.close(); app = null; await launch(); const restored = await command('state');
