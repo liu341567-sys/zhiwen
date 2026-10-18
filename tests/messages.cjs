@@ -86,6 +86,17 @@ async function run(scale) {
     const unchangedLegacy = await shell.evaluate(id=>browserAPI.getState().then(s=>s.profiles.find(p=>p.id===id)),legacy.id);
     check('legacy custom environments can monitor without changing original platform or URL',()=>{assert.equal(linked.rows.find(r=>r.id===legacy.id).result.unread,2);assert.equal(unchangedLegacy.platformId,legacy.platformId);assert.equal(Object.hasOwn(unchangedLegacy,'platformId'),Object.hasOwn(legacy,'platformId')); assert.equal(unchangedLegacy.startUrl,legacy.startUrl);});
     await command('platform',{id:legacy.id,platformId:null});
+    if (scale === 1) {
+      await set(a.id,8); await set(b.id,5); await command('settings',{selectedIds:[a.id,b.id],intervalSeconds:30});
+      const started = await command('start'), due = started.nextAt;
+      for(let i=0;i<3;i++){await pause(150);const refreshed=await command('scan');assert.equal(refreshed.nextAt,due);}
+      check('real-window manual refreshes retain the original automatic 30-second deadline',()=>assert.equal(due,started.nextAt));
+      await pause(Math.max(0,due-Date.now()-1000));
+      let automatic;await until(async()=>{automatic=await command('state');return !automatic.checking&&automatic.cycle.startedAt>=due;},'actual automatic timer after manual refreshes');
+      check('native automatic timer runs at its original deadline after repeated refreshes',()=>{assert(automatic.cycle.startedAt<due+10000);assert.equal(automatic.nextAt,due+30000);});
+      measure.timerCase={intervalSeconds:30,manualRefreshes:3,delayMs:automatic.cycle.startedAt-due};
+      const paused=await command('pause');check('pausing removes the displayed automatic deadline',()=>assert.equal(paused.nextAt,null));
+    }
     await shell.evaluate(ids => { for (const id of ids) document.querySelector(`#messages-rows tr[data-environment-id="${id}"] input`).click(); }, [a.id,b.id]);
     await until(() => command('state').then(s => s.config.selectedIds?.length === 0), 'rapid per-account deselection');
     const selected = await command('state'); check('rapid checkbox changes do not lose the previous account selection update', () => assert.deepEqual(selected.config.selectedIds,[]));

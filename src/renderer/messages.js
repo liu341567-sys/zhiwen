@@ -77,7 +77,7 @@
       text(c[3], row.result.first ? '首次基线' : row.result.increase === null || row.result.increase === undefined ? '待核实' : row.result.increase > 0 ? `计数 +${row.result.increase}（估算）` : '未观察到增加');
       text(c[4], time(row.result.checkedAt));
       text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.status === 'partial' ? '已发现会话未读' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '等待检查' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '请查看详情');
-      c[5].title = (row.description || '') + (row.result.visibleConversations ? `；已识别 ${row.result.visibleConversations} 个已加载会话` : ''); text(c[5].lastElementChild, row.result.retryAt > Date.now() ? `重试：${time(row.result.retryAt)}` : '');
+      c[5].title = (row.description || '') + (row.result.visibleConversations ? `；已识别 ${row.result.visibleConversations} 个已加载会话` : ''); text(c[5].lastElementChild, row.result.retryAt > Date.now() ? `异常账号重试：${time(row.result.retryAt)}` : '');
       const buttons = c[6].querySelectorAll('button'); buttons[0].disabled = (!row.supported && !row.customEnvironment) || row.checking; text(buttons[0], row.customEnvironment && !row.supported ? '这是抖音账号' : '查看消息'); buttons[1].disabled = !row.monitored || state.checking; buttons[3].hidden = !row.customEnvironment || !row.platformId; text(buttons[3], '取消抖音关联');
     }
     const valid = new Set(state.rows.map(r => r.id)); for (const [id, node] of nodes) if (!valid.has(id)) { node.remove(); nodes.delete(id); }
@@ -91,7 +91,9 @@
     if (!state) return;
     $('start').hidden = state.running || state.checking; $('pause').hidden = !state.running && !state.checking; $('start').disabled = state.running || state.checking || !state.summary.monitored; $('pause').disabled = !state.running && !state.checking; $('scan').disabled = state.checking;
     text($('status'), !state.summary.monitored ? '先勾选要监测的抖音账号' : state.checking ? `检查中 ${state.cycle?.done || 0} / ${state.cycle?.total || 0}` : state.running ? '持续监测中' : '已暂停');
-    text($('cycle'), state.cycle?.completedAt ? `最近更新 ${time(state.cycle.completedAt)}${state.nextAt ? ' · 下次自动检查 ' + time(state.nextAt) : ''}` : '默认勾选抖音账号，点击“开始监测”即可。');
+    const recent = state.cycle?.completedAt ? `最近更新 ${time(state.cycle.completedAt)}` : state.checking ? '正在检查账号' : '默认勾选抖音账号，点击“开始监测”即可。';
+    const next = !state.nextAt ? '' : state.checking && state.nextAt <= Date.now() ? '自动巡检已到期，当前检查结束后立即执行' : `下次自动巡检 ${time(state.nextAt)}`;
+    text($('cycle'), [recent, next].filter(Boolean).join(' · '));
     if (document.activeElement !== $('interval')) $('interval').value = state.config.intervalSeconds;
     if (document.activeElement !== $('concurrency')) $('concurrency').value = state.config.concurrency;
     $('sound').checked = state.config.sound; $('system').checked = state.config.systemNotifications; $('resume').checked = state.config.autoResume;

@@ -147,3 +147,84 @@ test('legacy custom environment adapter association never mutates original profi
   const f=await fixture(t,{profiles:()=>raw}); f.service.assignPlatform('legacy','douyin'); assert.equal(f.service.state().rows[0].supported,true); assert.equal(JSON.stringify(raw),before);
   assert.equal(f.service.state().rows[0].platformId,'douyin'); f.service.assignPlatform('legacy',null); assert.equal(f.service.state().rows[0].supported,false); assert.equal(JSON.stringify(raw),before);
 });
+
+// Only service timers are controlled; PQueue and async page work retain their
+// real lifecycle, so advancing a deadline also exercises coalescing/cleanup.
+function monitorClock() {
+  let now = 1000000;
+  const timers = new Map();
+  return {
+    now: () => now,
+    setTimer(fn, delay) { const timer = { at: now + delay, unref() {} }; timers.set(timer, fn); return timer; },
+    clearTimer(timer) { timers.delete(timer); },
+    async advance(ms) {
+      now += ms;
+      for (let fired = 0; fired < 100; fired++) {
+        const due = [...timers.keys()].sort((a,b) => a.at-b.at).find(t => t.at <= now);
+        if (!due) return;
+        const fn = timers.get(due); timers.delete(due); fn(); await tick(); await tick();
+      }
+      throw new Error('Unbounded timer catch-up');
+    },
+    pending: () => [...timers.keys()].map(t => t.at)
+  };
+}
+async function timedFixture(t, extra = {}) {
+  const clock = monitorClock(), f = await fixture(t, { now:clock.now, setTimer:clock.setTimer, clearTimer:clock.clearTimer, ...extra });
+  f.service.update({ intervalSeconds:30 }); return { ...f, clock };
+}
+test('manual refreshes preserve the automatic 30-second deadline and the due cycle still runs', async t => {
+  let calls=0; const f=await timedFixture(t,{getView:async id=>{calls++;return id;}});
+  await f.service.start(); const due=f.service.nextAt;
+  await f.clock.advance(10000); await f.service.scan({force:true});
+  await f.clock.advance(10000); await f.service.scan({force:true});
+  assert.equal(f.service.nextAt,due); assert.deepEqual(f.clock.pending(),[due]);
+  const before=calls; await f.clock.advance(10000); assert.equal(calls,before+2); assert.equal(f.service.nextAt,due+30000);
+});
+test('repeated manual failures never multiply automatic backoff; a success clears it', async t => {
+  const f=await timedFixture(t); f.counts.a={status:'timeout'};
+  await f.service.scan(); const before=f.service.state().rows[0].result;
+  assert.equal(before.failures,1); assert.equal(before.retryAt,f.clock.now()+60000);
+  for(let i=0;i<12;i++){await f.clock.advance(1000);await f.service.scan({force:true});}
+  const after=f.service.state().rows[0].result; assert.equal(after.failures,1); assert.equal(after.retryAt,before.retryAt);
+  f.counts.a=sample(9); await f.service.scan({force:true}); assert.equal(f.service.state().rows[0].result.retryAt,null); assert.equal(f.service.state().rows[0].result.failures,0);
+});
+test('manual-only failures do not create automatic deferral while monitoring is stopped', async t => {
+  const f=await timedFixture(t); f.counts.a={status:'unrecognized'};
+  for(let i=0;i<10;i++)await f.service.scan({force:true});
+  assert.equal(f.service.state().rows[0].result.failures,0); assert.equal(f.service.state().rows[0].result.retryAt,null); assert.equal(f.service.nextAt,null); assert.deepEqual(f.clock.pending(),[]);
+});
+test('notification and selection changes leave the deadline fixed; only frequency changes reset it', async t => {
+  const f=await timedFixture(t); await f.service.start(); const due=f.service.nextAt;
+  await f.clock.advance(10000); f.service.update({sound:false,concurrency:1}); f.service.select('a',false);
+  assert.equal(f.service.nextAt,due); await f.service.start(); assert.equal(f.service.nextAt,due);
+  f.service.update({intervalSeconds:60}); assert.equal(f.service.nextAt,f.clock.now()+60000);
+  await f.service.pause(); assert.equal(f.service.nextAt,null); assert.deepEqual(f.clock.pending(),[]);
+});
+test('a manual refresh crossing the deadline is followed by one due cycle without overlapping pages', async t => {
+  let release, block=false, active=0, max=0, calls=0;
+  const f=await timedFixture(t,{adapters:[{...douyin,read:async id=>{calls++;active++;max=Math.max(max,active);if(block&&id==='a')await new Promise(r=>release=r);active--;return sample(1);}}]});
+  f.service.update({selectedIds:['a']}); await f.service.start(); const due=f.service.nextAt;
+  await f.clock.advance(20000); block=true; const refresh=f.service.scan({force:true}); await tick();
+  await f.clock.advance(25000); assert.equal(f.service.nextAt,due); assert.equal(calls,2);
+  block=false; release(); await refresh; await f.clock.advance(0);
+  assert.equal(calls,3); assert.equal(max,1); assert.equal(f.service.nextAt,due+30000);
+});
+test('late timers after sleep run once and advance past missed ticks instead of queuing a burst', async t => {
+  let calls=0;const f=await timedFixture(t,{getView:async id=>{calls++;return id;}});await f.service.start();
+  await f.clock.advance(20*60000+5000);assert.equal(calls,4);assert(f.service.nextAt>f.clock.now());assert(f.service.nextAt<=f.clock.now()+30000);assert.equal(f.clock.pending().length,1);
+});
+test('automatic backoff remains account-specific and does not slow healthy accounts', async t => {
+  const seen=[],f=await timedFixture(t,{getView:async id=>{seen.push(id);return id;}});f.counts.a={status:'timeout'};
+  await f.service.start(); // Explicit start is a user check, not an automatic failure.
+  await f.clock.advance(30000);const row=f.service.state().rows[0].result;assert.equal(row.failures,1);
+  await f.clock.advance(30000);assert.equal(seen.filter(id=>id==='a').length,2);assert.equal(seen.filter(id=>id==='b').length,3);assert.equal(f.service.nextAt,f.clock.now()+30000);
+  await f.clock.advance(30000);assert.equal(seen.filter(id=>id==='a').length,3);
+});
+test('legacy hour-long manual backoff is ignored without losing baseline; new-policy backoff survives restart', async t => {
+  const dir=temp(),f=await timedFixture(t,{directory:dir});await f.service.scan();
+  f.service.store.put('results','a',{platformId:'douyin',status:'timeout',unread:null,failures:10,retryAt:f.clock.now()+3600000});
+  assert.equal(f.service.state().rows[0].result.retryAt,null);f.counts.a=sample(9);await f.service.scan();assert.equal(f.service.state().rows[0].baseline.unread,9);
+  f.counts.a={status:'timeout'};await f.service.scan();const due=f.service.state().rows[0].result.retryAt;await f.service.shutdown();
+  const g=await timedFixture(t,{directory:dir});t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));await g.service.scan();assert.equal(g.service.state().rows[0].result.retryAt,due);assert.equal(g.service.state().rows[0].baseline.unread,9);
+});
