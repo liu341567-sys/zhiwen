@@ -40,7 +40,7 @@ class MessageService {
       const result = !adapter || !monitored ? { status: !adapter ? 'unsupported' : 'disabled', unread: null, increase: null }
         : stored?.platformId === p.platformId ? { ...stored, ...(stored.retryPolicyVersion === retryPolicyVersion ? {} : { failures: 0, retryAt: null }) } : { status: 'paused', unread: null, increase: null };
       return { id: p.id, name: p.name, platformId: p.platformId || null, platformName: adapter?.name || '', supported: !!adapter, monitored,
-        platformVerified: adapter?.verified === true, customEnvironment: !p.originalPlatformId, result, description: descriptions[result.status], checking: this.active.has(p.id),
+        platformVerified: adapter?.verified === true, customEnvironment: !p.originalPlatformId, result, description: descriptions[result.status] + (result.activeConversation ? '；当前对话可能由官网自动标为已读，未读计数不能覆盖该对话的新消息' : ''), checking: this.active.has(p.id),
         baseline: (() => { const b = this.store.get('baselines', p.id); return Number.isSafeInteger(b?.unread) ? { unread: b.unread, unit: b.unit, checkedAt: b.checkedAt } : null; })() };
     });
     const monitored = rows.filter(r => r.monitored), fresh = monitored.filter(r => ['success', 'partial'].includes(r.result.status));
@@ -50,7 +50,7 @@ class MessageService {
     return { config: this.config, running: this.running, checking: !!this.scanJob, nextAt: this.nextAt, cycle, rows, alerts: this.store.alerts(),
       summary: { monitored: monitored.length, success: cycle?.success || 0, unreadAccounts: fresh.filter(r => r.result.unread > 0).length,
         unread: units, lowerBounds, partialAccounts: fresh.filter(r => !r.result.exact).length, observedAccounts: fresh.length, reliableAccounts: fresh.filter(r => r.result.exact).length, newMessages: null,
-        increases: cycle?.increases || { messages: 0, conversations: 0, unknown: 0 }, anomalies: monitored.filter(r => !['success', 'partial', 'paused', 'busy'].includes(r.result.status)).length } };
+        increases: cycle?.increases || { messages: 0, conversations: 0, unknown: 0 }, anomalies: monitored.filter(r => r.result.activeConversation || !['success', 'partial', 'paused', 'busy'].includes(r.result.status)).length } };
   }
   update(input) {
     if (this.closed) throw new Error('私信监测已关闭');
@@ -171,14 +171,14 @@ class MessageService {
       unread: ['success', 'partial'].includes(status) && Number.isSafeInteger(result.unread) ? result.unread : null, exact, unit, newMessages: null,
       increase: methodChanged ? 0 : exact ? count.increase : status === 'partial' && conversation.overlap ? conversation.increases[unit] : null, first: methodChanged || (status === 'partial' ? conversation.overlap === 0 && Object.keys(conversation.ledger).length > 0 : count.first), failures,
       visibleConversations: result.visibleConversations || 0, completeList: result.completeList === true,
-      retryPolicyVersion, retryAt };
+      retryPolicyVersion, retryAt, activeConversation: result.activeConversation === true };
     const increase = exact ? count.increase : status === 'partial' ? conversation.increases[unit] : 0;
     const change = !methodChanged && increase > 0 && !(exact ? count.first : !conversation.overlap) ? { environmentId: profile.id, platformId: profile.platformId, name: profile.name,
       unread: result.unread, increase, unit, lowerBound: !exact, newMessages: null, basis: exact ? 'count-estimate' : 'conversation-count-estimate', cycleId: cycle.id } : null;
     this.store.transaction(() => {
       if (exact || Object.keys(conversation.ledger).length) this.store.put('baselines', profile.id, { ...(exact ? count.baseline : baseline || { unread: null, unit: 'unknown', checkedAt: null }), platformId: profile.platformId, lastMethod: method || baseline?.lastMethod, conversationCounts: conversation.ledger });
       this.store.put('results', profile.id, saved);
-      if (!['success', 'partial', 'busy'].includes(status)) this.store.diagnostic(profile.id, { status, locator: result.diagnostic?.locator || 'official-message-list', candidates: result.diagnostic?.candidates || 0,
+      if (!['success', 'partial', 'busy'].includes(status)) this.store.diagnostic(profile.id, { status, activeConversation: result.activeConversation === true, locator: result.diagnostic?.locator || 'official-message-list', candidates: result.diagnostic?.candidates || 0,
         badges: (result.diagnostic?.badges || []).slice(0, 24).map(b => ({ numeric: /^\d+\+?$/.test(b.numeric || '') ? b.numeric : null, excluded: b.excluded === true, matchedRow: b.matchedRow === true, ancestors: (b.ancestors || []).slice(0,5).map(n => ({ tag: ['div','span','li','ul','section','a'].includes(n.tag) ? n.tag : 'other', avatar: n.avatar === true, siblings: Number.isSafeInteger(n.siblings) ? Math.max(0, Math.min(n.siblings,1000)) : 0, knownRow: n.knownRow === true })) })),
         structure: (result.diagnostic?.structure || []).slice(0, 40).map(n => ({ tag: ['iframe', 'button', 'span', 'div', 'a', 'li'].includes(n.tag) ? n.tag : 'other', role: ['tab', 'navigation', 'status'].includes(n.role) ? n.role : null, kind: ['iframe', 'unread', 'badge', 'navigation'].includes(n.kind) ? n.kind : 'unknown', numeric: /^\d+\+?$/.test(n.numeric || '') ? n.numeric : null, label: ['全部消息', '未读消息', '私信', '消息', '未读', '全部'].includes(n.label) ? n.label : null })),
         nodes: (result.diagnostic?.nodes || []).slice(0, 12).map(n => ({ tag: String(n.tag).replace(/[^a-z0-9-]/g, '').slice(0, 30), role: ['tab', 'button', 'navigation'].includes(n.role) ? n.role : null, kind: ['explicit-unread-total', 'unread-tab', 'private-message-navigation'].includes(n.kind) ? n.kind : 'unknown' })) }, now);
@@ -193,6 +193,13 @@ class MessageService {
     await this.cancelAccount(id);
     if (this.isBusy(id)) throw new Error('此账号正在发布或录制，请完成后查看消息');
     await this.reveal(id, adapter.launchUrl); return this.state();
+  }
+  diagnosticContext(id) {
+    const row = this.state().rows.find(r => r.id === id);
+    return { intervalSeconds: this.config.intervalSeconds, running: this.running, nextAutomaticAt: this.nextAt,
+      status: row?.result.status || 'closed', activeConversation: row?.result.activeConversation === true,
+      checkedAt: row?.result.checkedAt || null, unread: row?.result.unread ?? null, exact: row?.result.exact === true,
+      automaticFailures: row?.result.failures || 0, accountRetryAt: row?.result.retryAt || null };
   }
   diagnostics(id) { return this.store.diagnostics(id); }
   async shutdown() { if (this.closed) return; await this.pause({ persist: false }); this.closed = true; this.store.close(); }

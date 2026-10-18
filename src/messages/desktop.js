@@ -36,7 +36,7 @@ async function installMessages({ window, directory, profiles, WebContentsView, g
       case 'scan': return service.scan({ ids: input?.ids, force: true });
       case 'open': if (typeof input !== 'string') throw new Error('账号无效'); return service.open(input);
       case 'diagnostics': return { schemaVersion: 1, applicationVersion: app.getVersion(), platform: process.platform, exportedAt: Date.now(),
-        capability: 'count-estimate', entryVerifiedByUser: true, authenticatedDomVerified: false, diagnostics: service.diagnostics(String(input)) };
+        capability: 'count-estimate', entryVerifiedByUser: true, authenticatedDomVerified: false, context: service.diagnosticContext(String(input)), diagnostics: service.diagnostics(String(input)) };
       case 'backup': {
         const result = await dialog.showSaveDialog(window, { title: '备份私信监测数据', defaultPath: `Qiye-Messages-${Date.now()}.sqlite`, filters: [{ name: 'SQLite', extensions: ['sqlite'] }] });
         if (result.canceled || !result.filePath) return { cancelled: true };
@@ -45,7 +45,7 @@ async function installMessages({ window, directory, profiles, WebContentsView, g
       }
       case 'export': {
         const report = { schemaVersion: 1, applicationVersion: app.getVersion(), exportedAt: Date.now(), capability: 'count-estimate',
-          diagnostics: service.diagnostics(String(input)) };
+          context: service.diagnosticContext(String(input)), diagnostics: service.diagnostics(String(input)) };
         const result = await dialog.showSaveDialog(window, { title: '导出私信巡检诊断', defaultPath: 'Qiye-Message-Diagnostic.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
         if (result.canceled || !result.filePath) return { cancelled: true };
         await fs.promises.writeFile(result.filePath, JSON.stringify(report, null, 2), { mode: 0o600 }); return { saved: true };

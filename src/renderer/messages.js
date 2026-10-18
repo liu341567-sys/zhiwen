@@ -10,6 +10,7 @@
   const feedback = (message, type = 'success') => window.publishingNotify?.(message, type);
   root.innerHTML = `<header class="messages-heading"><div><h1>私信汇总</h1><p>勾选账号，开启监测。有未读时，点击“查看消息”到官网处理。</p></div></header>
     <section class="messages-controls" aria-label="私信监测控制"><div class="messages-buttons"><button id="messages-start" class="button button-primary" type="button">开始监测</button><button id="messages-pause" class="button button-secondary" type="button" hidden>暂停监测</button><button id="messages-scan" class="button button-secondary" type="button">刷新一次</button><span id="messages-status" role="status">正在读取账号…</span></div><p id="messages-cycle" class="messages-muted"></p></section>
+    <p id="messages-coverage" class="messages-notice" role="status" hidden>有账号仍停留在对话中。官网可能将该对话的新消息自动标为已读，未读巡检不能保证提醒。处理完私信后，请先退出当前对话，再继续监测。</p>
     <div id="messages-stats" class="messages-stats"></div>
     <section class="messages-accounts" aria-label="账号私信列表"><div class="messages-filters"><input id="messages-search" type="search" placeholder="搜索账号" aria-label="搜索账号名称"><select id="messages-filter" aria-label="筛选状态"><option value="all">全部账号</option><option value="unread">只看有未读</option><option value="error">需要处理</option><option value="monitored">已勾选</option><option value="unsupported">暂未支持</option></select></div>
     <div class="messages-table-scroll"><table class="messages-table"><thead><tr><th>监测</th><th>账号</th><th>未读</th><th>本次变化（估算）</th><th>最近检测</th><th>状态</th><th>操作</th></tr></thead><tbody id="messages-rows"></tbody></table><p id="messages-empty" class="messages-empty" hidden>没有找到账号。请调整筛选，或先在“我的环境”添加账号。</p></div></section>
@@ -60,7 +61,7 @@
   function renderRows() {
     if (!state) return;
     const q = $('search').value.trim().toLocaleLowerCase(), platform = $('platform').value, filter = $('filter').value;
-    const errors = row => row.monitored && !['success', 'partial', 'busy', 'paused'].includes(row.result.status);
+    const errors = row => row.monitored && (row.result.activeConversation || !['success', 'partial', 'busy', 'paused'].includes(row.result.status));
     const visible = state.rows.filter(row => (!q || row.name.toLocaleLowerCase().includes(q)) && (!platform || row.platformId === platform)
       && (filter === 'all' || filter === 'unread' && row.result.unread > 0 || filter === 'error' && errors(row) || filter === 'monitored' && row.monitored || filter === 'unsupported' && !row.supported));
     const sort = $('sort').value;
@@ -76,7 +77,7 @@
       c[2].title = row.baseline ? `上次可靠基线：${row.baseline.unread}${unit(row.baseline.unit)}，${time(row.baseline.checkedAt)}；不代表当前数量` : '';
       text(c[3], row.result.first ? '首次基线' : row.result.increase === null || row.result.increase === undefined ? '待核实' : row.result.increase > 0 ? `计数 +${row.result.increase}（估算）` : '未观察到增加');
       text(c[4], time(row.result.checkedAt));
-      text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.status === 'partial' ? '已发现会话未读' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '等待检查' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '请查看详情');
+      text(c[5].firstElementChild, row.checking ? '正在巡检' : row.result.activeConversation ? '对话打开 · 监测受限' : row.result.status === 'partial' ? '已发现会话未读' : row.result.status === 'success' ? '已读取' : row.result.status === 'busy' ? '等待空闲' : row.result.status === 'unsupported' ? '暂未支持' : row.result.status === 'disabled' ? '未监测' : row.result.status === 'paused' ? '等待检查' : row.result.status === 'login_required' ? '需要登录' : row.result.status === 'verification' ? '需要验证' : '请查看详情');
       c[5].title = (row.description || '') + (row.result.visibleConversations ? `；已识别 ${row.result.visibleConversations} 个已加载会话` : ''); text(c[5].lastElementChild, row.result.retryAt > Date.now() ? `异常账号重试：${time(row.result.retryAt)}` : '');
       const buttons = c[6].querySelectorAll('button'); buttons[0].disabled = (!row.supported && !row.customEnvironment) || row.checking; text(buttons[0], row.customEnvironment && !row.supported ? '这是抖音账号' : '查看消息'); buttons[1].disabled = !row.monitored || state.checking; buttons[3].hidden = !row.customEnvironment || !row.platformId; text(buttons[3], '取消抖音关联');
     }
@@ -97,7 +98,8 @@
     if (document.activeElement !== $('interval')) $('interval').value = state.config.intervalSeconds;
     if (document.activeElement !== $('concurrency')) $('concurrency').value = state.config.concurrency;
     $('sound').checked = state.config.sound; $('system').checked = state.config.systemNotifications; $('resume').checked = state.config.autoResume;
-    const needsAttention = state.rows.filter(r => r.monitored && !['success','partial','paused','busy'].includes(r.result.status)).length;
+    const needsAttention = state.rows.filter(r => r.monitored && (r.result.activeConversation || !['success','partial','paused','busy'].includes(r.result.status))).length;
+    $('coverage').hidden = !state.rows.some(r => r.monitored && r.result.activeConversation);
     const values = [state.summary.monitored, state.summary.observedAccounts ? state.summary.unreadAccounts : '—', needsAttention];
     [...$('stats').children].forEach((c,i) => { text(c.children[1], values[i]); text(c.children[2], i === 1 ? '按已读取的会话统计' : i === 2 && needsAttention ? '登录或检查详情后重试' : ''); });
     const platform = $('platform'), current = platform.value;

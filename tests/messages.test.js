@@ -228,3 +228,13 @@ test('legacy hour-long manual backoff is ignored without losing baseline; new-po
   f.counts.a={status:'timeout'};await f.service.scan();const due=f.service.state().rows[0].result.retryAt;await f.service.shutdown();
   const g=await timedFixture(t,{directory:dir});t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));await g.service.scan();assert.equal(g.service.state().rows[0].result.retryAt,due);assert.equal(g.service.state().rows[0].baseline.unread,9);
 });
+test('an open conversation is exposed as a coverage limit, never invented as unread or a new-message alert', async t => {
+  const f=await fixture(t); await f.service.scan(); f.counts.a=sample(0,{activeConversation:true}); await f.service.scan({force:true});
+  const state=f.service.state(),row=state.rows[0]; assert.equal(row.result.activeConversation,true);assert.equal(row.result.unread,0);assert.equal(state.summary.anomalies,1);assert.equal(f.notifications.length,0);assert(row.description.includes('自动标为已读'));
+  f.counts.a=sample(0);await f.service.scan({force:true});assert.equal(f.service.state().rows[0].result.activeConversation,false);assert.equal(f.service.state().summary.anomalies,0);
+});
+test('diagnostic context includes cadence and conversation coverage without environment identifiers or message contents', async t => {
+  const f=await timedFixture(t);f.counts.a=sample(0,{activeConversation:true,text:'secret private message',cookie:'secret credential'});await f.service.start();
+  const context=f.service.diagnosticContext('a');assert.equal(context.activeConversation,true);assert.equal(context.intervalSeconds,30);assert.equal(context.nextAutomaticAt,f.service.nextAt);assert.equal(context.unread,0);assert.equal(context.automaticFailures,0);
+  for(const value of ['secret','账号 A','environmentId'])assert(!JSON.stringify(context).includes(value));
+});

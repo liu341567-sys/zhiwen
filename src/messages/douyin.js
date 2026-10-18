@@ -23,6 +23,13 @@ function observe() {
     numeric: /^\d+\+?$/.test((n.textContent || '').trim()) ? (n.textContent || '').trim() : null,
     label: /^(?:全部消息|未读消息|私信|消息|未读|全部)$/.test((n.getAttribute('aria-label') || '').trim()) ? n.getAttribute('aria-label').trim() : null
   }));
+  // An open composer is a coverage warning, not evidence of unread arrivals.
+  // Inspect public control labels/structure only: never values or chat text.
+  const editors = [...document.querySelectorAll('textarea,input:not([type="password"]),[contenteditable="true"],[role="textbox"]')].slice(0,200).filter(visible);
+  const labeledComposer = editors.some(n => /(?:请输入|输入|发送).{0,8}(?:消息|私信|聊天)|发消息/.test([n.getAttribute('placeholder'),n.getAttribute('aria-label'),n.getAttribute('data-placeholder')].filter(Boolean).join(' ')));
+  const history = [...document.querySelectorAll('[role="log"],[class*="message-list" i],[class*="messageList"],[class*="chat-history" i],[class*="chatHistory"],[data-message-id],[data-msg-id]')].slice(0,300).some(visible);
+  const send = [...document.querySelectorAll('button,[role="button"]')].slice(0,200).filter(visible).some(n => /^(?:发送|发送消息)$/.test((n.textContent || '').trim()));
+  diagnostic.activeConversation = labeledComposer && (history || send) || history && send && editors.some(n => !/搜索|查找/.test(n.getAttribute('placeholder') || n.getAttribute('aria-label') || ''));
   const sources = [];
   for (const node of [...document.querySelectorAll('a,button,[role="tab"],[role="button"],[aria-label],h1,h2,h3')].slice(0, 4000)) {
     if (!visible(node)) continue;
@@ -62,7 +69,7 @@ function observe() {
   const rawBadges = [...document.querySelectorAll(badgeSelector)].slice(0, 5000).filter(n => visible(n) && valueOf(n));
   const badges = rawBadges.filter(n => !rawBadges.some(child => child !== n && n.contains(child)));
   const rowSelector = '[role="listitem"],[class*="conversation-item" i],[class*="conversationItem"],[class*="session-item" i],[class*="sessionItem"],[class*="chat-item" i],[class*="chatItem"],[data-conversation-id],[data-session-id],[class*="session" i][class*="item" i],[class*="conversation" i][class*="item" i],[class*="chat" i][class*="item" i],[class*="im-list-item" i]';
-  const excluded = 'nav,header,aside,[role="navigation"],[role="tablist"],[role="tab"],[role="menu"]';
+  const excluded = 'nav,header,aside,[role="navigation"],[role="tablist"],[role="tab"],[role="menu"],[role="log"],[data-message-id],[data-msg-id]';
   const avatarSelector = 'img,[class*="avatar" i]';
   // Hashed/renamed row classes are common. A conservative fallback requires a
   // repeated sibling structure, an avatar per row and a single badge cluster.
@@ -137,7 +144,7 @@ async function read(wc, signal, { timeoutMs = 8000, identitySalt, environmentId 
     const conversations = (sample.conversation?.entries || []).map(e => ({ key: e.identity && identitySalt && environmentId ? createHmac('sha256', identitySalt).update(environmentId + ':' + e.identity).digest('hex') : null,
       unread: e.unread, exact: e.exact, unit: e.unit }));
     const { conversation, ...publicSample } = sample;
-    return { ...publicSample, conversations, visibleConversations: conversation?.visibleConversations || 0, completeList: conversation?.complete === true, jumpUrl: launchUrl };
+    return { ...publicSample, activeConversation: sample.diagnostic?.activeConversation === true, conversations, visibleConversations: conversation?.visibleConversations || 0, completeList: conversation?.complete === true, jumpUrl: launchUrl };
   } catch (error) { return { status: signal.aborted ? 'aborted' : error.code === 'timeout' ? 'timeout' : 'page_changed' }; }
   finally { clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort); }
 }

@@ -107,6 +107,16 @@ async function run(scale) {
     const jumped = await shell.evaluate(() => browserAPI.getState()); check('message shortcut is bound to B environment ID and official list route', () => { assert.equal(jumped.activeId,b.id); assert.equal(jumped.openTabs.find(t=>t.id===b.id).url,chat); });
     await until(() => shell.evaluate(() => document.querySelector('.app-shell').dataset.module === 'environment'), 'jump updates renderer navigation');
     const count = (await original()).length; await command('open',b.id); assert.equal((await original()).length,count); checks++;
+    const chatPage=app.windows().find(p=>p.url()===chat);await chatPage.waitForFunction(()=>window.ready);
+    await chatPage.evaluate(()=>{const log=document.createElement('div');log.setAttribute('role','log');log.innerHTML='<div class="message-row"><span class="avatar">A</span><span class="badge">99</span></div><div class="message-row"><span class="avatar">B</span><span class="badge">100</span></div>';log.append(document.createTextNode('PRIVATE_CHAT_DO_NOT_EXPORT'));document.body.append(log);const input=document.createElement('textarea');input.id='chat-draft';input.placeholder='请输入消息';input.value='PRIVATE_DRAFT_DO_NOT_EXPORT';document.body.append(input);const send=document.createElement('button');send.textContent='发送';send.onclick=()=>window.sent=true;document.body.append(send);window.conversationToken=crypto.randomUUID();});
+    const conversationToken=await chatPage.evaluate(()=>window.conversationToken);
+    await shell.locator('[data-module="data"]').click(); const conversationCheck=await command('scan');
+    check('an open original conversation is flagged as limited coverage while preserving real unread counts',()=>{const r=conversationCheck.rows.find(r=>r.id===b.id);assert.equal(r.result.activeConversation,true);assert.equal(r.result.unread,5);assert.equal(r.result.visibleConversations,0);assert(r.description.includes('自动标为已读'));});
+    await shell.locator('#messages-coverage').waitFor({state:'visible'});
+    const retainedChat=await chatPage.evaluate(()=>({token:window.conversationToken,draft:document.getElementById('chat-draft').value,sent:!!window.sent}));
+    check('read-only conversation detection preserves the page, draft and send state',()=>assert.deepEqual(retainedChat,{token:conversationToken,draft:'PRIVATE_DRAFT_DO_NOT_EXPORT',sent:false}));
+    const conversationDiagnostic=await command('diagnostics',b.id);
+    check('conversation diagnostic provides coverage without exporting chat text or composer values',()=>{assert.equal(conversationDiagnostic.context.activeConversation,true);assert(!JSON.stringify(conversationDiagnostic).includes('DO_NOT_EXPORT'));});
     await app.close(); app = null; await launch(); const restored = await command('state');
     check('restart restores settings and count baselines, with auto-resume opt-in only', () => { assert.equal(restored.config.sound,false); assert.equal(restored.config.intervalSeconds,120); assert.equal(restored.running,false); assert.equal(restored.rows.find(r=>r.id===b.id).baseline.unread,5); });
     console.log(JSON.stringify({ messageSummary:{scale,checks:checks-before,...measure} }));
