@@ -22,7 +22,7 @@ class AnalyticsService {
     const allTasks=this.store.tasks().filter(t=>taskAccounts.some(r=>r.id===t.environmentId) && t.createdAt>=f.start && t.createdAt<=f.end && (!f.status || t.status===f.status));
     return{config:this.config,running:this.running,checking:!!this.scanJob,nextAt:this.nextAt,definitions,filters:f,rows:rows.slice((f.page-1)*f.pageSize,f.page*f.pageSize),total:rows.length,
       accounts:profiles.map(p=>({id:p.id,name:p.name,platformId:p.platformId,supported:this.adapters.has(p.platformId),selected:this.selected(p),custom:!this.profiles().find(raw=>raw.id===p.id)?.platformId})),
-      summary:{connected:eligible.length,success:eligible.filter(r=>['success','partial'].includes(r.status)).length,followers:aggregate(eligible,'followers'),works:aggregate(eligible,'works'),likes:aggregate(eligible,'likes'),periodPlays:aggregate(eligible,'periodPlays'),periodLikes:aggregate(eligible,'periodLikes'),growth:eligible.length && eligible.every(r=>r.growth)?eligible.reduce((n,r)=>n+r.growth.value,0):null,lastCollectedAt:Math.max(0,...eligible.map(r=>r.lastSuccessAt||0))||null},
+      summary:{connected:eligible.length,success:eligible.filter(r=>['success','partial'].includes(r.status)).length,followers:aggregate(eligible,'followers'),works:aggregate(eligible,'works'),likes:aggregate(eligible,'likes'),periodPlays:aggregate(eligible,'periodPlays'),periodLikes:aggregate(eligible,'periodLikes'),growth:eligible.length && eligible.every(r=>r.growth)?eligible.reduce((n,r)=>n+r.growth.value,0):null,lastCollectedAt:Math.max(0,...eligible.map(r=>r.lastSuccessAt||0))||null,rankings:eligible.filter(r=>r.growth).sort((a,b)=>b.growth.value-a.growth.value).slice(0,5).map(r=>({id:r.id,name:r.name,growth:r.growth}))},
       tasks:allTasks.slice((f.page-1)*f.pageSize,f.page*f.pageSize),taskTotal:allTasks.length,
       capabilities:[...this.adapters.values()].map(a=>({id:a.id,name:a.name,verified:a.verified===true,note:'仅采集官网可见、具有明确标签的累计指标和当前加载的作品；真实登录页面待核对'}))};
   }
@@ -37,7 +37,7 @@ class AnalyticsService {
     if(!this.accounts().some(p=>p.id===id) || (work && !/^\d{6,30}$/.test(work)))throw new Error('账号或作品无效');
     const history=this.store.history(id,work),limit=500;
     // Bucket by local observation day; keep last actual observation, no fill.
-    const days=new Map();for(const row of history)days.set(new Date(row.at+8*3600000).toISOString().slice(0,10),row);
+    const days=new Map();for(const row of history){const day=new Date(row.at+8*3600000).toISOString().slice(0,10),previous=days.get(day);days.set(day,{...row,metrics:{...(previous?.metrics || {}),...row.metrics}});}
     return{account:this.store.account(id),history:[...days.values()].slice(-limit),observations:history.length,coverage:'最近 500 个有采集记录的日期；没有记录的日期不补 0',tasks:this.store.tasks().filter(t=>t.environmentId===id).slice(0,20)};
   }
   schedule(reset=false){this.clearTimer(this.timer);this.timer=null;if(!this.running || this.closed){this.nextAt=null;return;}const now=this.now();if(reset || this.nextAt===null)this.nextAt=now+this.config.intervalSeconds*1000;if(this.scanJob && this.nextAt<=now)return;this.timer=this.setTimer(()=>{this.timer=null;if(this.running && !this.scanJob)this.scan({automatic:true}).catch(()=>{});},Math.max(0,this.nextAt-now));this.timer.unref?.();}

@@ -47,3 +47,12 @@ test('automatic timer consumes overdue deadlines once and schedules the original
 test('collector concurrency never exceeds configured limit and same environment is not duplicated',async t=>{
   let active=0,max=0;const f=await fixture(t,{adapters:[{...douyin,readPage:async(_,signal,kind)=>{active++;max=Math.max(max,active);await new Promise(r=>setImmediate(r));active--;return{status:'observed',metrics:kind==='account'?{followers:m('followers',1),works:m('works',1),likes:m('likes',1)}:{},works:[]};}}]});f.service.update({concurrency:1});await f.service.scan();assert.equal(max,1);assert.equal(f.service.store.tasks().length,2);
 });
+test('daily history retains the latest actual observation of each metric through partial snapshots',async t=>{
+  const f=await fixture(t);f.service.store.save(p,{status:'partial',metrics:{followers:m('followers',100,at)}},task(),at);
+  f.service.store.save(p,{status:'partial',metrics:{likes:m('likes',40,at+1000)}},task(at+1),at+1000);
+  const d=f.service.detail('a');assert.equal(d.history.length,1);assert.equal(d.history[0].metrics.followers.value,100);assert.equal(d.history[0].metrics.followers.collectedAt,at);assert.equal(d.history[0].metrics.likes.collectedAt,at+1000);assert.equal(d.observations,2);
+});
+test('growth rankings include filtered accounts beyond the first result page',async t=>{
+  const f=await fixture(t);for(let i=0;i<60;i++){const profile={id:'rank-'+i,name:'排名 '+i,platformId:'douyin'};f.profiles.push(profile);f.service.store.save(profile,{status:'partial',metrics:{followers:m('followers',100,at-8*86400000)}},{id:'old-'+i,environmentId:profile.id,createdAt:at-8*86400000},at-8*86400000);f.service.store.save(profile,{status:'partial',metrics:{followers:m('followers',100+i,at-1000-i)}},{id:'new-'+i,environmentId:profile.id,createdAt:at-1000-i},at-1000-i);}
+  const state=f.service.state();assert.equal(state.rows.length,50);assert(!state.rows.some(r=>r.id==='rank-59'));assert.equal(state.summary.rankings[0].id,'rank-59');assert.equal(state.summary.rankings[0].growth.value,59);
+});

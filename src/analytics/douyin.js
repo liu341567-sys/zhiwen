@@ -48,7 +48,14 @@ function observe() {
     const values={};
     if(headers)for(const [key,names]of Object.entries(workLabels)){const index=headers.findIndex(h=>names.includes(h));if(index>=0 && cols[index] && number.test(text(cols[index])))values[key]=text(cols[index]);}
     if(!headers)for(const el of [...row.querySelectorAll('span,div,p')].filter(visible))for(const[key,names]of Object.entries(workLabels))if(names.includes(text(el))){const p=el.parentElement;if(text(p).length<50){const nums=[...p.children].filter(n=>number.test(text(n)));if(nums.length===1)values[key]=text(nums[0]);}}
-    seen.add(ids[0]);works.push({id:ids[0],title,metrics:values,publishedAt:date(text(row))});
+    // Dates embedded in a title, an update time or an unrelated cell are not
+    // evidence of publication. Require the official publication column/label.
+    const dateColumn=headers?.findIndex(h=>['发布时间','作品发布时间'].includes(h));
+    let publishedAt=dateColumn>=0 && cols[dateColumn]?date(text(cols[dateColumn])):null;
+    if(!publishedAt)for(const el of [...row.querySelectorAll('span,p,time')].filter(visible)){
+      const t=text(el);if(t.length<60 && /^(?:发布时间|发布于)\s*[:：]?\s*20\d{2}/.test(t)){publishedAt=date(t);break;}
+    }
+    seen.add(ids[0]);works.push({id:ids[0],title,metrics:values,publishedAt});
   };
   for(const table of [...document.querySelectorAll('table,[role="table"],[role="grid"]')].filter(visible)) {
     const headers=[...table.querySelectorAll('thead th,[role="columnheader"]')].map(text);
