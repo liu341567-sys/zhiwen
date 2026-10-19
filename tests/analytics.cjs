@@ -18,7 +18,7 @@ async function run(scale){
   try{
     await launch();await shell.evaluate(id=>browserAPI.openProfile(id),a.id);let original;await until(()=>{original=app.windows().find(p=>p.url()===editing);return original;},'original page');await original.waitForFunction(()=>window.ready);
     await original.evaluate(()=>{document.cookie='identity=A;Path=/;Secure';localStorage.setItem('account','A');document.querySelector('#draft').value='personal draft never captured';});const token=await original.evaluate(()=>window.token);
-    await shell.locator('[data-module="data"]').click();await shell.locator('#analytics-title').waitFor();
+    await shell.locator('button[data-module="data"]').click();await shell.locator('#analytics-title').waitFor();
     check('data navigation groups retain private messages and eight operating pages',()=>{});assert.equal(await shell.locator('[data-data-page]').count(),9);assert.equal(await shell.locator('#analytics-title').textContent(),'数据总览');
     const empty=await command('state');check('initial state uses null rather than simulated zero',()=>{assert.equal(empty.summary.followers.value,null);assert.equal(empty.rows.find(r=>r.id===c.id).status,'unsupported');});
     await set(a.id,100);await set(b.id,200);const first=await command('scan');
@@ -31,9 +31,9 @@ async function run(scale){
     const browser=await shell.evaluate(()=>browserAPI.getState());check('closed account stays closed; startup URL and platform bindings remain unchanged',()=>{assert(!browser.openTabs.some(t=>t.id===b.id));assert.equal(browser.profiles.find(p=>p.id===a.id).startUrl,a.startUrl);assert.equal(browser.profiles.find(p=>p.id===a.id).platformId,'douyin');});
     await shell.locator('[data-data-page="accounts"]').click();await shell.waitForFunction(()=>document.querySelector('#analytics-accounts tbody tr'));const accountText=await shell.locator('#analytics-accounts').textContent();assert(accountText.includes('账号 A')&&accountText.includes('100'));checks++;
     await shell.locator('[data-data-page="works"]').click();await shell.waitForFunction(()=>document.querySelectorAll('#analytics-works tbody tr').length===4);checks++;
-    await shell.locator('#sidebar-toggle').click();await shell.locator('[data-module="publish"]').click();await shell.locator('[data-module="data"]').click();check('module switching never expands an explicitly collapsed sidebar',()=>{});assert(await shell.evaluate(()=>document.querySelector('.app-shell').classList.contains('sidebar-collapsed')));
-    await shell.locator('[data-module="data"]').click({button:'right'});await shell.locator('[data-data-page="trends"]').click();await shell.locator('#analytics-trend-show').click();await shell.locator('#analytics-chart svg').waitFor();checks++;
-    await shell.locator('[data-module="data"]').click({button:'right'});await shell.locator('[data-data-page="reports"]').click();
+    await shell.locator('#sidebar-toggle').click();await shell.locator('button[data-module="publish"]').click();await shell.locator('button[data-module="data"]').click();check('module switching never expands an explicitly collapsed sidebar',()=>{});assert(await shell.evaluate(()=>document.querySelector('.app-shell').classList.contains('sidebar-collapsed')));
+    await shell.locator('button[data-module="data"]').click({button:'right'});await shell.locator('[data-data-page="trends"]').click();await shell.locator('#analytics-trend-show').click();await shell.locator('#analytics-chart svg').waitFor();checks++;
+    await shell.locator('button[data-module="data"]').click({button:'right'});await shell.locator('[data-data-page="reports"]').click();
     const csvFile=path.join(dir,'report.csv'),excelFile=path.join(dir,'report.xlsx');await exportTo('export',{format:'csv',filters:{ids:[a.id]}},csvFile);await exportTo('export',{format:'xlsx',filters:{ids:[a.id]}},excelFile);
     const csv=fs.readFileSync(csvFile,'utf8'),Excel=require('exceljs'),book=new Excel.Workbook();await book.xlsx.readFile(excelFile);
     check('CSV and Excel reports use selected account and contain provenance/definitions',()=>{assert(csv.includes('账号 A'));assert(!csv.includes('账号 B'));assert(csv.includes('creator.douyin.com'));assert(csv.includes('口径说明'));assert.equal(book.worksheets.length,1);assert(book.worksheets[0].rowCount>5);});
@@ -48,7 +48,7 @@ async function run(scale){
     const source=await original.evaluate(()=>window.token);assert.equal(source,token);checks++;
     const measurement=await shell.evaluate(()=>({dpr:devicePixelRatio,width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,right:document.getElementById('analytics-module').getBoundingClientRect().right}));check('data pages stay within viewport at selected display scale',()=>{assert(!measurement.overflow);assert(measurement.right<=measurement.width+1);});fs.mkdirSync(out,{recursive:true});await shell.screenshot({path:path.join(out,`analytics-${scale}.png`)});
     await command('settings',{selectedIds:[a.id],intervalSeconds:900,autoResume:false});await close();await launch();const restored=await command('state');check('normal restart preserves metrics, works, settings and stays paused by default',()=>{assert.equal(restored.running,false);assert.equal(restored.config.intervalSeconds,900);assert.deepEqual(restored.config.selectedIds,[a.id]);assert.equal(restored.rows.find(r=>r.id===a.id).metrics.followers.value,110);});assert.equal((await command('works')).total,4);checks++;
-    await shell.locator('[data-module="data"]').click();const folded=await shell.evaluate(()=>document.querySelector('.app-shell').classList.contains('sidebar-collapsed'));assert(folded);checks++;
+    await shell.locator('button[data-module="data"]').click();const folded=await shell.evaluate(()=>document.querySelector('.app-shell').classList.contains('sidebar-collapsed'));assert(folded);checks++;
     console.log(JSON.stringify({analyticsSummary:{scale,...measurement,checks:checks-before,realAuthenticatedPage:false,fixtureOnly:true}}));
   }finally{await close().catch(()=>{});fs.rmSync(dir,{recursive:true,force:true});}
 }

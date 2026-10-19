@@ -10,7 +10,7 @@ class AnalyticsService {
     Object.assign(this,{profiles,getView,releaseView,reserveAccount,isBusy,reveal,changed,notify,now,setTimer,clearTimer});
     this.store=new AnalyticsStore(path.join(directory,'analytics'));this.config=this.store.settings();this.adapters=new Map(adapters.map(a=>[a.id,a]));this.queue=new Queue({concurrency:this.config.concurrency});this.controllers=new Map();this.running=false;this.closed=false;this.scanJob=null;this.nextAt=null;this.timer=null;
   }
-  initialize(){if(this.config.enabled && this.config.autoResume)this.start().catch(()=>{});}
+  initialize(){if(this.config.enabled && this.config.autoResume)this.start().catch(()=>{});this.changed();}
   accounts(){return this.profiles().map(p=>({...p,platformId:p.platformId || this.config.platformOverrides[p.id] || null}));}
   selected(p){return this.adapters.has(p.platformId) && (this.config.selectedIds===null || this.config.selectedIds.includes(p.id));}
   update(input){if(this.closed)throw new Error('采集服务已关闭');if(Object.hasOwn(input||{},'enabled'))throw new Error('请使用开始或暂停按钮');const old=this.config.intervalSeconds;this.config=this.store.settings(input);this.queue.concurrency=this.config.concurrency;for(const[id,c]of this.controllers)if(!this.accounts().some(p=>p.id===id && this.selected(p)))c.abort();if(this.running)this.schedule(old!==this.config.intervalSeconds);this.changed();return this.state();}

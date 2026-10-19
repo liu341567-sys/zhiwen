@@ -5,17 +5,21 @@ const {AnalyticsService}=require('./service');
 const {MessageBrowser}=require('../messages/browser');
 const {csv,safeCell}=require('./model');
 const {scrub}=require('../developer/data');
-function reportRows(service,input){
-  const state=service.state({...input,page:1}),all=[];for(let page=1;page<=Math.ceil(state.total/50);page++)all.push(...service.state({...input,page}).rows);
-  const f=state.filters,fmt=m=>m?`${m.precision==='rounded'?'约 ':''}${m.value}`:'暂无数据';
-  return [
-    ['栖页运营数据报表','统计开始（北京时间）',new Date(f.start).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}),'统计结束（北京时间）',new Date(f.end).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})],
-    ['口径说明','粉丝/作品/获赞为截至统计结束前最后一次可用快照的累计值。粉丝变化为起点前有效快照与期内最后快照之差；不等于平台日统计。作品仅采集当前加载页，未加载作品不视为 0。'],
-    ['筛选','平台',f.platformId||'全部','账号',f.ids?.join(' / ')||'全部','搜索',f.search,'状态',f.status||'全部'],
-    ['数据类型','环境ID','平台','账号','作品ID/标题','粉丝总数','粉丝变化','累计作品数','累计获赞','播放量','点赞量','评论量','收藏量','分享量','采集状态','采集时间（北京时间）','数据来源/缺失说明'],
-    ...all.map(r=>['账号',r.id,r.platformId||'自定义',r.name,'',fmt(r.metrics.followers),r.growth?.value??'暂无数据',fmt(r.metrics.works),fmt(r.metrics.likes),'暂不支持','暂不支持','暂不支持','暂不支持','暂不支持',r.status,r.lastSuccessAt?new Date(r.lastSuccessAt).toISOString():'尚未采集',JSON.stringify({metrics:r.metrics,growth:r.growth,reason:r.reason||null})]),
-    ...(()=>{const rows=[],first=service.works({...input,page:1});for(let page=1;page<=Math.ceil(first.total/50);page++)for(const w of service.works({...input,page}).rows)rows.push(['作品',w.environmentId,w.platformId,w.name,`${w.id} / ${w.title}`,'','','','',fmt(w.metrics.plays),fmt(w.metrics.workLikes),fmt(w.metrics.comments),fmt(w.metrics.favorites),fmt(w.metrics.shares),w.status,new Date(w.checkedAt).toISOString(),JSON.stringify({url:w.url,metrics:w.metrics,coverage:'当前加载页；累计指标；发布时间未知时不计入周期新增作品'})]);return rows;})()
+const reportMetrics={followers:'粉丝总数',growth:'粉丝快照变化',works:'作品总数',likes:'累计获赞',periodPlays:'周期播放量',periodLikes:'周期点赞量',plays:'作品累计播放量',workLikes:'作品点赞量',comments:'作品评论量',favorites:'作品收藏量',shares:'作品分享量'};
+function reportRows(service,input,selection=Object.keys(reportMetrics)){
+  if(!Array.isArray(selection)||!selection.length||selection.length>20||selection.some(k=>!Object.hasOwn(reportMetrics,k)))throw new Error('请至少选择一个有效报表指标');
+  const selected=[...new Set(selection)],state=service.state({...input,page:1}),all=[];
+  for(let page=1;page<=Math.ceil(state.total/50);page++)all.push(...service.state({...input,page}).rows);
+  const f=state.filters,fmt=m=>m?`${m.precision==='rounded'?'约 ':''}${m.value}`:'暂无数据',date=t=>t?new Date(t).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚未采集';
+  const rows=[
+    ['栖页运营数据报表','统计开始（北京时间）',date(f.start),'统计结束（北京时间）',date(f.end)],
+    ['口径说明','累计值取截至统计结束前的有效快照；周期指标按官方绝对日期范围精确匹配。粉丝变化为起点前有效快照与期内最后快照之差，非平台日统计。作品仅当前加载页，不代表全量。'],
+    ['筛选','平台',f.platformId||'全部','账号',f.ids?.join(' / ')||'全部','搜索',f.search,'状态',f.status||'全部','指标',selected.map(k=>reportMetrics[k]).join(' / ')],
+    ['数据类型','环境ID','平台','账号','作品ID','作品标题',...selected.map(k=>reportMetrics[k]),'采集状态','最近数据时间（北京时间）','来源与口径/缺失说明'],
+    ...all.map(r=>['账号',r.id,r.platformId||'自定义',r.name,'','',...selected.map(k=>k==='growth'?r.growth?.value??'暂无数据':['plays','workLikes','comments','favorites','shares'].includes(k)?'不适用':fmt(r.metrics[k])),r.status,date(r.lastSuccessAt),JSON.stringify({metrics:Object.fromEntries(selected.filter(k=>r.metrics[k]).map(k=>[k,r.metrics[k]])),growth:selected.includes('growth')?r.growth:null,reason:r.reason||null})])
   ];
+  const first=service.works({...input,page:1});for(let page=1;page<=Math.ceil(first.total/50);page++)for(const w of service.works({...input,page}).rows)rows.push(['作品',w.environmentId,w.platformId,w.name,w.id,w.title,...selected.map(k=>['plays','workLikes','comments','favorites','shares'].includes(k)?fmt(w.metrics[k]):'不适用'),w.status,date(w.checkedAt),JSON.stringify({url:w.url,metrics:Object.fromEntries(selected.filter(k=>w.metrics[k]).map(k=>[k,w.metrics[k]])),coverage:'当前加载页；累计指标；发布时间未知时不计入周期新增作品'})]);
+  return rows;
 }
 async function installAnalytics(options){
   const {window,scheduler,debugging,toast,reveal}=options;
@@ -43,7 +47,7 @@ async function installAnalytics(options){
       case 'work-open':{const work=service.store.works().find(w=>w.environmentId===input?.id&&w.id===input?.work);if(!work)throw new Error('作品记录无效');await service.cancelAccount(work.environmentId);if(service.isBusy(work.environmentId))throw new Error('账号正在执行其他任务');await reveal(work.environmentId,work.url);return{opened:true};}
       case 'delete-tasks':if(!Array.isArray(input?.ids)||input.ids.some(id=>typeof id!=='string'))throw new Error('记录选择无效');service.store.deleteTasks(input.ids);service.changed();return service.state();
       case 'export':{
-        if(!['csv','xlsx'].includes(input?.format))throw new Error('报表格式无效');const rows=reportRows(service,input.filters);
+        if(!['csv','xlsx'].includes(input?.format))throw new Error('报表格式无效');const rows=reportRows(service,input.filters,input.metrics);
         const result=await dialog.showSaveDialog(window,{title:'导出当前筛选的运营数据',defaultPath:`Qiye-Analytics-${Date.now()}.${input.format}`,filters:[{name:input.format.toUpperCase(),extensions:[input.format]}]});if(result.canceled||!result.filePath)return{cancelled:true};
         if(input.format==='csv')await fs.promises.writeFile(result.filePath,csv(rows),{mode:0o600});else{const Excel=require('exceljs'),book=new Excel.Workbook(),sheet=book.addWorksheet('运营数据');for(const row of rows)sheet.addRow(row.map(safeCell));sheet.views=[{state:'frozen',ySplit:4}];sheet.columns.forEach(c=>{c.width=24;});await book.xlsx.writeFile(result.filePath);}return{saved:true};
       }
