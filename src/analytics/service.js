@@ -81,7 +81,7 @@ class AnalyticsService {
           try{const wc=await this.getView(p.id,local.signal,{...adapter,launchUrl:kind==='account'?adapter.operation:kind==='home'?adapter.home:adapter.management});sample=await adapter.readPage(wc,local.signal,kind,{now:this.now});break;}
           catch(e){if(local.signal.aborted || !['timeout','load_error'].includes(e.code) || attempt===1)throw e;log('warning','临时加载异常，仅重试一次');}
           finally{this.releaseView(p.id);}
-        }}catch(e){if(local.signal.aborted)throw e;sample={status:'failed',metrics:{},works:[],diagnostic:{route:kind,reason:['timeout','load_error','wrong_page','login_required'].includes(e.code)?e.code:'read_error'}};log('warning',`${kind} 页面未读取成功，保留本次其他页面的有效数据`);}
+        }}catch(e){if(local.signal.aborted)throw e;sample={status:['login_required','verification'].includes(e.code)?e.code:'failed',metrics:{},works:[],diagnostic:{route:kind,reason:['timeout','load_error','wrong_page','login_required'].includes(e.code)?e.code:'read_error'}};log('warning',`${kind} 页面未读取成功，保留本次其他页面的有效数据`);}
         samples.push(sample);if(['login_required','verification'].includes(sample.status))break;
       }
       if(local.signal.aborted)throw Object.assign(new Error('采集已取消或超时'),{code:'aborted'});
