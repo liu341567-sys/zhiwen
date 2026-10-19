@@ -60,6 +60,9 @@ jobs:
       - name: Test read-only message monitor at all display scales
         shell: pwsh
         run: ./.github/scripts/test-messages.ps1
+      - name: Test operating data collection and reports at all display scales
+        shell: pwsh
+        run: ./.github/scripts/test-analytics.ps1
       - name: Test Chromium session isolation on Windows
         run: npm run test:integration
       - name: Test UI at 100%, 125% and 150% display scale

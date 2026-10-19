@@ -79,18 +79,70 @@
     "shortName": "数据",
     "icon": "chart",
     "mode": "messages",
-    "description": "账号与内容数据的管理入口，功能正在规划中。",
+    "description": "本地运营数据、采集任务与私信管理。",
     "items": [
+      {
+        "id": "overview",
+        "label": "数据总览",
+        "icon": "chart",
+        "group": "运营数据",
+        "analytics": true
+      },
+      {
+        "id": "accounts",
+        "label": "账号数据",
+        "icon": "layers",
+        "group": "运营数据",
+        "analytics": true
+      },
+      {
+        "id": "works",
+        "label": "作品数据",
+        "icon": "video",
+        "group": "运营数据",
+        "analytics": true
+      },
+      {
+        "id": "trends",
+        "label": "趋势分析",
+        "icon": "chart",
+        "group": "分析与报表",
+        "analytics": true
+      },
+      {
+        "id": "compare",
+        "label": "账号对比",
+        "icon": "grid",
+        "group": "分析与报表",
+        "analytics": true
+      },
+      {
+        "id": "reports",
+        "label": "数据报表",
+        "icon": "article",
+        "group": "分析与报表",
+        "analytics": true
+      },
+      {
+        "id": "tasks",
+        "label": "数据采集任务",
+        "icon": "clock",
+        "group": "采集管理",
+        "analytics": true
+      },
+      {
+        "id": "config",
+        "label": "采集配置",
+        "icon": "sliders",
+        "group": "采集管理",
+        "analytics": true
+      },
       {
         "id": "messages",
         "label": "私信汇总",
         "icon": "chat",
+        "group": "消息管理",
         "messages": true
-      },
-      {
-        "id": "overview",
-        "label": "数据总览",
-        "icon": "chart"
       }
     ]
   },

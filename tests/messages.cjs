@@ -30,7 +30,7 @@ async function run(scale) {
     let page; await until(() => { page = app.windows().find(p => p.url() === home); return page; }, 'original account page'); await page.waitForFunction(() => window.ready);
     await page.evaluate(() => { document.cookie = 'account=A;Path=/;Secure'; localStorage.setItem('preserved', 'A'); document.getElementById('editing').value = 'draft survives'; });
     const token = await page.evaluate(() => window.originalToken), native = await original();
-    await shell.locator('[data-module="data"]').click(); await shell.locator('#messages-start').waitFor();
+    await shell.locator('[data-module="data"]').click(); await shell.locator('[data-data-page="messages"]').click(); await shell.locator('#messages-start').waitFor();
     await set(a.id, 8); await set(b.id, 3); const first = await command('scan');
     check('initial samples build silent per-account baselines', () => { assert.equal(first.summary.unread.messages, 11); assert.equal(first.summary.newMessages, null); assert.equal(first.rows.find(r => r.id === c.id).result.status, 'unsupported'); });
     const evidence = await app.evaluate(() => ({ pages: globalThis.__messageFixture.pages, notifications: globalThis.__messageFixture.notifications.length }));

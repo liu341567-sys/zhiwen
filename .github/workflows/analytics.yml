@@ -1,0 +1,29 @@
+name: Windows operating data collection
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/analytics/**
+      - src/renderer/analytics.*
+      - src/renderer/navigation.js
+      - tests/analytics*
+      - .github/workflows/analytics.yml
+      - .github/scripts/test-analytics.ps1
+permissions:
+  contents: read
+jobs:
+  analytics:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run setup:electron
+      - name: Test operating data collection, isolated Sessions and exports at three display scales
+        shell: pwsh
+        run: ./.github/scripts/test-analytics.ps1

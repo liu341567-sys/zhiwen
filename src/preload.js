@@ -51,3 +51,8 @@ contextBridge.exposeInMainWorld('messagesAPI', {
   onOpened: callback => { const fn = () => callback(); ipcRenderer.on('messages:opened', fn); return () => ipcRenderer.removeListener('messages:opened', fn); },
   onSummary: callback => { const fn = () => callback(); ipcRenderer.on('messages:summary', fn); return () => ipcRenderer.removeListener('messages:summary', fn); }
 });
+
+contextBridge.exposeInMainWorld('analyticsAPI', {
+  command: (name, input) => ipcRenderer.invoke('analytics:command', name, input),
+  onChanged: callback => { const fn=()=>callback(); ipcRenderer.on('analytics:changed',fn); return ()=>ipcRenderer.removeListener('analytics:changed',fn); }
+});

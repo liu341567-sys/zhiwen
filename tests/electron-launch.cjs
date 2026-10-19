@@ -57,4 +57,5 @@ if (process.env.QIYE_DEVELOPER_FIXTURE === '1') {
   globalThis.__qiyeTestPage = require('../src/publishing/adapters/page').Page;
 }
 if (process.env.QIYE_MESSAGES_FIXTURE === '1') require('./messages-fixture.cjs');
+if (process.env.QIYE_ANALYTICS_FIXTURE === '1') require('./analytics-fixture.cjs');
 require('../src/main.js');

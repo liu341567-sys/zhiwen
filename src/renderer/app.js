@@ -992,7 +992,7 @@
   window.publishingNavigateEnvironment = ()=>navigation.select('environment',true);
   window.publishingNotify = notify;
   window.messagesAPI?.onOpened(() => navigation.environmentAction().catch(error => notify(error.message, 'error')));
-  window.messagesAPI?.onSummary(() => navigation.select('data', true).catch(error => notify(error.message, 'error')));
+  window.messagesAPI?.onSummary(() => {window.dispatchEvent(new Event('data:messages'));navigation.select('data', true).catch(error => notify(error.message, 'error'));});
   api?.onState(applyState);
   render();
   action('getState');

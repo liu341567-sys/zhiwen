@@ -15,6 +15,7 @@ const { installDesktop } = require('./publishing/desktop');
 const { DeveloperService } = require('./developer/service');
 const { installDeveloperDesktop } = require('./developer/desktop');
 const { installMessages } = require('./messages/desktop');
+const { installAnalytics } = require('./analytics/desktop');
 
 app.setName('栖页');
 if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
@@ -36,6 +37,7 @@ const documentStates = new Map();
 const pendingDocumentRestores = new Map();
 let publisher;
 let messages;
+let analytics;
 let toastAction;
 let developer;
 let publishingError;
@@ -645,6 +647,7 @@ function registerIPC() {
     if (publisher?.store.tasks().some(t => t.accountId === id && ['pending','paused','manual','unverified','submitted','review'].includes(t.status))) throw new Error('此环境仍有关联发布任务，请先取消未提交任务并核实已提交结果。');
     store.get(id);
     await messages?.cancelAccount(id);
+    await analytics?.cancelAccount(id);
     await closeView(id);
     const ownSession = getSession(id);
     await ownSession.clearStorageData();
@@ -854,6 +857,21 @@ if (!app.requestSingleInstanceLock()) {
         });
       } catch (error) { publishingToast(`私信监测不可用：${error.message}。原账号环境可继续使用。`, 'error'); }
 
+      try {
+        analytics = await installAnalytics({ window: mainWindow, directory: app.getPath('userData'), profiles: () => store.getState().profiles,
+          WebContentsView, getSession, restore: id => restores.get(id), blocked: id => blockedVaults.has(id),
+          scheduler: () => publisher?.scheduler, debugging: id => developer?.active === id && (developer.inspecting || developer.report?.status === 'recording'),
+          toast: publishingToast,
+          reveal: async (id, url) => {
+            const pending = mutationQueue.then(async () => { assertNotLeased(id); store.open(id); const entry = await createView(id);
+              uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
+              if (entry.view.webContents.getURL() !== url) entry.view.webContents.loadURL(url).catch(() => {});
+              mainWindow.webContents.send('messages:opened', id); mainWindow.show(); mainWindow.focus();
+            }); mutationQueue = pending.catch(() => {}); await pending;
+          }
+        });
+      } catch (error) { publishingToast(`运营数据采集不可用：${error.message}。原账号环境可继续使用。`, 'error'); }
+
     } catch (error) {
       dialog.showErrorBox('无法读取账号环境', `${error.message}\n数据位置：${app.getPath('userData')}\n请先备份原目录，再检查 profiles.json；原有数据未被覆盖。`);
       canQuit = true;
@@ -879,6 +897,7 @@ if (!app.requestSingleInstanceLock()) {
       } catch { /* UI state must not prevent browser data from being flushed. */ }
       if (developer) { try { await developer.close(); } catch { /* Optional debug data must not prevent account data from being flushed. */ } }
       if (messages) await messages.shutdown();
+      if (analytics) await analytics.shutdown();
       if (publisher) await publisher.shutdown();
       await mutationQueue;
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));

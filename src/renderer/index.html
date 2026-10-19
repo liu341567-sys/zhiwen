@@ -8,9 +8,11 @@
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./publishing.css" />
     <link rel="stylesheet" href="./messages.css" />
+    <link rel="stylesheet" href="./analytics.css" />
     <script src="./navigation.js" defer></script>
     <script src="./publishing.js" defer></script>
     <script src="./messages.js" defer></script>
+    <script src="./analytics.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body class="navigation-loading">
@@ -64,6 +66,7 @@
         </div>
         <section id="module-view" class="module-view" aria-label="功能模块" hidden>
           <div id="messages-module" hidden></div>
+          <div id="analytics-module" hidden></div>
           <div id="planned-module" class="planned-module" hidden><span id="planned-icon" class="module-symbol"></span><span class="planned-badge">规划中</span><h1 id="planned-title"></h1><p id="planned-description"></p><button id="module-return" class="button button-primary" type="button">返回环境管理</button></div>
           <div id="developer-module" class="planned-module" hidden><h1>开发者工具中心</h1><p>直接选择已有账号环境，录制完整流程或部分模块；也可记录问题现场并演示正确操作。不需要创建发布计划。</p><button id="developer-open" class="button button-primary" type="button">打开开发者工具中心</button><p>开始录制 → 在原网页操作 → 结束并预览 → 保存 ZIP 发给 AI。资料仅保存在本机。</p></div>
           <div id="publishing-module" class="publishing-module" hidden></div>

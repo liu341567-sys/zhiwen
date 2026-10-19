@@ -16,6 +16,13 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
   let restoreFrame;
   let restoringEnvironment = false;
   let compactTimer;
+  let dataPage = localStorage.getItem('qiye-data-page') || 'overview';
+  const showDataPage = id => {
+    dataPage=id; localStorage.setItem('qiye-data-page',id);
+    $('messages-module').hidden=id!=='messages'; $('analytics-module').hidden=id==='messages';
+    for(const b of document.querySelectorAll('[data-data-page]')) { const active=b.dataset.dataPage===id;b.classList.toggle('active',active);b.setAttribute('aria-current',active?'page':'false'); }
+    window.dispatchEvent(id==='messages' ? new Event('messages:visible') : new CustomEvent('analytics:page',{detail:id}));
+  };
   const menus = new Map();
   const environmentVisible = () => activeModule === 'environment' && (!collapsed() || overlay);
   const collapsed = () => compact || preferences?.sidebarCollapsed === true;
@@ -50,7 +57,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       button.type = 'button'; button.className = 'secondary-menu-button';
       const label = document.createElement('span'); label.textContent = entry.label;
       button.append(icon(entry.icon), label);
-      if (entry.messages) { button.classList.add('active'); button.setAttribute('aria-current', 'page'); button.addEventListener('click', async () => { if (overlay) await closeOverlay(); window.dispatchEvent(new Event('messages:visible')); }); }
+      if (entry.messages || entry.analytics) { button.dataset.dataPage=entry.id;button.addEventListener('click',async()=>{if(overlay)await closeOverlay();showDataPage(entry.id);}); }
       else if (entry.developer) {button.addEventListener('click',()=>api.openDeveloperTools().catch(error=>notify(error.message,'error')));}
       else if (entry.publishing) {
         button.dataset.publishPage=entry.id;
@@ -118,7 +125,8 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
       $('settings-module').hidden = item.mode !== 'settings';
       $('publishing-module').hidden = item.mode !== 'publishing';
       $('messages-module').hidden = item.mode !== 'messages';
-      if (item.mode === 'messages') window.dispatchEvent(new Event('messages:visible'));
+      $('analytics-module').hidden = item.mode !== 'messages';
+      if (item.mode === 'messages') showDataPage(dataPage);
       $('developer-module').hidden = item.mode !== 'developer';
       if(item.mode === 'publishing')window.dispatchEvent(new Event('publishing:visible'));
       if (item.mode === 'planned') {
@@ -209,6 +217,7 @@ window.createNavigationController = ({ api, icon, changed, beforeChange, blocked
   }
 
   window.addEventListener('publishing:selected',event=>{for(const b of document.querySelectorAll('[data-publish-page]')){b.classList.toggle('active',b.dataset.publishPage===event.detail);b.setAttribute('aria-current',b.dataset.publishPage===event.detail?'page':'false');}});
+  window.addEventListener('data:messages',()=>{dataPage='messages';if(activeModule==='data')showDataPage('messages');});
   $('sidebar-toggle').addEventListener('click', guarded(toggle));
   $('sidebar-overlay-close').addEventListener('click', guarded(closeOverlay));
   $('sidebar-overlay-backdrop').addEventListener('click', guarded(closeOverlay));
