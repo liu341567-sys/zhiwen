@@ -236,6 +236,18 @@ function configurePage(wc, id) {
   });
   wc.setWindowOpenHandler(details => {
     if (quitting || !internalTabs || (!allowedNavigation(details.url) && details.url !== 'about:blank') || blockedVaults.has(id)) return { action: 'deny' };
+    // Ctrl/middle-click has no script-visible WindowProxy or pre-created guest.
+    // Electron 44 can deadlock if a WebContentsView is constructed inside this
+    // deferred-guest callback. Take ownership of just this background request
+    // and construct it after Chromium's native input dispatch has completed.
+    if (details.disposition === 'background-tab') {
+      setImmediate(() => {
+        if (quitting || wc.isDestroyed() || !views.has(id)) return;
+        try { internalTabs.open(id, wc, details, {}); }
+        catch (error) { publishingToast(`后台页面未能打开：${error.message}`, 'error'); }
+      });
+      return { action: 'deny' };
+    }
     return { action: 'allow', outlivesOpener: true,
       overrideBrowserWindowOptions: { webPreferences: {
         session: getSession(id), preload: path.join(__dirname, 'remote-preload.js'),
