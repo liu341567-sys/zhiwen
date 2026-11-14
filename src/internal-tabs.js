@@ -47,12 +47,18 @@ class InternalTabs {
     // Adopt Chromium's already-created guest: its opener, named window, POST,
     // referrer and native sessionStorage semantics must remain untouched.
     // Deferred guests (e.g. ctrl/middle-click) require one explicit navigation.
-    if (!options.webContents && details.url !== 'about:blank') {
-      const post = details.postBody;
-      const headers = post ? `content-type: ${post.contentType}${post.boundary ? '; boundary=' + post.boundary : ''}` : undefined;
-      wc.loadURL(details.url, { httpReferrer: details.referrer, ...(post ? { postData: post.data, extraHeaders: headers } : {}) }).catch(() => {});
-    }
-    notify();
+    // Chromium is still dispatching the opener's input/new-contents callback.
+    // Start a deferred guest's navigation after that callback has returned;
+    // reentering navigation here can stall Ctrl/middle-click in native Chromium.
+    setImmediate(() => {
+      if (wc.isDestroyed() || !this.entries.has(id)) return;
+      if (!options.webContents && details.url !== 'about:blank') {
+        const post = details.postBody;
+        const headers = post ? `content-type: ${post.contentType}${post.boundary ? '; boundary=' + post.boundary : ''}` : undefined;
+        wc.loadURL(details.url, { httpReferrer: details.referrer, ...(post ? { postData: post.data, extraHeaders: headers } : {}) }).catch(() => {});
+      }
+      notify();
+    });
     return wc;
   }
   remove(id) {
