@@ -16,6 +16,7 @@ const { DeveloperService } = require('./developer/service');
 const { installDeveloperDesktop } = require('./developer/desktop');
 const { installMessages } = require('./messages/desktop');
 const { installAnalytics } = require('./analytics/desktop');
+const { InternalTabs } = require('./internal-tabs');
 
 app.setName('栖页');
 if (process.platform === 'win32') app.setAppUserModelId('com.qiye.browser');
@@ -30,7 +31,7 @@ if (process.env.QIYE_DATA_DIR) app.setPath('userData', path.resolve(process.env.
 
 const views = new Map();
 const sessions = new Map();
-const popups = new Map();
+let internalTabs;
 const restores = new Map();
 const blockedVaults = new Set();
 const documentStates = new Map();
@@ -116,19 +117,19 @@ function snapshot() {
     uiPreferences: uiPreferences.get(),
     platformPresets,
     activeId: state.activeId,
-    openTabs: state.openIds.map(id => {
-      const entry = views.get(id);
-      const wc = entry?.view.webContents;
-      const usable = wc && !wc.isDestroyed();
-      return {
-        id,
-        title: usable ? wc.getTitle() : '',
-        url: usable ? wc.getURL() || store.get(id).lastUrl : store.get(id).lastUrl,
-        loading: usable ? wc.isLoading() : false,
-        canGoBack: usable ? wc.navigationHistory.canGoBack() : false,
-        canGoForward: usable ? wc.navigationHistory.canGoForward() : false,
-        error: entry?.error ?? null
-      };
+    activeTabId: internalTabs?.activeId(state.activeId) || state.activeId,
+    openTabs: state.openIds.flatMap(id => {
+      const entries = [{ id, environmentId: id, ...views.get(id) }, ...(internalTabs?.forEnvironment(id) || [])];
+      return entries.map(entry => {
+        const wc = entry.view?.webContents, usable = wc && !wc.isDestroyed();
+        return { id: entry.id, environmentId: id, child: entry.id !== id,
+          title: usable ? wc.getTitle() : '',
+          url: usable ? wc.getURL() || (entry.id === id ? store.get(id).lastUrl : 'about:blank') : store.get(id).lastUrl,
+          loading: usable ? wc.isLoading() : false,
+          canGoBack: usable ? wc.navigationHistory.canGoBack() : false,
+          canGoForward: usable ? wc.navigationHistory.canGoForward() : false,
+          error: entry.error ?? null };
+      });
     }),
     dataPath: app.getPath('userData'),
     persistenceWarning: vault.available ? '' : '本机安全存储不可用：会话型 Cookie 和临时网页存储无法跨程序退出恢复。关闭标签页再打开仍保留；持久 Cookie 和网站存储也会保留。Windows 版使用系统加密保存会话。'
@@ -158,9 +159,11 @@ function updateViews() {
     width: Math.max(0, Math.min(backingBounds.width, width - backingBounds.x)),
     height: Math.max(0, Math.min(backingBounds.height, height - backingBounds.y))
   };
-  for (const [id, entry] of views) {
+  const pages = [...views, ...[...(internalTabs?.entries.values() || [])].map(entry => [entry.environmentId, entry])];
+  const selectedPage = internalTabs?.active(activeId, views.get(activeId)) || views.get(activeId);
+  for (const [id, entry] of pages) {
     entry.view.setBounds(renderBounds);
-    entry.view.setVisible(id === activeId && environmentMode && !navigationOverlay && !overlayVisible && !entry.error && !publisher?.scheduler.leased(id) && safeBounds.width > 0 && safeBounds.height > 0);
+    entry.view.setVisible(entry === selectedPage && id === activeId && environmentMode && !navigationOverlay && !overlayVisible && !entry.error && !publisher?.scheduler.leased(id) && safeBounds.width > 0 && safeBounds.height > 0);
   }
   updateToastView();
 }
@@ -224,39 +227,23 @@ function configurePage(wc, id) {
     const allowedFrameDocument = !event.isMainFrame && /^(about:blank|about:srcdoc|blob:|data:)/.test(event.url);
     if (!allowedNavigation(event.url) && !allowedFrameDocument) event.preventDefault();
   });
-  wc.setWindowOpenHandler(({ url }) => {
-    const popupArea = (mainWindow && !mainWindow.isDestroyed()
-      ? screen.getDisplayMatching(mainWindow.getBounds()) : screen.getPrimaryDisplay()).workAreaSize;
-    return {
-      action: allowedNavigation(url) || url === 'about:blank' ? 'allow' : 'deny',
-      overrideBrowserWindowOptions: {
-        parent: mainWindow,
-        icon: applicationIcon,
-        autoHideMenuBar: true,
-        width: Math.min(1060, popupArea.width),
-        height: Math.min(780, popupArea.height),
-        title: `${store.get(id).name} · 栖页`,
-        webPreferences: {
-          session: sessions.get(id),
-          preload: path.join(__dirname, 'remote-preload.js'),
-          nodeIntegration: false,
-          contextIsolation: true,
-          sandbox: true,
-          webSecurity: true,
-          navigateOnDragDrop: false
-        }
-      }
-    };
+  wc.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !(input.control || input.meta)) return;
+    if (['t', 'l', 'w'].includes(input.key.toLowerCase())) {
+      event.preventDefault(); mainWindow.webContents.focus();
+      mainWindow.webContents.send('browser:shortcut', input.key.toLowerCase());
+    }
   });
-  wc.on('did-create-window', child => {
-    if (!popups.has(id)) popups.set(id, new Set());
-    popups.get(id).add(child);
-    configurePage(child.webContents, id);
-    child.on('page-title-updated', event => {
-      event.preventDefault();
-      if (!child.isDestroyed()) child.setTitle(`${store.get(id).name} · ${child.webContents.getTitle() || '新窗口'}`);
-    });
-    child.on('closed', () => popups.get(id)?.delete(child));
+  wc.setWindowOpenHandler(details => {
+    if (quitting || !internalTabs || (!allowedNavigation(details.url) && details.url !== 'about:blank') || blockedVaults.has(id)) return { action: 'deny' };
+    return { action: 'allow', outlivesOpener: true,
+      overrideBrowserWindowOptions: { webPreferences: {
+        session: getSession(id), preload: path.join(__dirname, 'remote-preload.js'),
+        nodeIntegration: false, nodeIntegrationInSubFrames: false, nodeIntegrationInWorker: false,
+        contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, navigateOnDragDrop: false
+      } },
+      createWindow: options => internalTabs.open(id, wc, details, options)
+    };
   });
 }
 
@@ -405,15 +392,6 @@ async function createView(id) {
     entry.error = `页面进程已停止（${details.reason}），请重新加载。`;
     notify();
   });
-  // Forward browser shortcuts to the shell, including when a website has focus.
-  wc.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || !(input.control || input.meta)) return;
-    if (['t', 'l', 'w'].includes(input.key.toLowerCase())) {
-      event.preventDefault();
-      mainWindow.webContents.focus();
-      mainWindow.webContents.send('browser:shortcut', input.key.toLowerCase());
-    }
-  });
   const restoration = await restores.get(id);
   if (restoration instanceof Error) {
     entry.error = restoration.message;
@@ -434,9 +412,7 @@ async function createView(id) {
 async function closeView(id) {
   if (diagnostics.targetId === id) stopDiagnostics('profile-closed');
   await captureDocumentState(id);
-  const children = popups.get(id);
-  if (children) for (const child of [...children]) { if (!child.isDestroyed()) child.destroy(); }
-  popups.delete(id);
+  internalTabs?.closeEnvironment(id);
   const entry = views.get(id);
   if (entry) {
     views.delete(id);
@@ -450,7 +426,7 @@ async function closeView(id) {
 function activePage() {
   const activeId = store.getState().activeId;
   assertNotLeased(activeId);
-  const entry = views.get(activeId);
+  const entry = internalTabs?.active(activeId, views.get(activeId)) || views.get(activeId);
   if (!entry || entry.view.webContents.isDestroyed()) throw new Error('请先打开一个环境');
   if (blockedVaults.has(activeId)) throw new Error('此环境的会话数据暂时无法解密，请使用原系统用户重新启动应用');
   return entry;
@@ -526,7 +502,7 @@ function registerIPC() {
     if (typeof visible !== 'boolean') throw new Error('无效的临时侧栏状态');
     let frame = null;
     const activeId = store.getState().activeId;
-    const view = views.get(activeId)?.view;
+    const view = internalTabs?.active(activeId, views.get(activeId))?.view;
     if (visible && !navigationOverlay && uiPreferences.get().activeModule === 'environment' && view?.getVisible()) {
       try {
         // A native webpage covers HTML overlays. Keep its instance and full
@@ -607,7 +583,7 @@ function registerIPC() {
     finally { event.returnValue = true; }
   });
   const serialized = new Set(['create', 'update', 'move', 'open', 'close', 'delete', 'overview', 'navigate', 'back', 'forward', 'reload',
-    'diagnostics-start', 'diagnostics-stop', 'diagnostics-save']);
+    'select-tab', 'close-tab', 'diagnostics-start', 'diagnostics-stop', 'diagnostics-save']);
   const handle = (name, action) => ipcMain.handle(`browser:${name}`, async (event, ...args) => {
     if (quitting || !mainWindow || event.sender !== mainWindow.webContents ||
         event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('此页面无权管理环境');
@@ -636,6 +612,17 @@ function registerIPC() {
   handle('update', (id, input) => { store.update(id, input); });
   handle('move', (id, beforeId) => { store.move(id, beforeId); });
   handle('open', async id => { store.open(id); await createView(id); });
+  handle('select-tab', async tabId => {
+    const environmentId = internalTabs.entries.get(tabId)?.environmentId || tabId;
+    store.get(environmentId); store.open(environmentId);
+    await createView(environmentId);
+    internalTabs.select(tabId, environmentId);
+  });
+  handle('close-tab', async tabId => {
+    const child = internalTabs.entries.get(tabId);
+    if (child) { assertNotLeased(child.environmentId); internalTabs.close(tabId); }
+    else { assertNotLeased(tabId); store.get(tabId); await closeView(tabId); store.close(tabId); }
+  });
   handle('close', async id => {
     assertNotLeased(id);
     store.get(id);
@@ -765,6 +752,10 @@ async function createWindow() {
     }
   });
   mainWindow.setMenu(null);
+  internalTabs = new InternalTabs({ window: mainWindow, WebContentsView, sessionFor: getSession, configure: configurePage,
+    changed: () => { updateViews(); emitState(); },
+    canActivate: id => store.getState().activeId === id && uiPreferences.get().activeModule === 'environment' && !publisher?.scheduler.leased(id)
+  });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
   mainWindow.on('resize', updateViews);
@@ -810,7 +801,7 @@ if (!app.requestSingleInstanceLock()) {
           inspectView: id => views.get(id)?.view.webContents || null,
           onDeveloperTrace: (id, event) => developer?.trace(id, event).catch(() => {}),
           takeover: async id => {
-            const pending = mutationQueue.then(async () => { store.open(id); await createView(id); uiPreferences.update({activeModule:'environment'}); updateViews(); emitState(); mainWindow.webContents.send('publishing:takeover',id); });
+            const pending = mutationQueue.then(async () => { store.open(id); await createView(id); internalTabs.select(id, id); uiPreferences.update({activeModule:'environment'}); updateViews(); emitState(); mainWindow.webContents.send('publishing:takeover',id); });
             mutationQueue = pending.catch(() => {}); await pending;
           }, notify: publishingToast, changed: publishingChanged });
         installDesktop({window:mainWindow,service:publisher,assertManager:event => {
@@ -822,7 +813,7 @@ if (!app.requestSingleInstanceLock()) {
         developer = new DeveloperService({ directory: app.getPath('userData'),
           publisher: () => publisher,
           prepareView: async id => {
-            const pending = mutationQueue.then(async () => { store.open(id); await createView(id); updateViews(); emitState(); });
+            const pending = mutationQueue.then(async () => { store.open(id); await createView(id); internalTabs.select(id, id); updateViews(); emitState(); });
             mutationQueue = pending.catch(() => {}); await pending;
           },
           profiles: () => store.getState().profiles,
@@ -832,7 +823,7 @@ if (!app.requestSingleInstanceLock()) {
           reveal: async id => {
             if (!views.has(id)) throw new Error('请先在账号环境管理中打开原环境');
             if (publisher?.scheduler.leased(id)) throw new Error('请先在脚本调试中暂停任务，再操作原网页');
-            store.activate(id); uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
+            store.activate(id); internalTabs.select(id, id); uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
             mainWindow.webContents.send('publishing:takeover', id); mainWindow.show(); mainWindow.focus();
           }
         });
@@ -847,7 +838,7 @@ if (!app.requestSingleInstanceLock()) {
           scheduler: () => publisher?.scheduler, debugging: id => developer?.active === id && (developer.inspecting || developer.report?.status === 'recording'),
           icon: applicationIcon, toast: publishingToast,
           reveal: async (id, url) => {
-            const pending = mutationQueue.then(async () => { assertNotLeased(id); store.open(id); const entry = await createView(id);
+            const pending = mutationQueue.then(async () => { assertNotLeased(id); store.open(id); const entry = await createView(id); internalTabs.select(id, id);
               uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
               const wc = entry.view.webContents;
               if (wc.getURL() !== url) wc.loadURL(url).catch(() => {});
@@ -863,7 +854,7 @@ if (!app.requestSingleInstanceLock()) {
           scheduler: () => publisher?.scheduler, debugging: id => developer?.active === id && (developer.inspecting || developer.report?.status === 'recording'),
           toast: publishingToast,
           reveal: async (id, url) => {
-            const pending = mutationQueue.then(async () => { assertNotLeased(id); store.open(id); const entry = await createView(id);
+            const pending = mutationQueue.then(async () => { assertNotLeased(id); store.open(id); const entry = await createView(id); internalTabs.select(id, id);
               uiPreferences.update({ activeModule: 'environment' }); updateViews(); emitState();
               if (entry.view.webContents.getURL() !== url) entry.view.webContents.loadURL(url).catch(() => {});
               mainWindow.webContents.send('messages:opened', id); mainWindow.show(); mainWindow.focus();
@@ -900,6 +891,7 @@ if (!app.requestSingleInstanceLock()) {
       if (analytics) await analytics.shutdown();
       if (publisher) await publisher.shutdown();
       await mutationQueue;
+      for (const id of sessions.keys()) internalTabs?.closeEnvironment(id);
       await Promise.all([...sessions.keys()].map(id => captureDocumentState(id)));
       const results = await Promise.allSettled([...sessions.keys()].map(id => flushSession(id)));
       const failed = results.filter(item => item.status === 'rejected');

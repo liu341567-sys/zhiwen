@@ -1,0 +1,31 @@
+name: Windows internal browser tabs
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/internal-tabs.js
+      - src/main.js
+      - src/renderer/app.js
+      - src/preload.js
+      - src/renderer/navigation.js
+      - tests/internal-tabs*
+      - .github/workflows/tabs.yml
+      - .github/scripts/test-tabs.ps1
+permissions:
+  contents: read
+jobs:
+  tabs:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run setup:electron
+      - name: Test internal tabs, popup compatibility and original Session isolation
+        shell: pwsh
+        run: ./.github/scripts/test-tabs.ps1

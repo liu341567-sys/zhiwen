@@ -303,13 +303,13 @@ async function main() {
     const popupDeadline = Date.now() + 10_000;
     while (Date.now() < popupDeadline) {
       const ready = await app.evaluate(({ BrowserWindow }, origin) =>
-        BrowserWindow.getAllWindows().some(window => window.webContents.getURL().startsWith(`${origin}/popup`) && !window.webContents.isLoadingMainFrame()), origin);
+        BrowserWindow.getAllWindows().flatMap(w=>w.contentView.children).some(v => v.webContents?.getURL().startsWith(`${origin}/popup`) && !v.webContents.isLoadingMainFrame()), origin);
       if (ready) break;
       await delay(100);
     }
     const popupIdentity = await app.evaluate(({ BrowserWindow, session }, { id, origin }) => {
       const partition = session.fromPartition(`persist:account-${id}`);
-      const popup = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().startsWith(`${origin}/popup`));
+      const popup = BrowserWindow.getAllWindows().flatMap(w=>w.contentView.children).find(v => v.webContents?.getURL().startsWith(`${origin}/popup`));
       return { found: Boolean(popup), samePartition: Boolean(popup && popup.webContents.session === partition) };
     }, { id: first.id, origin });
     check('login popups inherit the originating environment session', () => assert.deepEqual(popupIdentity, { found: true, samePartition: true }));

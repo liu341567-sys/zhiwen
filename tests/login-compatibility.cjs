@@ -123,8 +123,8 @@ async function newNativeControl(name) {
 async function popup(url, code = '({ initialNonce: window.initialNonce, openerIsNull: window.opener === null })') {
   for (let attempt = 0; attempt < 150; attempt += 1) {
     const result = await app.evaluate(async ({ BrowserWindow }, { url, code }) => {
-      const wc = BrowserWindow.getAllWindows().map(window => window.webContents)
-        .find(wc => wc.getURL() === url && !wc.isLoadingMainFrame());
+      const wc = BrowserWindow.getAllWindows().flatMap(window => [window.webContents, ...window.contentView.children.map(v=>v.webContents)]).filter(Boolean)
+        .find(wc => !wc.isDestroyed() && wc.getURL() === url && !wc.isLoadingMainFrame());
       if (!wc) return null;
       return wc.executeJavaScript(code);
     }, { url, code });
@@ -342,9 +342,9 @@ window.frameReady = true;</script>`);
 
     await popup(popupUrl, "sessionStorage.setItem('auditNonce', 'synthetic-popup-only'); true");
     await app.evaluate(async ({ BrowserWindow }, { url, next }) => {
-      const child = BrowserWindow.getAllWindows().find(window => window.webContents.getURL() === url);
-      await child.webContents.loadURL(next);
-      child.close();
+      const wc = BrowserWindow.getAllWindows().flatMap(window => [window.webContents, ...window.contentView.children.map(v=>v.webContents)]).filter(Boolean).find(wc => !wc.isDestroyed() && wc.getURL() === url);
+      await wc.loadURL(next);
+      wc.close();
     }, { url: popupUrl, next: primaryOrigin + '/popup-next' });
     const mainNonce = await contents('qiye', profile, 'eval', "sessionStorage.getItem('auditNonce')");
     check('same-origin popup navigation and closing do not replace the main tab state', () => assert.equal(mainNonce, 'synthetic-qiye-nonce'));
