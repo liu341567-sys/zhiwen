@@ -11,7 +11,7 @@ function fixture() {
     close() { this.dead = true; this.emit('destroyed'); }
     loadURL(url, options) { loads.push({url,options}); return Promise.resolve(); }
   }
-  class View { constructor(options) { this.options = options; this.webContents = options.webContents || new Contents(options.webPreferences.session); } setVisible() {} setBackgroundColor() {} }
+  class View { constructor(options) { if(Object.hasOwn(options,'webContents') && !options.webContents)throw new TypeError('options.webContents must be a WebContents');this.options = options; this.webContents = options.webContents || new Contents(options.webPreferences.session); } setVisible() {} setBackgroundColor() {} }
   const manager = new InternalTabs({ window:{isDestroyed:()=>false,contentView:{addChildView:v=>children.push(v),removeChildView:v=>{const i=children.indexOf(v);if(i>=0)children.splice(i,1);}}},WebContentsView:View,sessionFor:()=>own,configure:(wc,id)=>{wc.profileId=id;},changed:()=>{},canActivate:()=>true });
   const opener = new Contents(own), open = (details={},options={}) => {const wc=manager.open('account',opener,{url:'https://example.com/',disposition:'new-window',referrer:{url:'https://source.test/',policy:'strict-origin-when-cross-origin'},...details},options);return{wc,entry:manager.entries.get(wc.pageTabId)};};
   return {manager,own,children,loads,opener,open,Contents};

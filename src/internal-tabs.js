@@ -21,7 +21,10 @@ class InternalTabs {
   open(environmentId, opener, details, options) {
     const session = this.sessionFor(environmentId);
     if (options.webContents && options.webContents.session !== session) throw new Error('新页面会话与原环境不一致');
-    const view = new this.WebContentsView({ webContents: options.webContents, webPreferences: {
+    // An absent guest must be omitted, not passed as `webContents: undefined`:
+    // Electron's native constructor treats a present property as an adoption
+    // request and rejects anything other than a real WebContents.
+    const view = new this.WebContentsView({ ...(options.webContents ? { webContents: options.webContents } : {}), webPreferences: {
       ...options.webPreferences, session, partition: undefined,
       preload: path.join(__dirname, 'remote-preload.js'), nodeIntegration: false,
       nodeIntegrationInSubFrames: false, nodeIntegrationInWorker: false,
@@ -47,9 +50,8 @@ class InternalTabs {
     // Adopt Chromium's already-created guest: its opener, named window, POST,
     // referrer and native sessionStorage semantics must remain untouched.
     // Deferred guests (e.g. ctrl/middle-click) require one explicit navigation.
-    // Chromium is still dispatching the opener's input/new-contents callback.
-    // Start a deferred guest's navigation after that callback has returned;
-    // reentering navigation here can stall Ctrl/middle-click in native Chromium.
+    // Start deferred navigation after returning the newly created contents to
+    // Chromium; an adopted guest already has its native navigation pending.
     setImmediate(() => {
       if (wc.isDestroyed() || !this.entries.has(id)) return;
       if (!options.webContents && details.url !== 'about:blank') {
