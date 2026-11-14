@@ -21,4 +21,10 @@
 
 ## 验证
 
-本地注册、关闭、Session约束和安全配置单元检查已通过。Windows真实窗口将在100%、125%、150%缩放下检查普通导航、window.open、blank、POST、跨来源postMessage、window.close、命名复用、deferred后台链接、noreferrer、COOP、连续请求、隔离、快捷键、关闭及重启。安装包和公开文件验证完成后补充结果；合成标准网页验证不等于所有第三方平台实测。
+Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/43554101008)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/43554200519)均通过，对应 `c2d07ed1550a35a22413dd74b44da0e8d7979903` / `v0.3.17`：228项单元、84项内部标签真实窗口检查、72项数据中心、111项私信，以及23项隔离、16项登录兼容性、357项窗口UI、51项侧栏稳定性、45项导航、81项开发者工具、96项发布、57项发布选项检查。100%、125%、150%缩放、NSIS实际安装、图标、正常退出与重启均通过。
+
+标准网页夹具验证了实际Chromium中的window.open、target blank、跨来源postMessage、命名窗口复用、window.close与closed回调、POST、noopener/noreferrer、COOP、Ctrl后台链接、连续请求、原页面草稿/存储、环境隔离和重启。全程无额外BrowserWindow；这是通用机制验证，不是所有真实第三方登录或支付平台认证。非HTTP/HTTPS外部协议仍沿用原安全限制。
+
+发布于2026-11-14 12:15:30（北京时间）。安装包与ZIP均已匿名完整下载，GitHub摘要与SHA256SUMS一致；ZIP全部CRC通过，包内全部src文件匹配版本标签（文本规范化Windows行尾），原始品牌素材及依赖许可证已核对，未打包用户账号、私信/运营数据库、测试夹具或录制资料。
+
+后台链接的缺省guest必须省略webContents构造参数，不能传入undefined；已据Electron 44.6.0原生构造契约修复，并以严格单元桩和真实Ctrl鼠标事件回归。数据汇总旧夹具的固定作品日期已改为相对日期，业务采集逻辑未修改。
