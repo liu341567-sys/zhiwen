@@ -1,5 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict'), fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http');
+const { spawnSync }=require('node:child_process');
 const { _electron } = require('playwright-core');
 const root = path.resolve(__dirname, '..'), output = path.join(root, 'test-results/ui');
 let checks = 0, lastStep = "startup";
@@ -8,7 +9,7 @@ const check = (label, fn) => { lastStep=label; fn(); checks++; console.log('✓ 
 async function until(fn, label) { lastStep=label; const end = Date.now() + 18000; while (Date.now() < end) { if (await fn()) return; await delay(60); } throw Error('Timed out: ' + label); }
 async function run(scale) {
   let app, shell, origin; const before = checks, directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qiye-tabs-')), requests = [];
-  const watchdog=setTimeout(()=>{console.error(JSON.stringify({uiFailure:{message:'Internal tab scenario exceeded 150s',scale,lastStep,checks}}));app?.process()?.kill();process.exit(1);},150000);
+  const watchdog=setTimeout(()=>{const detail=JSON.stringify({uiFailure:{message:'Internal tab scenario exceeded 150s',scale,lastStep,checks}});console.error(detail);console.log('::error title=Internal tab watchdog::'+detail);const child=app?.process();if(child){if(process.platform==='win32')spawnSync('taskkill',['/pid',String(child.pid),'/t','/f']);else child.kill();}process.exit(1);},150000);
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, origin); let body = ''; for await (const chunk of req) body += chunk;
     requests.push({ path: u.pathname, method: req.method, body, referrer: req.headers.referer });
@@ -84,6 +85,6 @@ async function run(scale) {
     await command('closeProfile',b);assert(!(await state()).openTabs.some(t=>t.environmentId===b));assert((await state()).openTabs.some(t=>t.id===a));checks++;
     await closeApp();await launch();s=await state();check('restart preserves root environment and cookies without replaying transient authorization pages',()=>{assert.equal(s.openTabs.filter(t=>t.child).length,0);assert.equal(s.profiles.length,2);assert.equal(s.profiles.find(p=>p.id===a).startUrl,origin+'/root');});await until(()=>evalPage(a,'window.ready===true'),'restored A');assert((await evalPage(a,'document.cookie')).includes('account=A'));checks++;
     console.log(JSON.stringify({tabsSummary:{scale,checks:checks-before,metrics}}));
-  }catch(error){console.error(JSON.stringify({uiFailure:{message:error.message,stack:error.stack,lastStep,scale,checks}}));throw error;}finally{clearTimeout(watchdog);await closeApp().catch(async()=>{app?.process()?.kill();await app?.close().catch(()=>{});});server.close();server.closeAllConnections();crossServer.close();crossServer.closeAllConnections();fs.rmSync(directory,{recursive:true,force:true});}
+  }catch(error){const detail=JSON.stringify({uiFailure:{message:error.message,stack:error.stack,lastStep,scale,checks}});console.error(detail);console.log('::error title=Internal tab scenario::'+detail.replace(/%/g,'%25').replace(/\n/g,'%0A'));throw error;}finally{await closeApp().catch(async()=>{app?.process()?.kill();await app?.close().catch(()=>{});});server.close();server.closeAllConnections();crossServer.close();crossServer.closeAllConnections();fs.rmSync(directory,{recursive:true,force:true});clearTimeout(watchdog);}
 }
 (async()=>{for(const scale of [1,1.25,1.5])await run(scale);console.log(`${checks} internal-tab real-window checks passed`);})().catch(error=>{console.error(JSON.stringify({uiFailure:{message:error.message,stack:error.stack}}));process.exitCode=1;});
