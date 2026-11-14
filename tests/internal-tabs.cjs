@@ -66,8 +66,9 @@ async function run(scale) {
     await command('selectTab',a);await evalPage(a,"document.getElementById('no-referrer').click();true");const noref=await child('/noref');check('noreferrer keeps its native referrer privacy',()=>assert.equal(requests.find(r=>r.path==='/noref').referrer,undefined));
     await command('selectTab',a);
     // Ctrl-click exercises Chromium's deferred guest path.
-    const aPage = app.windows().find(p=>p.url()===origin+'/root');
-    await aPage.locator('#background').click({modifiers:['Control']});const background=await child('/background');
+    const point=await evalPage(a,"(()=>{const r=document.getElementById('background').getBoundingClientRect();return{x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()");
+    await app.evaluate(({BrowserWindow},{id,point})=>{const wc=BrowserWindow.getAllWindows()[0].contentView.children.map(v=>v.webContents).find(w=>w?.profileId===id&&!w.pageTabId);wc.focus();setImmediate(()=>{wc.sendInputEvent({type:'mouseMove',...point,modifiers:['control']});wc.sendInputEvent({type:'mouseDown',...point,button:'left',clickCount:1,modifiers:['control']});wc.sendInputEvent({type:'mouseUp',...point,button:'left',clickCount:1,modifiers:['control']});});},{id:a,point});
+    const background=await child('/background');
     check('deferred background link loads once and keeps the current tab selected',()=>{});assert.equal((await state()).activeTabId,a);assert.equal(requests.filter(r=>r.path==='/background').length,1);
     s=await command('createProfile',{name:'账号 B',startUrl:origin+'/root'});const b=s.activeId;await until(()=>evalPage(b,'window.ready===true'),'B ready');
     const initialB=await evalPage(b,"({cookie:document.cookie,local:localStorage.getItem('account')})");check('a second environment cannot inherit account A data',()=>{assert(!initialB.cookie.includes('account=A'));assert.equal(initialB.local,null);});
