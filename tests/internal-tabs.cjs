@@ -16,7 +16,7 @@ async function run(scale) {
     if (u.pathname === '/download') { res.writeHead(200, { 'Content-Disposition': 'attachment; filename="test.txt"' }); res.end('test'); return; }
     if (u.pathname === '/coop') res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('content-type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><title>${u.pathname}</title><input id="draft"><a id="ordinary" href="/same">普通跳转</a><a id="blank" href="/blank" target="_blank">新标签</a><button id="script-open" onclick="window.open('/regular','_blank')">脚本跳转</button><a id="background" href="/background" target="_blank">后台标签</a><a id="no-referrer" href="/noref" target="_blank" rel="noreferrer">无引荐来源</a><form target="_blank" method="post" action="/posted"><input name="challenge" value="test-nonce"><button id="post">提交表单</button></form><script>window.token=crypto.randomUUID();window.messages=[];addEventListener('message',e=>messages.push({data:e.data,origin:e.origin}));window.ready=true;</script>`);
+    res.end(`<!doctype html><title>${u.pathname}</title><style>a, #script-open { display: block; width: max-content; min-height: 30px; }</style><input id="draft"><a id="ordinary" href="/same">普通跳转</a><a id="blank" href="/blank" target="_blank">新标签</a><button id="script-open" onclick="window.open('/regular','_blank')">脚本跳转</button><a id="background" href="/background" target="_blank">后台标签</a><a id="no-referrer" href="/noref" target="_blank" rel="noreferrer">无引荐来源</a><form target="_blank" method="post" action="/posted"><input name="challenge" value="test-nonce"><button id="post">提交表单</button></form><script>window.token=crypto.randomUUID();window.messages=[];addEventListener('message',e=>messages.push({data:e.data,origin:e.origin}));window.ready=true;</script>`);
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); origin = `http://127.0.0.1:${server.address().port}`;
   const crossServer=http.createServer(server.listeners('request')[0]);await new Promise(r=>crossServer.listen(0,'127.0.0.1',r));const foreign=`http://127.0.0.1:${crossServer.address().port}`;
@@ -30,7 +30,9 @@ async function run(scale) {
       const control = document.querySelector(${JSON.stringify(selector)});
       control.scrollIntoView({ block: 'center' });
       const rect = control.getBoundingClientRect();
-      return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+      const x = Math.round(rect.x + rect.width / 2), y = Math.round(rect.y + rect.height / 2);
+      if (!control.contains(document.elementFromPoint(x, y))) throw new Error('Link is not hit-testable: ' + control.id);
+      return { x, y };
     })()`;
     const point = await evalPage(id, code);
     await app.evaluate(({ BrowserWindow }, { id, point, modifiers }) => {
