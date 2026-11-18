@@ -16,7 +16,7 @@ async function run(scale) {
     if (u.pathname === '/download') { res.writeHead(200, { 'Content-Disposition': 'attachment; filename="test.txt"' }); res.end('test'); return; }
     if (u.pathname === '/coop') res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('content-type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><title>${u.pathname}</title><input id="draft"><a id="ordinary" href="/same">普通跳转</a><a id="blank" href="/blank" target="_blank">新标签</a><a id="background" href="/background" target="_blank">后台标签</a><a id="no-referrer" href="/noref" target="_blank" rel="noreferrer">无引荐来源</a><form target="_blank" method="post" action="/posted"><input name="challenge" value="test-nonce"><button id="post">提交表单</button></form><script>window.token=crypto.randomUUID();window.messages=[];addEventListener('message',e=>messages.push({data:e.data,origin:e.origin}));window.ready=true;</script>`);
+    res.end(`<!doctype html><title>${u.pathname}</title><input id="draft"><a id="ordinary" href="/same">普通跳转</a><a id="blank" href="/blank" target="_blank">新标签</a><button id="script-open" onclick="window.open('/regular','_blank')">脚本跳转</button><a id="background" href="/background" target="_blank">后台标签</a><a id="no-referrer" href="/noref" target="_blank" rel="noreferrer">无引荐来源</a><form target="_blank" method="post" action="/posted"><input name="challenge" value="test-nonce"><button id="post">提交表单</button></form><script>window.token=crypto.randomUUID();window.messages=[];addEventListener('message',e=>messages.push({data:e.data,origin:e.origin}));window.ready=true;</script>`);
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); origin = `http://127.0.0.1:${server.address().port}`;
   const crossServer=http.createServer(server.listeners('request')[0]);await new Promise(r=>crossServer.listen(0,'127.0.0.1',r));const foreign=`http://127.0.0.1:${crossServer.address().port}`;
@@ -25,6 +25,26 @@ async function run(scale) {
     const wc = BrowserWindow.getAllWindows()[0].contentView.children.map(v => v.webContents).find(wc => wc && !wc.isDestroyed() && (wc.pageTabId || wc.profileId) === id);
     if (!wc) throw Error('Missing page ' + id); return wc.executeJavaScript(code);
   }, { id, code });
+  async function clickPage(id, selector, modifiers = []) {
+    const code = `(() => {
+      const control = document.querySelector(${JSON.stringify(selector)});
+      control.scrollIntoView({ block: 'center' });
+      const rect = control.getBoundingClientRect();
+      return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+    })()`;
+    const point = await evalPage(id, code);
+    await app.evaluate(({ BrowserWindow }, { id, point, modifiers }) => {
+      const wc = BrowserWindow.getAllWindows()[0].contentView.children.map(view => view.webContents)
+        .find(contents => contents?.profileId === id && !contents.pageTabId);
+      wc.focus();
+      setImmediate(() => {
+        wc.sendInputEvent({ type: 'mouseMove', ...point, modifiers });
+        for (const type of ['mouseDown', 'mouseUp']) {
+          wc.sendInputEvent({ type, ...point, button: 'left', clickCount: 1, modifiers });
+        }
+      });
+    }, { id, point, modifiers });
+  }
   const state = () => command('getState');
   async function pageAt(id, route, popup = false) {
     let tab;
@@ -53,13 +73,10 @@ async function run(scale) {
     await pageAt(a, '/root');
     await evalPage(a, "document.cookie='account=A;Path=/';localStorage.setItem('account','A');sessionStorage.setItem('nonce','A');true");
 
-    for (const [code, route] of [
-      ["document.getElementById('ordinary').click();true", '/same'],
-      ["document.getElementById('blank').click();true", '/blank'],
-      ["window.open('/regular','_blank');true", '/regular'],
-      ["document.getElementById('no-referrer').click();true", '/noref']
+    for (const [selector, route] of [
+      ['#ordinary', '/same'], ['#blank', '/blank'], ['#script-open', '/regular'], ['#no-referrer', '/noref']
     ]) {
-      await evalPage(a, code);
+      await clickPage(a, selector);
       const current = await pageAt(a, route);
       await tabIds([a]);
       check(route + ' uses the existing page and login session', () => {
@@ -73,17 +90,7 @@ async function run(scale) {
     }
     check('noreferrer keeps its referrer privacy', () => assert.equal(requests.find(r => r.path === '/noref').referrer, undefined));
 
-    const point = await evalPage(a, "(()=>{const r=document.getElementById('background').getBoundingClientRect();return{x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()");
-    await app.evaluate(({ BrowserWindow }, { id, point }) => {
-      const wc = BrowserWindow.getAllWindows()[0].contentView.children.map(view => view.webContents)
-        .find(contents => contents?.profileId === id && !contents.pageTabId);
-      wc.focus();
-      setImmediate(() => {
-        for (const type of ['mouseDown', 'mouseUp']) {
-          wc.sendInputEvent({ type, ...point, button: 'left', clickCount: 1, modifiers: ['control'] });
-        }
-      });
-    }, { id: a, point });
+    await clickPage(a, '#background', ['control']);
     await pageAt(a, '/background');
     await tabIds([a]);
     check('Ctrl-click navigates in place with exactly one request', () => {
