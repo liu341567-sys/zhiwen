@@ -41,16 +41,16 @@
 
 ## Windows 下载
 
-- [下载安装版（约 161 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.17/Qiye-Setup-0.3.17-x64.exe)：下载后运行安装程序。
-- [下载 ZIP 版（约 218 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.17/Qiye-0.3.17-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
+- [下载安装版（约 161 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.18/Qiye-Setup-0.3.18-x64.exe)：下载后运行安装程序。
+- [下载 ZIP 版（约 218 MB）](https://github.com/liu341567-sys/zhiwen/releases/download/v0.3.18/Qiye-0.3.18-x64.zip)：完整解压后运行其中的 `栖页.exe`，保留同目录所有文件。
 
-[v0.3.17 预览发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.3.17)提供发布说明和 SHA256 校验文件。环境二级侧栏的大 Logo 已移除；一级栏使用附件竖版 PNG 原始字节，完整等比居中。标题改为「账号环境管理」，一级 / 二级宽度仍为 64 / 240 px，沿用蓝色视觉及原有账号功能。
+[v0.3.18 预览发布页](https://github.com/liu341567-sys/zhiwen/releases/tag/v0.3.18)提供发布说明和 SHA256 校验文件。环境二级侧栏的大 Logo 已移除；一级栏使用附件竖版 PNG 原始字节，完整等比居中。标题改为「账号环境管理」，一级 / 二级宽度仍为 64 / 240 px，沿用蓝色视觉及原有账号功能。
 
 展开 / 收起统一为左下角固定按钮，二级栏和设置正文不再有重复入口。普通点击一级导航只切换模块，收起后不会自动展开或呼出覆盖；折叠偏好独立保存，重启恢复。临时菜单需右键一级入口或聚焦后使用菜单键 / Shift + F10 主动显示。窄窗口下固定按钮主动显示 / 隐藏覆盖，保留常规宽度时的固定布局偏好。临时覆盖不改变主区或浏览器视口宽度，使用网页内存画面，关闭后恢复实时页面，不保存或上传画面。
 
 模块切换继续复用原列表、平台图标与浏览器实例，保留选中、搜索、排序和滚动。创建、编辑、删除、拖拽、固定头尾弹窗、顶部 Toast、启动配置锁定及账号隔离保持。内容发布中心已新增视频向导、本地资源与任务引擎；数据中心新增运营数据汇总及私信管理，其他平台与 AI 功能继续标明待适配/规划中。
 
-Windows [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/43554101008)与[发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/43554200519)均通过，对应 `c2d07ed1550a35a22413dd74b44da0e8d7979903` / `v0.3.17`：228项单元、84项内部标签真实窗口检查、72项数据中心、111项私信，以及23项隔离、16项登录兼容性、357项窗口UI、51项侧栏稳定性、45项导航、81项开发者工具、96项发布、57项发布选项检查。100%、125%、150%缩放、NSIS实际安装、图标、正常退出与重启均通过。 标准网页夹具验证了实际Chromium中的window.open、target blank、跨来源postMessage、命名窗口复用、window.close与closed回调、POST、noopener/noreferrer、COOP、Ctrl后台链接、连续请求、原页面草稿/存储、环境隔离和重启。全程无额外BrowserWindow；这是通用机制验证，不是所有真实第三方登录或支付平台认证。非HTTP/HTTPS外部协议仍沿用原安全限制。 两个公开下载已完整核对哈希。
+Windows 三种显示缩放下通过 60 项网页跳转与临时页面检查，覆盖普通链接、页面内打开脚本、Ctrl 点击、前进后退、授权消息回传、表单 POST、Cookie 隔离、标签关闭和重启恢复。发布标签 `v0.3.18` 对应提交 `ff465c7cae837bbd9548abcd34b6634abfde2e07`。229 项单元检查以及布局、开发者工具、私信、数据中心、发布和 Windows 实际安装回归通过。已完整下载安装包与 ZIP 并核对 SHA256 和包内源码版本。 [主分支检查](https://github.com/liu341567-sys/zhiwen/actions/runs/44224943886) · [发布检查](https://github.com/liu341567-sys/zhiwen/actions/runs/44225117638)
 
 更新前正常退出旧版，已有环境数据沿用，无需迁移；已打包版本无需安装 Node.js。真实平台登录仍需实机复测，知乎 `10001` 原因尚未确认。完整结果见 [验证记录](docs/validation.md)，[视觉规范](docs/visual-system.md)记录当前交互规则。
 
