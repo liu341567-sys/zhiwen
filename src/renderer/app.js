@@ -44,6 +44,7 @@
   };
   let state = { profiles: [], openTabs: [], activeId: null, dataPath: '', platformPresets: [] };
   let previousActiveId = null;
+  let previousPageId;
   let editId = null;
   let deleteId = null;
   let dialogBusy = false;
@@ -129,7 +130,7 @@
   function colorName(value) { return (colors.find((item) => item.value === value) || colors[0]).name; }
   function findProfile(id) { return state.profiles.find((profile) => profile.id === id); }
   function isOpen(id) { return state.openTabs.some((tab) => tab.id === id); }
-  function activeTab() { return state.openTabs.find((tab) => tab.id === (state.activeTabId || state.activeId)); }
+  function activeTab() { return state.openTabs.find((tab) => tab.id === state.activeId); }
   function dialogIsOpen() { return !!document.querySelector('dialog[open]') || modalOpening; }
   function initials(name) { return Array.from(String(name || '环境').trim())[0] || '环'; }
   function findPlatform(id) { return Array.isArray(state.platformPresets) ? state.platformPresets.find((preset) => preset.id === id) : undefined; }
@@ -232,7 +233,7 @@
 
   async function call(method, ...args) {
     if (!api || typeof api[method] !== 'function') throw new Error('浏览器接口尚未连接，请重新启动应用。');
-    if (['openProfile', 'selectTab', 'createProfile', 'showOverview'].includes(method)) await navigation.environmentAction();
+    if (['openProfile', 'createProfile', 'showOverview'].includes(method)) await navigation.environmentAction();
     const result = await api[method](...args);
     applyState(result);
     return result;
@@ -530,21 +531,21 @@
     home.dataset.focusKey = 'overview-tab';
     overview.append(home);
     const tabs = state.openTabs.map((tab) => {
-      const profile = findProfile(tab.environmentId || tab.id);
+      const profile = findProfile(tab.id);
       if (!profile) return null;
-      const root = element('div', `tab${(state.activeTabId || state.activeId) === tab.id ? ' active' : ''}`);
-      const select = button('tab-select', '', () => action('selectTab', tab.id));
+      const root = element('div', `tab${state.activeId === tab.id ? ' active' : ''}`);
+      const select = button('tab-select', '', () => action('openProfile', tab.id));
       select.role = 'tab';
-      select.setAttribute('aria-selected', String((state.activeTabId || state.activeId) === tab.id));
+      select.setAttribute('aria-selected', String(state.activeId === tab.id));
       select.setAttribute('aria-controls', 'browser-view');
       select.dataset.focusKey = `tab:${tab.id}`;
       const dot = element('span', 'tab-color-dot');
       dot.dataset.color = colorName(profile.color);
-      select.append(dot, element('span', '', tab.child ? (tab.title || '新页面') : profile.name));
+      select.append(dot, element('span', '', profile.name));
       select.title = `${profile.name}${tab.title ? ` · ${tab.title}` : ''}`;
-      const close = button('icon-button tab-close', '', () => action('closeTab', tab.id), 'x');
-      close.title = tab.child ? '关闭此页面，保留同环境其他页面' : '关闭环境全部页面（保留环境数据）';
-      close.setAttribute('aria-label', `关闭 ${profile.name}${tab.child ? " · " + (tab.title || "新页面") : ""} 标签页，保留环境数据`);
+      const close = button('icon-button tab-close', '', () => action('closeProfile', tab.id), 'x');
+      close.title = '关闭环境标签页（保留环境数据）';
+      close.setAttribute('aria-label', `关闭 ${profile.name} 标签页，保留环境数据`);
       close.dataset.focusKey = `close:${tab.id}`;
       root.append(select, close);
       return root;
@@ -571,19 +572,23 @@
     $('settings-edit-environment').disabled = !tab;
     $('address-input').disabled = leased || !tab;
     $('address-environment').hidden = !tab;
-    if (previousActiveId !== (state.activeTabId || state.activeId) || document.activeElement !== $('address-input')) {
+    const temporaryPage = $('temporary-page-button');
+    temporaryPage.hidden = leased || !tab?.popupAvailable;
+    temporaryPage.textContent = tab?.popupActive ? '关闭临时页面' : '打开临时页面';
+    if (previousPageId !== tab?.pageId || document.activeElement !== $('address-input')) {
       $('address-input').value = tab ? (tab.url || findProfile(tab.id)?.lastUrl || findProfile(tab.id)?.startUrl || '') : '';
     }
     $('address-icon').replaceChildren(icon(tab ? 'globe' : 'grid'));
     $('browser-loading').hidden = !tab?.loading;
     $('browser-error').hidden = !tab?.error;
     $('browser-error-message').textContent = tab?.error ? (typeof tab.error === 'string' ? tab.error : tab.error.message || '请检查网络连接，或尝试输入其他网址。') : '';
-    previousActiveId = state.activeTabId || state.activeId;
+    previousActiveId = state.activeId;
+    previousPageId = tab?.pageId;
   }
 
   function render() {
     const focusKey = document.activeElement?.dataset.focusKey;
-    const activeChanged = previousActiveId !== (state.activeTabId || state.activeId);
+    const activeChanged = previousActiveId !== state.activeId;
     renderProfiles();
     renderTabs();
     renderNavigation();
@@ -929,6 +934,7 @@
   $('diagnostics-save').addEventListener('click', () => runDiagnosticsAction('saveLoginDiagnostics'));
   $('back-button').addEventListener('click', () => action('goBack'));
   $('forward-button').addEventListener('click', () => action('goForward'));
+  $('temporary-page-button').addEventListener('click', () => action('togglePopup', state.activeId));
   for (const id of ['reload-button', 'error-reload']) $(id).addEventListener('click', () => action('reload'));
   $('address-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -972,7 +978,7 @@
     if (dialogIsOpen()) return;
     if (key === 't') openProfileDialog();
     else if (key === 'l' && activeTab()) { $('address-input').focus(); $('address-input').select(); }
-    else if (key === 'w' && activeTab()) action('closeTab', state.activeTabId || state.activeId);
+    else if (key === 'w' && activeTab()) action('closeProfile', state.activeId);
   }
   document.addEventListener('keydown', (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;

@@ -299,7 +299,7 @@ async function main() {
       assert.deepEqual(aAfterRename, account('A-restored'));
     });
 
-    await evaluateView(first.id, `window.open(${JSON.stringify(`${origin}/popup`)}, '_blank'); true`);
+    await evaluateView(first.id, `window.open(${JSON.stringify(`${origin}/popup`)}, 'account-authorization'); true`);
     const popupDeadline = Date.now() + 10_000;
     while (Date.now() < popupDeadline) {
       const ready = await app.evaluate(({ BrowserWindow }, origin) =>

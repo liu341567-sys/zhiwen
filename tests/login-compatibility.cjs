@@ -299,7 +299,7 @@ window.frameReady = true;</script>`);
       assertAgent(requestAgents.get('web-service-worker'), versions);
     });
     const webPopupUrl = primaryOrigin + '/web-popup?context=web-popup';
-    await contents('qiye', webProfile, 'eval', `window.open(${JSON.stringify(webPopupUrl)}, '_blank', 'noopener'); true`);
+    await contents('qiye', webProfile, 'eval', `window.open(${JSON.stringify(webPopupUrl)}, '_blank', 'popup,noopener'); true`);
     const webPopupAgent = await popup(webPopupUrl, 'agentInfo()');
     check('second environment login popup inherits the originating session identity and real Client Hints', () => {
       assertAgent(webPopupAgent, versions);
@@ -321,7 +321,7 @@ window.frameReady = true;</script>`);
       await contents(kind, id, 'eval', `sessionStorage.setItem('auditNonce', ${JSON.stringify(nonce)}); true`);
       await contents(kind, id, 'load', primaryOrigin + '/checkpoint?context=' + (kind === 'qiye' ? 'main' : 'control'));
       await contents(kind, id, 'eval', `fetch('/consume', { method: 'POST', body: ${JSON.stringify(nonce)} }).then(response => response.json())`);
-      await contents(kind, id, 'eval', `window.open(${JSON.stringify(primaryOrigin + '/resume?context=' + (kind === 'qiye' ? 'popup' : 'control-popup'))}, '_blank', 'noopener'); true`);
+      await contents(kind, id, 'eval', `window.open(${JSON.stringify(primaryOrigin + '/resume?context=' + (kind === 'qiye' ? 'popup' : 'control-popup'))}, '_blank', 'popup,noopener'); true`);
     }
     const popupUrl = primaryOrigin + '/resume?context=popup';
     const qiyePopup = await popup(popupUrl, '(async () => ({ initialNonce: window.initialNonce, openerIsNull: window.opener === null, resume: await window.resumeDone }))()');

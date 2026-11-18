@@ -476,13 +476,24 @@ async function main() {
       return row === old.row && row.querySelector('.profile-icon') === old.avatar && row.querySelector('img') === old.image;
     })), true, 'Editing, sorting, closing and reopening must preserve installed sidebar rows and images');
 
-    await accountPage.evaluate(url => { window.open(url, '_blank'); }, fixtureUrl.replace('/account', '/popup'));
+    const regularUrl = fixtureUrl.replace('/account', '/works');
+    await accountPage.evaluate(url => { window.open(url, '_blank'); }, regularUrl);
+    await accountPage.waitForURL(regularUrl);
+    const regularNavigation = await shell.evaluate(() => window.browserAPI.getState());
+    assert.deepEqual(regularNavigation.openTabs.map(tab => tab.id), [id]);
+    assert.equal(regularNavigation.openTabs[0].popupAvailable, false);
+    assertAccount(await accountState(accountPage));
+    await shell.evaluate(() => window.browserAPI.goBack());
+    await accountPage.waitForURL(fixtureUrl);
+
+    await accountPage.evaluate(url => { window.open(url, 'installed-authorization'); }, fixtureUrl.replace('/account', '/popup'));
     const popup = await pageFor(instance, fixtureUrl.replace('/account', '/popup'));
     const popupIdentity = await popup.evaluate(() => ({ cookie: document.cookie, node: typeof require, manager: typeof browserAPI }));
     assert.match(popupIdentity.cookie, /installedAccount=native-preview/);
     assert.equal(popupIdentity.node, 'undefined');
     assert.equal(popupIdentity.manager, 'undefined');
-    await popup.close();
+    assert.deepEqual(await shell.evaluate(() => window.browserAPI.getState().then(state => state.openTabs.map(tab => tab.id))), [id]);
+    await Promise.all([popup.waitForEvent('close'), shell.locator('#temporary-page-button').click()]);
     await shell.locator('#sidebar-toggle').click();
     assert.equal(await shell.locator('#secondary-sidebar').isVisible(), false);
     await closeNormally(instance);

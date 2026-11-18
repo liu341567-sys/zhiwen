@@ -4,19 +4,23 @@ const path = require('node:path');
 
 // Pages belong to an existing environment. They never create profiles, Session
 // partitions or OS windows, and never overwrite the root tab's storage checkpoint.
-class InternalTabs {
+class PopupPages {
   constructor({ window, WebContentsView, sessionFor, configure, changed, canActivate }) {
     Object.assign(this, { window, WebContentsView, sessionFor, configure, changed, canActivate });
     this.entries = new Map();
     this.selected = new Map();
-    this.closing = new Set();
   }
   forEnvironment(id) { return [...this.entries.values()].filter(e => e.environmentId === id); }
-  activeId(id) { return this.entries.has(this.selected.get(id)) ? this.selected.get(id) : id; }
-  active(id, root) { return this.entries.get(this.activeId(id)) || root; }
-  select(id, environmentId) {
-    if (id !== environmentId && this.entries.get(id)?.environmentId !== environmentId) throw new Error('页面已关闭或不属于此环境');
-    this.selected.set(environmentId, id);
+  activePopup(id) { return this.entries.get(this.selected.get(id)); }
+  active(id, root) { return this.activePopup(id) || root; }
+  showMain(id) { this.selected.delete(id); }
+  toggle(id) {
+    const active = this.activePopup(id);
+    if (active) this.close(active.id);
+    else {
+      const last = this.forEnvironment(id).at(-1);
+      if (last) this.selected.set(id, last.id);
+    }
   }
   open(environmentId, opener, details, options) {
     const session = this.sessionFor(environmentId);
@@ -69,23 +73,51 @@ class InternalTabs {
     if (!this.window.isDestroyed()) this.window.contentView.removeChildView(entry.view);
     if (this.selected.get(entry.environmentId) === id) {
       const parent = this.entries.get(entry.openerId);
-      this.selected.set(entry.environmentId, parent?.environmentId === entry.environmentId ? parent.id : entry.environmentId);
+      const next = parent || this.forEnvironment(entry.environmentId).at(-1);
+      if (next) this.selected.set(entry.environmentId, next.id);
+      else this.showMain(entry.environmentId);
     }
     this.changed();
   }
   close(id) {
-    const entry = this.entries.get(id); if (!entry) throw new Error('页面已关闭');
-    if (this.closing.has(id)) return;
-    this.closing.add(id);
-    try {
-      // Removing first keeps state coherent if destroyed fires synchronously.
-      this.remove(id);
-      if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close({ waitForBeforeUnload: false });
-    } finally { this.closing.delete(id); }
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    const wc = entry.view.webContents;
+    this.remove(id);
+    if (wc && !wc.isDestroyed()) wc.close({ waitForBeforeUnload: false });
   }
   closeEnvironment(id) {
     for (const entry of this.forEnvironment(id)) if (this.entries.has(entry.id)) this.close(entry.id);
     this.selected.delete(id);
   }
 }
-module.exports = { InternalTabs };
+// Empty and named windows can be written to, reused, or closed by the caller.
+// A POST also needs its original document's navigation and form metadata.
+function needsPopup(details, opener) {
+  if (details.url === 'about:blank' || details.postBody) return true;
+  const name = details.frameName?.toLowerCase();
+  if (name && !['_blank', '_self', '_parent', '_top'].includes(name)) return true;
+  if (details.features?.split(',').some(feature => {
+    const key = feature.split('=')[0].trim().toLowerCase();
+    return key && key !== 'noopener' && key !== 'noreferrer';
+  })) return true;
+
+  const destination = new URL(details.url);
+  const authOrPayment = /(?:^|[./_-])(?:oauth2?|oidc|sso|passport|login|log-in|sign-in|signin|authorize|authorization|consent|pay|payment|checkout|cashier)(?:$|[./_-])/i;
+  if (authOrPayment.test(destination.hostname + destination.pathname) ||
+      (destination.searchParams.has('client_id') && (destination.searchParams.has('redirect_uri') || destination.searchParams.has('response_type')))) return true;
+
+  // Electron doesn't report the initiating frame. Where the referrer could
+  // come from a subframe, let Chromium enforce that frame's popup restrictions.
+  const main = opener.mainFrame;
+  const frames = main.framesInSubtree.filter(frame => frame !== main);
+  if (!frames.length) return false;
+  const origin = url => { try { return new URL(url).origin; } catch { return null; } };
+  const sourceOrigin = origin(details.referrer?.url);
+  return !sourceOrigin || sourceOrigin !== origin(main.url) || frames.some(frame => {
+    const frameOrigin = origin(frame.url);
+    return !frameOrigin || frameOrigin === 'null' || frameOrigin === sourceOrigin;
+  });
+}
+
+module.exports = { PopupPages, needsPopup };
